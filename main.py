@@ -11,7 +11,10 @@ RENAME_ORIGINAL_MKV = True
 DELETE_ORIGINAL_MKA = False
 RENAME_ORIGINAL_MKA = True
 DELETE_CHS_SUB = False
+RENAME_CHS_SUB = True
 DELETE_CHT_SUB = False
+RENAME_CHT_SUB = True
+SUFFIX_NAME = "_Plex"
 
 
 # https://gist.github.com/hideaki-t/c42a16189dd5f88a955d
@@ -36,6 +39,12 @@ if __name__ == '__main__':
         DELETE_ORIGINAL_MKV = False
     if DELETE_ORIGINAL_MKA and RENAME_ORIGINAL_MKA:
         print("Rename MKA instead")
+        DELETE_ORIGINAL_MKA = False
+    if DELETE_CHS_SUB and RENAME_CHS_SUB:
+        print("Rename CHS instead")
+        DELETE_ORIGINAL_MKA = False
+    if DELETE_CHT_SUB and RENAME_CHT_SUB:
+        print("Rename CHT instead")
         DELETE_ORIGINAL_MKA = False
     delete_list = []
     rename_list = []
@@ -73,12 +82,16 @@ if __name__ == '__main__':
                             print("Find associated CHS subtitle: " + item)
                             if DELETE_CHS_SUB:
                                 delete_list.append(item)
+                            if RENAME_CHS_SUB:
+                                rename_list.append(item)
                         if "cht" in item or "tc" in item:
                             this_cht = MKVTrack(item, track_name="cht", default_track=False, language="chi")
                             this_task.add_track(this_cht)
                             print("Find associated CHT subtitle: " + item)
                             if DELETE_CHT_SUB:
                                 delete_list.append(item)
+                            if RENAME_CHT_SUB:
+                                rename_list.append(item)
                     if ".mka" in item:
                         this_task.add_track(item)
                         print("Find associated audio: " + item)
@@ -88,7 +101,7 @@ if __name__ == '__main__':
                             rename_list.append(item)
             for font in font_list:
                 this_task.add_attachment(font)
-            newMKV_name = episode_name + "_Plex.mkv"
+            newMKV_name = episode_name + SUFFIX_NAME + ".mkv"
             this_task.mux(newMKV_name)
             print("=" * 20)
 

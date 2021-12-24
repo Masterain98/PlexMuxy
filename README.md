@@ -10,6 +10,9 @@ A Python script to allow Plex load CN-Subs Anime MKV
   - External audio tracks (usually 5.1 Channel) will be added and keep original tracker information
 - (Optional) Rename or remove original files
   - Rename mode will add ```.bak``` at the end of file name
+- The new generated MKV file will be automatically added a suffix name 
+  - Can be changed in settings
+  - Default as ```_Plex```
 - A friendly reminder that the encoding and subtitling groups distribute the multi-channel audio and font files separately to save storage space, and that running this script increases the storage space used by the episodes, a change that is sometimes significant.
 
 ### How to  Use
@@ -32,7 +35,10 @@ A Python script to allow Plex load CN-Subs Anime MKV
     DELETE_ORIGINAL_MKA = False
     RENAME_ORIGINAL_MKA = True
     DELETE_CHS_SUB = False
+    RENAME_CHS_SUB = True
     DELETE_CHT_SUB = False
+    RENAME_CHT_SUB = True
+    SUFFIX_NAME = "_Plex"
     ```
 
 - Make sure all associated content has same name with each corresponding episode
