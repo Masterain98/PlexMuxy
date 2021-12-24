@@ -4,10 +4,10 @@ A Python script to allow Plex load CN-Subs Anime MKV
 ### Feature
 
 - Merge original MKV video with subtitles, subtitle fonts and external audio tracks to meet requirements of Plex server
-  - Simplified-Chinese will be added as ```chi``` language and the tracker will be named as ```chs```
-  - Traditional Chinese will be added as ```chi``` language and the tracker will be named as ```cht``
+  - Simplified-Chinese will be added as ```chi``` language and the track will be named as ```chs```
+  - Traditional Chinese will be added as ```chi``` language and the track will be named as ```cht```
   - Subtitle fonts will be added as attachment and Plex will load them automictically
-  - External audio tracks (usually 5.1 Channel) will be added and keep original tracker information
+  - External audio tracks (usually 5.1 Channel) will be added and keep original track information
 - (Optional) Rename or remove original files
   - Rename mode will add ```.bak``` at the end of file name
 - The new generated MKV file will be automatically added a suffix name 
