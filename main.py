@@ -4,6 +4,7 @@ import zipfile
 from pymkv import MKVFile, MKVTrack
 from pathlib import Path
 import py7zr
+import re
 
 # Global Variable
 DELETE_FONTS = True
@@ -32,6 +33,34 @@ def unzip(f, encoding):
                 with n.open('wb') as w:
                     w.write(z.read(i))
     return font_list
+
+
+def subtitle_info_checker(subtitle_file_name):
+    language = ""
+    sub_author = ""
+
+    chs_list = [".chs", ".sc", "[chs]", "[sc]"]
+    cht_list = [".cht", ".tc", "[cht]", "[tc]"]
+    jp_sc_list = [".jpsc", "[jpsc]", "jp_sc", "[jp_sc]"]
+    jp_tc_list = [".jptc", "[jptc]", "jp_tc", "[jp_tc]"]
+
+    if any(indicator in subtitle_file_name.lower() for indicator in chs_list):
+        language = "chs"
+    elif any(indicator in subtitle_file_name.lower() for indicator in cht_list):
+        language = "cht"
+    elif any(indicator in subtitle_file_name.lower() for indicator in jp_sc_list):
+        language = "jp_sc"
+    elif any(indicator in subtitle_file_name.lower() for indicator in jp_tc_list):
+        language = "jp_tc"
+    else:
+        pass
+
+    sub_author = re.search(r'(^\[)(\w|\d|\-|\_|\&|\.|\!)+(\]+?)', subtitle_file_name).group(0)
+
+    return {
+        "language": language,
+        "sub_author": sub_author
+    }
 
 
 if __name__ == '__main__':
@@ -79,7 +108,7 @@ if __name__ == '__main__':
                     print("Unzipped to /Fonts: " + str(font_list))
             else:
                 pass
-    #input("waiting....")
+    # input("waiting....")
     # Main tasks
     for file_name in folder_list:
         skip_this_task = True
@@ -96,17 +125,20 @@ if __name__ == '__main__':
                             rename_list.append(item)
                     if ".ass" in item:
                         skip_this_task = False
-                        if "chs" in item.lower() or "sc" in item.lower() or "jpsc" in item.lower():
-                            this_chs = MKVTrack(item, track_name="chs", default_track=True, language="chi")
-                            this_task.add_track(this_chs)
+                        this_sub_info = subtitle_info_checker(item)
+                        if this_sub_info["language"] == "chs" or this_sub_info["language"] == "jp_sc":
+                            this_sub_track = MKVTrack(item, track_name=this_sub_info["language"],
+                                                      default_track=True, language="chi")
+                            this_task.add_track(this_sub_track)
                             print("Find associated CHS subtitle: " + item)
                             if DELETE_CHS_SUB:
                                 delete_list.append(item)
                             if RENAME_CHS_SUB:
                                 rename_list.append(item)
-                        if "cht" in item.lower() or "tc" in item.lower() or "jptc" in item.lower():
-                            this_cht = MKVTrack(item, track_name="cht", default_track=False, language="chi")
-                            this_task.add_track(this_cht)
+                        elif this_sub_info["language"] == "cht" or this_sub_info["language"] == "jp_tc":
+                            this_sub_track = MKVTrack(item, track_name=this_sub_info["language"],
+                                                      default_track=False, language="chi")
+                            this_task.add_track(this_sub_track)
                             print("Find associated CHT subtitle: " + item)
                             if DELETE_CHT_SUB:
                                 delete_list.append(item)
@@ -147,6 +179,6 @@ if __name__ == '__main__':
             print("Failed to delete " + file)
     for file in rename_list:
         # os.rename(file, file + ".bak")
-        shutil.move(file, "Extra/"+file)
+        shutil.move(file, "Extra/" + file)
 
     input("Task finished. Press Enter to exit...")
