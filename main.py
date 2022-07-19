@@ -3,6 +3,7 @@ import shutil
 import zipfile
 from pymkv import MKVFile, MKVTrack
 from pathlib import Path
+import py7zr
 
 # Global Variable
 DELETE_FONTS = True
@@ -67,7 +68,18 @@ if __name__ == '__main__':
                 font_list = unzip(file_name, "GBK")
                 print("Unzipped to /Fonts: " + str(font_list))
                 print("=" * 20)
-
+            elif "Font" in file_name and ".7z" in file_name:
+                print("Find font package file: " + file_name)
+                if not os.path.exists("Fonts"):
+                    os.makedirs("Fonts")
+                    print("Fonts sub-directory created")
+                with py7zr.SevenZipFile(file_name, mode='r') as z:
+                    z.extractall("Fonts")
+                    font_list = z.getnames()
+                    print("Unzipped to /Fonts: " + str(font_list))
+            else:
+                pass
+    #input("waiting....")
     # Main tasks
     for file_name in folder_list:
         skip_this_task = True
@@ -84,7 +96,7 @@ if __name__ == '__main__':
                             rename_list.append(item)
                     if ".ass" in item:
                         skip_this_task = False
-                        if "chs" in item or "sc" in item:
+                        if "chs" in item.lower() or "sc" in item.lower() or "jpsc" in item.lower():
                             this_chs = MKVTrack(item, track_name="chs", default_track=True, language="chi")
                             this_task.add_track(this_chs)
                             print("Find associated CHS subtitle: " + item)
@@ -92,7 +104,7 @@ if __name__ == '__main__':
                                 delete_list.append(item)
                             if RENAME_CHS_SUB:
                                 rename_list.append(item)
-                        if "cht" in item or "tc" in item:
+                        if "cht" in item.lower() or "tc" in item.lower() or "jptc" in item.lower():
                             this_cht = MKVTrack(item, track_name="cht", default_track=False, language="chi")
                             this_task.add_track(this_cht)
                             print("Find associated CHT subtitle: " + item)
@@ -137,4 +149,4 @@ if __name__ == '__main__':
         # os.rename(file, file + ".bak")
         shutil.move(file, "Extra/"+file)
 
-    input("Task finished. Press any key to exit...")
+    input("Task finished. Press Enter to exit...")
