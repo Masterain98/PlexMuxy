@@ -95,7 +95,7 @@ if __name__ == '__main__':
             print("Loading fonts: " + str(font_list))
         else:
             for file_name in folder_list:
-                if "Font" in file_name and ".zip" in file_name:
+                if "font" in file_name.lower() and ".zip" in file_name:
                     print("Find font package file: " + file_name)
                     if not os.path.exists("Fonts"):
                         os.makedirs("Fonts")
