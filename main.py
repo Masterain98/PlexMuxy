@@ -7,7 +7,7 @@ import py7zr
 import re
 
 # Global Variable
-DELETE_FONTS = True
+DELETE_FONTS = False
 DELETE_ORIGINAL_MKV = False
 RENAME_ORIGINAL_MKV = True
 DELETE_ORIGINAL_MKA = False
@@ -36,13 +36,14 @@ def unzip(f, encoding):
 
 
 def subtitle_info_checker(subtitle_file_name):
-    language = ""
-    sub_author = ""
-
-    chs_list = [".chs", ".sc", "[chs]", "[sc]"]
-    cht_list = [".cht", ".tc", "[cht]", "[tc]"]
+    # zh-CN
+    chs_list = [".chs", ".sc", "[chs]", "[sc]", ".gb", "[gb]"]
+    # zh-TW or zh-HK
+    cht_list = [".cht", ".tc", "[cht]", "[tc]", "big5", "[big5]"]
+    # Jpn and zh-CN
     jp_sc_list = [".jpsc", "[jpsc]", "jp_sc", "[jp_sc]", "chs&jap"]
-    jp_tc_list = [".jptc", "[jptc]", "jp_tc", "[jp_tc]", "chs&jap"]
+    # Jpn and zh-TW/zh-HK
+    jp_tc_list = [".jptc", "[jptc]", "jp_tc", "[jp_tc]", "cht&jap"]
 
     if any(indicator in subtitle_file_name.lower() for indicator in chs_list):
         language = "chs"
@@ -53,9 +54,13 @@ def subtitle_info_checker(subtitle_file_name):
     elif any(indicator in subtitle_file_name.lower() for indicator in jp_tc_list):
         language = "jp_tc"
     else:
-        pass
+        language = ""
 
-    sub_author = re.search(r'(^\[)(\w|\d|\-|\_|\&|\.|\!)+(\]+?)', subtitle_file_name).group(0)
+    sub_author = re.search(r'(^\[)(\w|\d|\-|\_|\&|\.|\!)+(\]+?)', subtitle_file_name)
+    if sub_author is not None:
+        sub_author = sub_author.group(0)
+    else:
+        sub_author = ""
 
     return {
         "language": language,
@@ -109,45 +114,47 @@ if __name__ == '__main__':
                         print("Unzipped to /Fonts: " + str(font_list))
                 else:
                     pass
-        # input("waiting....")
+
+        # Generate two useful list to reduce chance traversing folder_list in main task loop
+        folder_mkv_list = [file for file in folder_list if file.endswith(".mkv")]
+        folder_other_file_list = [file for file in folder_list if not file.endswith(".mkv")]
+
+        # input("waiting...")
         # Main tasks
-        for file_name in folder_list:
+        for MKV_file_name in folder_mkv_list:
+            # Initial variables
             skip_this_task = True
-            if ".mkv" in file_name and SUFFIX_NAME not in file_name:
-                # Target the main MKV file
-                print("Task start: " + file_name)
-                episode_name = file_name.replace(".mkv", "")
-                this_task = MKVFile(file_name)
-                for item in folder_list:
-                    if episode_name in item:
-                        if ".mkv" in item:
-                            if DELETE_ORIGINAL_MKV:
-                                delete_list.append(item)
-                            if RENAME_ORIGINAL_MKV:
-                                rename_list.append(item)
-                        if ".ass" in item:
-                            # Add subtitle file with same name as MKV
-                            skip_this_task = False
+
+            if SUFFIX_NAME not in MKV_file_name:
+                # Generate the task with MKV file
+                print("Task start: " + MKV_file_name)
+                MKV_name_no_extension = MKV_file_name.replace(".mkv", "")
+                this_task = MKVFile(MKV_file_name)
+
+                if DELETE_ORIGINAL_MKV:
+                    delete_list.append(MKV_file_name)
+                if RENAME_ORIGINAL_MKV:
+                    rename_list.append(MKV_file_name)
+
+                for item in folder_other_file_list:
+                    # Match resources based on file name
+                    if MKV_name_no_extension in item:
+                        if item.endswith(".ass"):
+                            # Add Subtitle track
                             this_sub_info = subtitle_info_checker(item)
-                            if this_sub_info["language"] == "chs" or this_sub_info["language"] == "jp_sc":
-                                this_sub_track = MKVTrack(item, track_name=this_sub_info["language"] + " " + this_sub_info["sub_author"],
+                            if this_sub_info["language"] != "":
+                                this_sub_track = MKVTrack(item,
+                                                          track_name=this_sub_info["language"] + " " + this_sub_info[
+                                                              "sub_author"],
                                                           default_track=True, language="chi")
+                                skip_this_task = False
                                 this_task.add_track(this_sub_track)
                                 print("Find " + this_sub_info["language"] + " subtitle: " + item)
                                 if DELETE_CHS_SUB:
                                     delete_list.append(item)
                                 if RENAME_CHS_SUB:
                                     rename_list.append(item)
-                            elif this_sub_info["language"] == "cht" or this_sub_info["language"] == "jp_tc":
-                                this_sub_track = MKVTrack(item, track_name=this_sub_info["language"] + " " + this_sub_info["sub_author"],
-                                                          default_track=False, language="chi")
-                                this_task.add_track(this_sub_track)
-                                print("Find " + this_sub_info["language"] + " subtitle: " + item)
-                                if DELETE_CHT_SUB:
-                                    delete_list.append(item)
-                                if RENAME_CHT_SUB:
-                                    rename_list.append(item)
-                        if ".mka" in item:
+                        if item.endswith(".mka"):
                             # Add MKA track
                             skip_this_task = False
                             this_task.add_track(item)
@@ -159,29 +166,28 @@ if __name__ == '__main__':
                     else:
                         # Expand the search range for other subgroups
                         # By matching up the episode number
-                        this_ep_num = re.search(r'(\[)(\d{2})(\])', episode_name)
+                        this_ep_num = re.search(r'(\[)(\d{2})(\])', MKV_name_no_extension)
                         if this_ep_num is not None:
-                            # e.g. this_ep_num = [01]
                             this_ep_num = this_ep_num.group(0)
-                            if this_ep_num in item and item != file_name:
+                            sub_matched = False
+                            if this_ep_num in item and item != MKV_file_name:
+                                # this_ep_num = [01]
+                                sub_matched = True
+                            elif this_ep_num.replace("[", " ").replace("]", " ") in item and item != MKV_file_name:
+                                # this_ep_num =  01 (one space before and after the number)
+                                sub_matched = True
+
+                            if sub_matched:
                                 print("Using ep number " + this_ep_num + " to match subtitle file")
-                                if ".ass" in item:
-                                    skip_this_task = False
+                                if item.endswith(".ass"):
                                     this_sub_info = subtitle_info_checker(item)
-                                    if this_sub_info["language"] == "chs" or this_sub_info["language"] == "jp_sc":
+                                    print(this_sub_info)
+                                    if this_sub_info["language"] != "":
                                         this_sub_track = MKVTrack(item,
-                                                                  track_name=this_sub_info["language"] + " " + this_sub_info["sub_author"],
+                                                                  track_name=this_sub_info["language"] + " " +
+                                                                             this_sub_info["sub_author"],
                                                                   default_track=True, language="chi")
-                                        this_task.add_track(this_sub_track)
-                                        print("Find " + this_sub_info["language"] + " subtitle: " + item)
-                                        if DELETE_CHS_SUB:
-                                            delete_list.append(item)
-                                        if RENAME_CHS_SUB:
-                                            rename_list.append(item)
-                                    elif this_sub_info["language"] == "cht" or this_sub_info["language"] == "jp_tc":
-                                        this_sub_track = MKVTrack(item,
-                                                                  track_name=this_sub_info["language"] + " " + this_sub_info["sub_author"],
-                                                                  default_track=False, language="chi")
+                                        skip_this_task = False
                                         this_task.add_track(this_sub_track)
                                         print("Find " + this_sub_info["language"] + " subtitle: " + item)
                                         if DELETE_CHT_SUB:
@@ -192,10 +198,12 @@ if __name__ == '__main__':
                     font = "Fonts/" + font
                     this_task.add_attachment(font)
                 if not skip_this_task:
-                    newMKV_name = episode_name + SUFFIX_NAME + ".mkv"
+                    newMKV_name = MKV_name_no_extension + SUFFIX_NAME + ".mkv"
                     try:
+                        print("")
                         this_task.mux(newMKV_name)
-                    except:
+                    except ValueError:
+                        # A mysterious error will not cause any problem
                         print("mkvmerge raised error: " + newMKV_name)
                     print("=" * 20)
                 else:
@@ -207,7 +215,7 @@ if __name__ == '__main__':
 
     try:
         # Clean up
-        ## 创建Extra目录
+        # 创建 Extra 目录
         ExtraFolderIsExists = os.path.exists("Extra")
         if not ExtraFolderIsExists:
             os.makedirs("Extra")
@@ -229,4 +237,3 @@ if __name__ == '__main__':
     except Exception as e:
         print(e)
         input("Error at clean up stage. Press Enter to exit...")
-
