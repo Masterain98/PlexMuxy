@@ -24,8 +24,17 @@ def unzip(f, encoding):
     font_list = []
     with zipfile.ZipFile(f) as z:
         for i in z.namelist():
-            font_list.append("Fonts/" + i.encode('cp437').decode(encoding))
-            n = Path("Fonts/" + i.encode('cp437').decode(encoding))
+            try:
+                # GBK
+                font_list.append("Fonts/" + i.encode('cp437').decode(encoding))
+                n = Path("Fonts/" + i.encode('cp437').decode(encoding))
+            except UnicodeDecodeError:
+                # UTF-8
+                try:
+                    font_list.append("Fonts/" + i.encode('utf-8').decode(encoding))
+                    n = Path("Fonts/" + i.encode('utf-8').decode(encoding))
+                except UnicodeDecodeError:
+                    print("UnicodeDecodeError: " + i)
             if i[-1] == '/':
                 if not n.exists():
                     n.mkdir()
@@ -41,18 +50,22 @@ def subtitle_info_checker(subtitle_file_name):
     # zh-TW or zh-HK
     cht_list = [".cht", ".tc", "[cht]", "[tc]", "big5", "[big5]"]
     # Jpn and zh-CN
-    jp_sc_list = [".jpsc", "[jpsc]", "jp_sc", "[jp_sc]", "chs&jap"]
+    jp_sc_list = [".jpsc", "[jpsc]", "jp_sc", "[jp_sc]", "chs&jap", "简日"]
     # Jpn and zh-TW/zh-HK
-    jp_tc_list = [".jptc", "[jptc]", "jp_tc", "[jp_tc]", "cht&jap"]
+    jp_tc_list = [".jptc", "[jptc]", "jp_tc", "[jp_tc]", "cht&jap", "繁日"]
+    # Jpn
+    jp_list = [".jp", ".jpn", ".jap","[jp]", "[jpn]", "[jap]"]
 
-    if any(indicator in subtitle_file_name.lower() for indicator in chs_list):
-        language = "chs"
-    elif any(indicator in subtitle_file_name.lower() for indicator in cht_list):
-        language = "cht"
-    elif any(indicator in subtitle_file_name.lower() for indicator in jp_sc_list):
+    if any(indicator in subtitle_file_name.lower() for indicator in jp_sc_list):
         language = "jp_sc"
     elif any(indicator in subtitle_file_name.lower() for indicator in jp_tc_list):
         language = "jp_tc"
+    elif any(indicator in subtitle_file_name.lower() for indicator in chs_list):
+        language = "chs"
+    elif any(indicator in subtitle_file_name.lower() for indicator in cht_list):
+        language = "cht"
+    elif any(indicator in subtitle_file_name.lower() for indicator in jp_list):
+        language = "jpn"
     else:
         language = ""
 
@@ -66,6 +79,14 @@ def subtitle_info_checker(subtitle_file_name):
         "language": language,
         "sub_author": sub_author.replace("[", "").replace("]", "")
     }
+
+
+def is_font_file(file):
+    ALLOWED_FONT_EXTENSIONS = [".ttf", ".otf", ".ttc"]
+    if any(file.lower().endswith(ext) for ext in ALLOWED_FONT_EXTENSIONS):
+        return True
+    else:
+        return False
 
 
 if __name__ == '__main__':
@@ -91,8 +112,7 @@ if __name__ == '__main__':
         # Prepare fonts
         font_list = []
         if os.path.exists("Fonts"):
-            font_list = os.listdir("Fonts")
-            print("Loading fonts: " + str(font_list))
+            unfiltered_font_list = os.listdir("Fonts")
         else:
             for file_name in folder_list:
                 if "font" in file_name.lower() and ".zip" in file_name:
@@ -100,8 +120,8 @@ if __name__ == '__main__':
                     if not os.path.exists("Fonts"):
                         os.makedirs("Fonts")
                         print("Fonts sub-directory created")
-                    font_list = unzip(file_name, "GBK")
-                    print("Unzipped to /Fonts: " + str(font_list))
+                    unfiltered_font_list = unzip(file_name, "GBK")
+                    print("Unzipped to /Fonts: " + str(unfiltered_font_list))
                     print("=" * 20)
                 elif "Font" in file_name and ".7z" in file_name:
                     print("Find font package file: " + file_name)
@@ -110,14 +130,19 @@ if __name__ == '__main__':
                         print("Fonts sub-directory created")
                     with py7zr.SevenZipFile(file_name, mode='r') as z:
                         z.extractall("Fonts")
-                        font_list = z.getnames()
-                        print("Unzipped to /Fonts: " + str(font_list))
+                        unfiltered_font_list = z.getnames()
+                        print("Unzipped to /Fonts: " + str(unfiltered_font_list))
                 else:
-                    pass
+                    unfiltered_font_list = []
+        font_list = list(filter(is_font_file, unfiltered_font_list))
+        print("Loading fonts: " + str(font_list))
+
+        # 筛选字体文件格式
+        font_list = [i for i in font_list if i.endswith(".ttf") or ".otf" in i]
 
         # Generate two useful list to reduce chance traversing folder_list in main task loop
         folder_mkv_list = [file for file in folder_list if file.endswith(".mkv")]
-        folder_other_file_list = [file for file in folder_list if not file.endswith(".mkv")]
+        folder_other_file_list = [file for file in folder_list if not file.endswith(".mkv") and "." in file]
 
         # input("waiting...")
         # Main tasks
@@ -176,17 +201,30 @@ if __name__ == '__main__':
                             elif this_ep_num.replace("[", " ").replace("]", " ") in item and item != MKV_file_name:
                                 # this_ep_num =  01 (one space before and after the number)
                                 sub_matched = True
-
+                            elif this_ep_num.replace("[", ".").replace("]", ".") in item and item != MKV_file_name:
+                                # this_ep_num =  .01. (one dot before and after the number)
+                                sub_matched = True
+                            elif this_ep_num.replace("[", " ").replace("]", ".") in item and item != MKV_file_name:
+                                # this_ep_num =  01. (one space before and one dot after the number)
+                                sub_matched = True
+                            elif item == this_ep_num.replace("[", "").replace("]", "")+".ass":
+                                sub_matched = True
                             if sub_matched:
                                 print("Using ep number " + this_ep_num + " to match subtitle file")
                                 if item.endswith(".ass"):
                                     this_sub_info = subtitle_info_checker(item)
                                     print(this_sub_info)
                                     if this_sub_info["language"] != "":
-                                        this_sub_track = MKVTrack(item,
-                                                                  track_name=this_sub_info["language"] + " " +
-                                                                             this_sub_info["sub_author"],
-                                                                  default_track=True, language="chi")
+                                        if this_sub_info["language"] == "jpn":
+                                            this_sub_track = MKVTrack(item,
+                                                                      track_name=this_sub_info["language"] + " " +
+                                                                                 this_sub_info["sub_author"],
+                                                                      default_track=True, language="jpn")
+                                        else:
+                                            this_sub_track = MKVTrack(item,
+                                                                      track_name=this_sub_info["language"] + " " +
+                                                                                 this_sub_info["sub_author"],
+                                                                      default_track=True, language="chi")
                                         skip_this_task = False
                                         this_task.add_track(this_sub_track)
                                         print("Find " + this_sub_info["language"] + " subtitle: " + item)
@@ -201,17 +239,16 @@ if __name__ == '__main__':
                     newMKV_name = MKV_name_no_extension + SUFFIX_NAME + ".mkv"
                     try:
                         print("")
-                        this_task.mux(newMKV_name)
-                    except ValueError:
+                        this_task.mux(newMKV_name, silent=True)
+                    except Exception as e:
                         # A mysterious error will not cause any problem
                         print("mkvmerge raised error: " + newMKV_name)
                     print("=" * 20)
                 else:
                     print("No task for this MKV")
-
+            # input("waiting...")
     except Exception as e:
-        print(e)
-        input("Error. Press Enter to exit...")
+        print("Error: " + str(e))
 
     try:
         # Clean up
@@ -219,11 +256,12 @@ if __name__ == '__main__':
         ExtraFolderIsExists = os.path.exists("Extra")
         if not ExtraFolderIsExists:
             os.makedirs("Extra")
-        try:
-            shutil.rmtree("Fonts/")
-            print("Remove Fonts Folder Successfully")
-        except:
-            print("Remove Fonts Folder Error")
+        if DELETE_FONTS:
+            try:
+                shutil.rmtree("Fonts/")
+                print("Remove Fonts Folder Successfully")
+            except:
+                print("Remove Fonts Folder Error")
         for file in delete_list:
             try:
                 os.remove(file)
