@@ -106,6 +106,9 @@ if __name__ == '__main__':
     delete_list = []
     move_list = []
 
+    if SUFFIX_NAME == "":
+        SUFFIX_NAME = "_Plex"
+
     try:
         # A useful global variable
         folder_list = os.listdir()
