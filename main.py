@@ -37,7 +37,7 @@ def unzip(f: str, encoding: str) -> list:
                     n = Path("Fonts/" + i.encode('utf-8').decode(encoding))
                 except UnicodeDecodeError:
                     # Usually JPN
-                    print("UnicodeDecodeError: " + i)
+                    raise UnicodeDecodeError("Unsupported encoding, please manually zip the file...")
             if i[-1] == '/':
                 if not n.exists():
                     n.mkdir()
@@ -261,7 +261,6 @@ if __name__ == '__main__':
 
     try:
         # Clean up
-        # 创建 Extra 目录
         ExtraFolderIsExists = os.path.exists("Extra")
         if not ExtraFolderIsExists and len(move_list) >= 1:
             os.makedirs("Extra")
