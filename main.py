@@ -63,6 +63,8 @@ def subtitle_info_checker(subtitle_file_name: str) -> dict:
     JP_TC_LIST = [".jptc", "[jptc]", "jp_tc", "[jp_tc]", "cht&jap", "繁日"]
     # Jpn
     JP_LIST = [".jp", ".jpn", ".jap", "[jp]", "[jpn]", "[jap]"]
+    # Rus
+    RU_LIST = [".ru", ".rus", "[ru]", "[rus]"]
 
     if any(indicator in subtitle_file_name.lower() for indicator in JP_SC_LIST):
         language = "jp_sc"
@@ -74,6 +76,8 @@ def subtitle_info_checker(subtitle_file_name: str) -> dict:
         language = "cht"
     elif any(indicator in subtitle_file_name.lower() for indicator in JP_LIST):
         language = "jpn"
+    elif any(indicator in subtitle_file_name.lower() for indicator in RU_LIST):
+        language = "rus"
     else:
         language = ""
 
@@ -179,6 +183,9 @@ if __name__ == '__main__':
                                 if this_sub_info["language"] == "jpn":
                                     this_sub_track = MKVTrack(item, track_name=track_name,
                                                               default_track=True, language="jpn")
+                                elif this_sub_info["language"] == "rus":
+                                    this_sub_track = MKVTrack(item, track_name=track_name,
+                                                              default_track=True, language="rus")
                                 else:
                                     this_sub_track = MKVTrack(item, track_name=track_name,
                                                               default_track=True, language="chi")
@@ -228,6 +235,9 @@ if __name__ == '__main__':
                                         if this_sub_info["language"] == "jpn":
                                             this_sub_track = MKVTrack(item, track_name=track_name,
                                                                       default_track=True, language="jpn")
+                                        elif this_sub_info["language"] == "rus":
+                                            this_sub_track = MKVTrack(item, track_name=track_name,
+                                                                      default_track=True, language="rus")
                                         else:
                                             this_sub_track = MKVTrack(item, track_name=track_name,
                                                                       default_track=True, language="chi")
