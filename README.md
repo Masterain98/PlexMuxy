@@ -10,12 +10,13 @@ English README | [中文 README](https://github.com/Masterain98/PlexMuxy/blob/ma
     - Usually are external 5.1 Channel audio and audio commentary
 
   - Subtitle
-    - Determine the language by file name, including Simplified Chinese, Traditional Chinese, Japanese, SC&JP, TC&JP
+    - Determine the language by file name, including Simplified Chinese, Traditional Chinese, Japanese, SC&JP, TC&JP, Russian
       - For Simplified Chinese, track name will be `chs` , and language is marked as `chi`
       - For Traditional Chinese, track name will be `cht`, and language is marked as `chi`
       - For Japanese, track name will be `jpn` and language is marked as `jpn`
       - For SC&JP, track name will be `jp_sc` and language is marked as `chi`
       - For TC&JP, track name will be `jp_tc` and language is marked as `chi`
+      - For Russian, track name will be `rus` and language is marked as `rus`
 
     - Determine the subtitle author by file name
 
@@ -77,6 +78,8 @@ English README | [中文 README](https://github.com/Masterain98/PlexMuxy/blob/ma
         |      `.chs`, `.sc`, `[chs]`, `[sc]`, `.gb`, `[gb]`       |   chs    |
         |     `.cht`, `.tc`, `[cht]`, `[tc]`, `big5`, `[big5]`     |   cht    |
         |     `.jp`, `.jpn`, `.jap`, `[jp]`, `[jpn]`, `[jap]`      |   jpn    |
+        |     `.ru`, `.rus`, `[ru]`, `[rus]`                       |   rus    |
+
 
     - If the file name starts with `[`, and the following characters until next `]` will be considered as subtitle author and marked in the track name
 
