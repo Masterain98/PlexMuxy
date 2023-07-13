@@ -33,17 +33,17 @@ def subtitle_info_checker(subtitle_file_name: str) -> dict:
     :return: a dictionary of language and group information, empty string if not found
     """
     # zh-CN
-    CHS_LIST = config["SubtitleKeyword"]["CHS"]
+    CHS_LIST = config["Subtitle"]["Keyword"]["CHS"]
     # zh-TW or zh-HK
-    CHT_LIST = config["SubtitleKeyword"]["CHT"]
+    CHT_LIST = config["Subtitle"]["Keyword"]["CHT"]
     # Jpn and zh-CN
-    JP_SC_LIST = config["SubtitleKeyword"]["JP_SC"]
+    JP_SC_LIST = config["Subtitle"]["Keyword"]["JP_SC"]
     # Jpn and zh-TW/zh-HK
-    JP_TC_LIST = config["SubtitleKeyword"]["JP_TC"]
+    JP_TC_LIST = config["Subtitle"]["Keyword"]["JP_TC"]
     # Jpn
-    JP_LIST = config["SubtitleKeyword"]["JP"]
+    JP_LIST = config["Subtitle"]["Keyword"]["JP"]
     # Rus
-    RU_LIST = config["SubtitleKeyword"]["RU"]
+    RU_LIST = config["Subtitle"]["Keyword"]["RU"]
 
     if any(indicator in subtitle_file_name.lower() for indicator in JP_SC_LIST):
         language = "jp_sc"

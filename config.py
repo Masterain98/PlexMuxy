@@ -16,13 +16,17 @@ def make_default_config():
         "Font": {
             "AllowedExtensions": [".ttf", ".otf", ".ttc"]
         },
-        "SubtitleKeyword": {
-            "CHS": [".chs", ".sc", "[chs]", "[sc]", ".gb", "[gb]"],
-            "CHT": [".cht", ".tc", "[cht]", "[tc]", "big5", "[big5]"],
-            "JP_SC": [".jpsc", "[jpsc]", "jp_sc", "[jp_sc]", "chs&jap", "简日"],
-            "JP_TC": [".jptc", "[jptc]", "jp_tc", "[jp_tc]", "cht&jap", "繁日"],
-            "JP": [".jp", ".jpn", ".jap", "[jp]", "[jpn]", "[jap]"],
-            "RU": [".ru", ".rus", "[ru]", "[rus]"]
+        "Subtitle": {
+            "Keyword": {
+                "CHS": [".chs", ".sc", "[chs]", "[sc]", ".gb", "[gb]"],
+                "CHT": [".cht", ".tc", "[cht]", "[tc]", "big5", "[big5]"],
+                "JP_SC": [".jpsc", "[jpsc]", "jp_sc", "[jp_sc]", "chs&jap", "简日"],
+                "JP_TC": [".jptc", "[jptc]", "jp_tc", "[jp_tc]", "cht&jap", "繁日"],
+                "JP": [".jp", ".jpn", ".jap", "[jp]", "[jpn]", "[jap]"],
+                "RU": [".ru", ".rus", "[ru]", "[rus]"]
+            },
+            "DefaultLanguage": "chs"
+
         },
         "mkvmerge": {
             "path": "C:\\Program Files\\MKVToolNix\\mkvmerge.exe"
