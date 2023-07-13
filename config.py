@@ -23,6 +23,9 @@ def make_default_config():
             "JP_TC": [".jptc", "[jptc]", "jp_tc", "[jp_tc]", "cht&jap", "繁日"],
             "JP": [".jp", ".jpn", ".jap", "[jp]", "[jpn]", "[jap]"],
             "RU": [".ru", ".rus", "[ru]", "[rus]"]
+        },
+        "mkvmerge": {
+            "path": "C:\\Program Files\\MKVToolNix\\mkvmerge.exe"
         }
     }
     with open(os.path.expandvars("%userprofile%/Documents/PlexMuxy.json"), "w", encoding='utf-8') as output:
