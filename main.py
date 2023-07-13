@@ -1,18 +1,26 @@
 import os
 import shutil
 import subprocess
+import time
 import zipfile
 from pymkv import MKVFile, MKVTrack
 from pathlib import Path
 import py7zr
 import re
+from config import get_config
 
 # Global Variable
-DELETE_FONTS = False
-DELETE_ORIGINAL_MKV = False
-DELETE_ORIGINAL_MKA = False
-DELETE_SUB = False
-SUFFIX_NAME = "_Plex"
+try:
+    config = get_config()
+except ValueError:
+    exit(0)
+DELETE_FONTS = config["TaskSettings"]["DeleteFonts"]
+DELETE_ORIGINAL_MKV = config["TaskSettings"]["DeleteOriginalMKV"]
+DELETE_ORIGINAL_MKA = config["TaskSettings"]["DeleteOriginalMKA"]
+DELETE_SUB = config["TaskSettings"]["DeleteSubtitle"]
+SUFFIX_NAME = config["TaskSettings"]["OutputSuffixName"]
+if SUFFIX_NAME == "":
+    SUFFIX_NAME = "_Plex"
 
 
 # https://gist.github.com/hideaki-t/c42a16189dd5f88a955d
@@ -54,17 +62,17 @@ def subtitle_info_checker(subtitle_file_name: str) -> dict:
     :return: a dictionary of language and group information, empty string if not found
     """
     # zh-CN
-    CHS_LIST = [".chs", ".sc", "[chs]", "[sc]", ".gb", "[gb]"]
+    CHS_LIST = config["SubtitleKeyword"]["CHS"]
     # zh-TW or zh-HK
-    CHT_LIST = [".cht", ".tc", "[cht]", "[tc]", "big5", "[big5]"]
+    CHT_LIST = config["SubtitleKeyword"]["CHT"]
     # Jpn and zh-CN
-    JP_SC_LIST = [".jpsc", "[jpsc]", "jp_sc", "[jp_sc]", "chs&jap", "简日"]
+    JP_SC_LIST = config["SubtitleKeyword"]["JP_SC"]
     # Jpn and zh-TW/zh-HK
-    JP_TC_LIST = [".jptc", "[jptc]", "jp_tc", "[jp_tc]", "cht&jap", "繁日"]
+    JP_TC_LIST = config["SubtitleKeyword"]["JP_TC"]
     # Jpn
-    JP_LIST = [".jp", ".jpn", ".jap", "[jp]", "[jpn]", "[jap]"]
+    JP_LIST = config["SubtitleKeyword"]["JP"]
     # Rus
-    RU_LIST = [".ru", ".rus", "[ru]", "[rus]"]
+    RU_LIST = config["SubtitleKeyword"]["RU"]
 
     if any(indicator in subtitle_file_name.lower() for indicator in JP_SC_LIST):
         language = "jp_sc"
@@ -99,7 +107,7 @@ def is_font_file(f: str) -> bool:
     :param f: file name (path)
     :return: true if is a font file, false if not
     """
-    ALLOWED_FONT_EXTENSIONS = [".ttf", ".otf", ".ttc"]
+    ALLOWED_FONT_EXTENSIONS = config["Font"]["AllowedExtensions"]
     if any(f.lower().endswith(ext) for ext in ALLOWED_FONT_EXTENSIONS):
         return True
     else:
@@ -110,12 +118,12 @@ if __name__ == '__main__':
     delete_list = []
     move_list = []
 
-    if SUFFIX_NAME == "":
-        SUFFIX_NAME = "_Plex"
+    custom_workdir = input("Please input the working directory (default: current directory): ")
+    if custom_workdir != "":
+        os.chdir(custom_workdir)
+    folder_list = os.listdir()
 
     try:
-        # A useful global variable
-        folder_list = os.listdir()
         # Prepare fonts
         font_list = []
         # If Fonts folder exists, load all fonts in it
