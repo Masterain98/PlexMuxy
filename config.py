@@ -25,7 +25,8 @@ def make_default_config():
                 "JP": [".jp", ".jpn", ".jap", "[jp]", "[jpn]", "[jap]"],
                 "RU": [".ru", ".rus", "[ru]", "[rus]"]
             },
-            "DefaultLanguage": "chs"
+            "DefaultLanguage": "chs",
+            "ShowSubtitleAuthorInTrackName": True
 
         },
         "mkvmerge": {

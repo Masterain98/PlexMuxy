@@ -100,7 +100,10 @@ if __name__ == '__main__':
                         this_sub_info = subtitle_info_checker(item)
                         print("Subtitle info: " + str(this_sub_info))
                         if this_sub_info["language"] != "":
-                            track_name = this_sub_info["language"] + " " + this_sub_info["sub_author"]
+                            if config["Subtitle"]["ShowSubtitleAuthorInTrackName"]:
+                                track_name = this_sub_info["language"] + " " + this_sub_info["sub_author"]
+                            else:
+                                track_name = this_sub_info["language"]
                             this_sub_track = MKVTrack(item, track_name=track_name,
                                                       default_track=False, language=this_sub_info["mkv_language"],
                                                       mkvmerge_path=MKVMERGE_PATH)
@@ -148,7 +151,10 @@ if __name__ == '__main__':
                                 this_sub_info = subtitle_info_checker(item)
                                 print(this_sub_info)
                                 if this_sub_info["language"] != "":
-                                    track_name = this_sub_info["language"] + " " + this_sub_info["sub_author"]
+                                    if config["Subtitle"]["ShowSubtitleAuthorInTrackName"]:
+                                        track_name = this_sub_info["language"] + " " + this_sub_info["sub_author"]
+                                    else:
+                                        track_name = this_sub_info["language"]
                                     this_sub_track = MKVTrack(item, track_name=track_name,
                                                               default_track=False,
                                                               language=this_sub_info["mkv_language"],
