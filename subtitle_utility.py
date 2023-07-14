@@ -9,6 +9,8 @@ def subtitle_info_checker(subtitle_file_name: str) -> dict:
     :return: a dictionary of language and group information, empty string if not found
     """
     config = get_config()
+    user_default_language = config["Subtitle"]["DefaultLanguage"]
+    is_default_language = False
     # zh-CN
     CHS_LIST = config["Subtitle"]["Keyword"]["CHS"]
     # zh-TW or zh-HK
@@ -24,18 +26,28 @@ def subtitle_info_checker(subtitle_file_name: str) -> dict:
 
     if any(indicator in subtitle_file_name.lower() for indicator in JP_SC_LIST):
         language = "jp_sc"
+        mkv_language = "chi"
     elif any(indicator in subtitle_file_name.lower() for indicator in JP_TC_LIST):
         language = "jp_tc"
+        mkv_language = "chi"
     elif any(indicator in subtitle_file_name.lower() for indicator in CHS_LIST):
         language = "chs"
+        mkv_language = "chi"
     elif any(indicator in subtitle_file_name.lower() for indicator in CHT_LIST):
         language = "cht"
+        mkv_language = "chi"
     elif any(indicator in subtitle_file_name.lower() for indicator in JP_LIST):
         language = "jpn"
+        mkv_language = "jpn"
     elif any(indicator in subtitle_file_name.lower() for indicator in RU_LIST):
         language = "rus"
+        mkv_language = "rus"
     else:
         language = ""
+        mkv_language = ""
+
+    if language == user_default_language:
+        is_default_language = True
 
     sub_author = re.search(r'(^\[)(\w|\d|\-|\_|\&|\.|\!)+(\]+?)', subtitle_file_name)
     if sub_author is not None:
@@ -45,7 +57,9 @@ def subtitle_info_checker(subtitle_file_name: str) -> dict:
 
     return {
         "language": language,
-        "sub_author": sub_author.replace("[", "").replace("]", "")
+        "sub_author": sub_author.replace("[", "").replace("]", ""),
+        "default_language": is_default_language,
+        "mkv_language": mkv_language
     }
 
 

@@ -101,18 +101,11 @@ if __name__ == '__main__':
                         print("Subtitle info: " + str(this_sub_info))
                         if this_sub_info["language"] != "":
                             track_name = this_sub_info["language"] + " " + this_sub_info["sub_author"]
-                            if this_sub_info["language"] == "jpn":
-                                this_sub_track = MKVTrack(item, track_name=track_name,
-                                                          default_track=True, language="jpn",
-                                                          mkvmerge_path=MKVMERGE_PATH)
-                            elif this_sub_info["language"] == "rus":
-                                this_sub_track = MKVTrack(item, track_name=track_name,
-                                                          default_track=True, language="rus",
-                                                          mkvmerge_path=MKVMERGE_PATH)
-                            else:
-                                this_sub_track = MKVTrack(item, track_name=track_name,
-                                                          default_track=True, language="chi",
-                                                          mkvmerge_path=MKVMERGE_PATH)
+                            this_sub_track = MKVTrack(item, track_name=track_name,
+                                                      default_track=False, language=this_sub_info["mkv_language"],
+                                                      mkvmerge_path=MKVMERGE_PATH)
+                            if this_sub_info["default_language"]:
+                                this_sub_track.default_track = True
                             skip_this_task = False
                             this_task.add_track(this_sub_track)
                             print("Find " + this_sub_info["language"] + " subtitle: " + item)
@@ -156,18 +149,12 @@ if __name__ == '__main__':
                                 print(this_sub_info)
                                 if this_sub_info["language"] != "":
                                     track_name = this_sub_info["language"] + " " + this_sub_info["sub_author"]
-                                    if this_sub_info["language"] == "jpn":
-                                        this_sub_track = MKVTrack(item, track_name=track_name,
-                                                                  default_track=True, language="jpn",
-                                                                  mkvmerge_path=MKVMERGE_PATH)
-                                    elif this_sub_info["language"] == "rus":
-                                        this_sub_track = MKVTrack(item, track_name=track_name,
-                                                                  default_track=True, language="rus",
-                                                                  mkvmerge_path=MKVMERGE_PATH)
-                                    else:
-                                        this_sub_track = MKVTrack(item, track_name=track_name,
-                                                                  default_track=True, language="chi",
-                                                                  mkvmerge_path=MKVMERGE_PATH)
+                                    this_sub_track = MKVTrack(item, track_name=track_name,
+                                                              default_track=False,
+                                                              language=this_sub_info["mkv_language"],
+                                                              mkvmerge_path=MKVMERGE_PATH)
+                                    if this_sub_info["default_language"]:
+                                        this_sub_track.default_track = True
                                     skip_this_task = False
                                     this_task.add_track(this_sub_track)
                                     print("Find " + this_sub_info["language"] + " subtitle: " + item)
