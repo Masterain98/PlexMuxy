@@ -7,7 +7,7 @@ import py7zr
 import re
 from config import get_config
 from compressed import unzip
-from subtitle_utility import subtitle_info_checker, is_font_file
+from subtitle_utils import subtitle_info_checker, is_font_file
 
 # Global Variable
 try:
