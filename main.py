@@ -1,7 +1,6 @@
 import os
 import shutil
 import subprocess
-import time
 from pymkv import MKVFile, MKVTrack
 import py7zr
 import re
@@ -13,7 +12,7 @@ from subtitle_utils import subtitle_info_checker, is_font_file
 try:
     config = get_config()
 except ValueError:
-    exit(0)
+    raise ValueError("Config file error")
 DELETE_FONTS = config["TaskSettings"]["DeleteFonts"]
 DELETE_ORIGINAL_MKV = config["TaskSettings"]["DeleteOriginalMKV"]
 DELETE_ORIGINAL_MKA = config["TaskSettings"]["DeleteOriginalMKA"]
@@ -86,6 +85,14 @@ if __name__ == '__main__':
             print("Task start: " + MKV_file_name)
             MKV_name_no_extension = MKV_file_name.replace(".mkv", "")
             this_task = MKVFile(MKV_file_name, mkvmerge_path=MKVMERGE_PATH)
+            for track in this_task.tracks:
+                if track.track_type == "audio" or track.track_type == "subtitles":
+                    if track.language == "und":
+                        print("Track %s (%s track) language is undefined, set a language for it"
+                              % (track.track_id, track.track_type))
+                        input("Input a language code for this track"
+                              " (zh-Hans/zh-Hant/jp/en/ru or other language code): ")
+                        track.language_ietf = input()
 
             if DELETE_ORIGINAL_MKV:
                 delete_list.append(MKV_file_name)

@@ -1,7 +1,7 @@
 import os
 import json
 
-REQUIRED_CONFIG = ["TaskSettings", "Font", "SubtitleKeyword"]
+REQUIRED_CONFIG = ["TaskSettings", "Font", "Subtitle"]
 
 
 def make_default_config():
