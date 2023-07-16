@@ -104,8 +104,9 @@ if __name__ == '__main__':
                                 track_name = this_sub_info["language"] + " " + this_sub_info["sub_author"]
                             else:
                                 track_name = this_sub_info["language"]
-                            this_sub_track = MKVTrack(item, track_name=track_name,
-                                                      default_track=False, language=this_sub_info["mkv_language"],
+                            this_sub_track = MKVTrack(item, track_name=track_name, default_track=False,
+                                                      language=this_sub_info["mkv_language"],
+                                                      language_ietf=this_sub_info["ietf_language"],
                                                       mkvmerge_path=MKVMERGE_PATH)
                             if this_sub_info["default_language"]:
                                 this_sub_track.default_track = True
@@ -155,9 +156,9 @@ if __name__ == '__main__':
                                         track_name = this_sub_info["language"] + " " + this_sub_info["sub_author"]
                                     else:
                                         track_name = this_sub_info["language"]
-                                    this_sub_track = MKVTrack(item, track_name=track_name,
-                                                              default_track=False,
+                                    this_sub_track = MKVTrack(item, track_name=track_name, default_track=False,
                                                               language=this_sub_info["mkv_language"],
+                                                              language_ietf=this_sub_info["ietf_language"],
                                                               mkvmerge_path=MKVMERGE_PATH)
                                     if this_sub_info["default_language"]:
                                         this_sub_track.default_track = True
