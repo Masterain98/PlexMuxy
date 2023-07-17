@@ -1,7 +1,7 @@
 import os
 import json
 
-REQUIRED_CONFIG = ["TaskSettings", "Font", "Subtitle"]
+REQUIRED_CONFIG = ["TaskSettings", "Font", "Subtitle", "mkvmerge"]
 
 
 def make_default_config():
@@ -14,7 +14,8 @@ def make_default_config():
             "OutputSuffixName": "_Plex"
         },
         "Font": {
-            "AllowedExtensions": [".ttf", ".otf", ".ttc"]
+            "AllowedExtensions": [".ttf", ".otf", ".ttc"],
+            "Unrar_Path": "C:\\Program Files\\WinRAR\\UnRAR.exe"
         },
         "Subtitle": {
             "Keyword": {

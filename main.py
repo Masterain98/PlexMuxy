@@ -4,6 +4,7 @@ import subprocess
 from pymkv import MKVFile, MKVTrack
 import py7zr
 import re
+import patoolib
 from config import get_config
 from compressed import unzip
 from subtitle_utils import subtitle_info_checker, is_font_file
@@ -12,12 +13,14 @@ from subtitle_utils import subtitle_info_checker, is_font_file
 try:
     config = get_config()
 except ValueError:
-    raise ValueError("Config file error")
+    input("Config file error, press ENTER to exit")
+    exit(0)
 DELETE_FONTS = config["TaskSettings"]["DeleteFonts"]
 DELETE_ORIGINAL_MKV = config["TaskSettings"]["DeleteOriginalMKV"]
 DELETE_ORIGINAL_MKA = config["TaskSettings"]["DeleteOriginalMKA"]
 DELETE_SUB = config["TaskSettings"]["DeleteSubtitle"]
 SUFFIX_NAME = config["TaskSettings"]["OutputSuffixName"]
+UNRAR_PATH = config["Font"]["Unrar_Path"]
 if SUFFIX_NAME == "":
     SUFFIX_NAME = "_Plex"
 if config["mkvmerge"]["path"] != "":
@@ -25,7 +28,6 @@ if config["mkvmerge"]["path"] != "":
 else:
     print("mkvmerge path not set, using mkvmerge.exe in the working directory")
     MKVMERGE_PATH = "mkvmerge"
-
 
 if __name__ == '__main__':
     delete_list = []
@@ -46,25 +48,30 @@ if __name__ == '__main__':
         unfiltered_font_list = []
         for file_name in folder_list:
             # if there is a zipped fonts file, unzip it
-            if "font" in file_name.lower() and ".zip" in file_name:
-                # zip extension
+            if "font" in file_name.lower():
                 print("Find font package file: " + file_name)
                 if not os.path.exists("Fonts"):
                     os.makedirs("Fonts")
                     print("Fonts sub-directory created")
-                unfiltered_font_list = unzip(file_name, "cp437")
-                print("Unzipped to /Fonts: " + str(unfiltered_font_list))
-                print("=" * 20)
-            elif "Font" in file_name and ".7z" in file_name:
-                # 7z extension
-                print("Find font package file: " + file_name)
-                if not os.path.exists("Fonts"):
-                    os.makedirs("Fonts")
-                    print("Fonts sub-directory created")
-                with py7zr.SevenZipFile(file_name, mode='r') as z:
-                    z.extractall("Fonts")
-                    unfiltered_font_list = z.getnames()
+                if ".zip" in file_name:
+                    # zip extension
+                    unfiltered_font_list = unzip(file_name, "utf-8")
                     print("Unzipped to /Fonts: " + str(unfiltered_font_list))
+                elif ".7z" in file_name:
+                    # 7z extension
+                    with py7zr.SevenZipFile(file_name, mode='r') as z:
+                        z.extractall("Fonts")
+                        unfiltered_font_list = z.getnames()
+                        print("Unzipped to /Fonts: " + str(unfiltered_font_list))
+                elif ".rar" in file_name:
+                    if UNRAR_PATH != "":
+                        patoolib.extract_archive(file_name, outdir="./Fonts/", program=UNRAR_PATH)
+                        unfiltered_font_list = os.listdir("Fonts")
+                    else:
+                        print("Unrar path not set, please manually unrar the file")
+                else:
+                    print("%s is an unrecognized compressed file format, please manually unzip the file" % file_name)
+                print("=" * 20)
     # Filter fonts file
     font_list = list(filter(is_font_file, unfiltered_font_list))
     print("Loading fonts: " + str(font_list))

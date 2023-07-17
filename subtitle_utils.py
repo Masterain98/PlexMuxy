@@ -1,6 +1,21 @@
 from config import get_config
 import re
 
+config = get_config()
+# zh-CN
+CHS_LIST = config["Subtitle"]["Keyword"]["CHS"]
+# zh-TW or zh-HK
+CHT_LIST = config["Subtitle"]["Keyword"]["CHT"]
+# Jpn and zh-CN
+JP_SC_LIST = config["Subtitle"]["Keyword"]["JP_SC"]
+# Jpn and zh-TW/zh-HK
+JP_TC_LIST = config["Subtitle"]["Keyword"]["JP_TC"]
+# Jpn
+JP_LIST = config["Subtitle"]["Keyword"]["JP"]
+# Rus
+RU_LIST = config["Subtitle"]["Keyword"]["RU"]
+ALLOWED_FONT_EXTENSIONS = config["Font"]["AllowedExtensions"]
+
 
 def subtitle_info_checker(subtitle_file_name: str) -> dict:
     """
@@ -8,21 +23,9 @@ def subtitle_info_checker(subtitle_file_name: str) -> dict:
     :param subtitle_file_name: subtitle file name (path)
     :return: a dictionary of language and group information, empty string if not found
     """
-    config = get_config()
+
     user_default_language = config["Subtitle"]["DefaultLanguage"]
     is_default_language = False
-    # zh-CN
-    CHS_LIST = config["Subtitle"]["Keyword"]["CHS"]
-    # zh-TW or zh-HK
-    CHT_LIST = config["Subtitle"]["Keyword"]["CHT"]
-    # Jpn and zh-CN
-    JP_SC_LIST = config["Subtitle"]["Keyword"]["JP_SC"]
-    # Jpn and zh-TW/zh-HK
-    JP_TC_LIST = config["Subtitle"]["Keyword"]["JP_TC"]
-    # Jpn
-    JP_LIST = config["Subtitle"]["Keyword"]["JP"]
-    # Rus
-    RU_LIST = config["Subtitle"]["Keyword"]["RU"]
 
     if any(indicator in subtitle_file_name.lower() for indicator in JP_SC_LIST):
         language = "jp_sc"
@@ -56,7 +59,7 @@ def subtitle_info_checker(subtitle_file_name: str) -> dict:
     if language == user_default_language:
         is_default_language = True
 
-    sub_author = re.search(r'(^\[)(\w|\d|\-|\_|\&|\.|\!)+(\]+?)', subtitle_file_name)
+    sub_author = re.search(r'(^\[)(\w|\d|-|_|&|\.|!)+(]+?)', subtitle_file_name)
     if sub_author is not None:
         sub_author = sub_author.group(0)
     else:
@@ -77,8 +80,6 @@ def is_font_file(f: str) -> bool:
     :param f: file name (path)
     :return: true if is a font file, false if not
     """
-    config = get_config()
-    ALLOWED_FONT_EXTENSIONS = config["Font"]["AllowedExtensions"]
     if any(f.lower().endswith(ext) for ext in ALLOWED_FONT_EXTENSIONS):
         return True
     else:
