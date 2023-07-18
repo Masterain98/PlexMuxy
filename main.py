@@ -29,7 +29,8 @@ else:
     print("mkvmerge path not set, using mkvmerge.exe in the working directory")
     MKVMERGE_PATH = "mkvmerge"
 
-if __name__ == '__main__':
+
+def main():
     delete_list = []
     move_list = []
 
@@ -39,7 +40,6 @@ if __name__ == '__main__':
     folder_list = os.listdir()
 
     # Prepare fonts
-    font_list = []
     # If Fonts folder exists, load all fonts in it
     if os.path.exists("Fonts"):
         unfiltered_font_list = os.listdir("Fonts")
@@ -90,7 +90,7 @@ if __name__ == '__main__':
         if SUFFIX_NAME not in MKV_file_name:
             # Generate the task with MKV file
             print("Task start: " + MKV_file_name)
-            MKV_name_no_extension = MKV_file_name.replace(".mkv", "")
+            mkv_name_no_extension = MKV_file_name.replace(".mkv", "")
             this_task = MKVFile(MKV_file_name, mkvmerge_path=MKVMERGE_PATH)
             for track in this_task.tracks:
                 if track.track_type == "audio" or track.track_type == "subtitles":
@@ -108,7 +108,7 @@ if __name__ == '__main__':
 
             for item in folder_other_file_list:
                 # Match resources based on file name
-                if MKV_name_no_extension in item:
+                if mkv_name_no_extension in item:
                     if item.endswith(".ass"):
                         # Add Subtitle track
                         this_sub_info = subtitle_info_checker(item)
@@ -144,7 +144,7 @@ if __name__ == '__main__':
                 else:
                     # Expand the search range for other subgroups
                     # By matching up the episode number
-                    this_ep_num = re.search(r'(\[)(SP|sp)?(\d{2})(])', MKV_name_no_extension)
+                    this_ep_num = re.search(r'(\[)(SP|sp)?(\d{2})(])', mkv_name_no_extension)
                     if this_ep_num is not None:
                         this_ep_num = this_ep_num.group(0)
                         sub_matched = False
@@ -189,22 +189,22 @@ if __name__ == '__main__':
                 font = "Fonts/" + font
                 this_task.add_attachment(font)
             if not skip_this_task:
-                newMKV_name = MKV_name_no_extension + SUFFIX_NAME + ".mkv"
+                new_mkv_name = mkv_name_no_extension + SUFFIX_NAME + ".mkv"
                 try:
                     print("")
-                    this_task.mux(newMKV_name, silent=True)
-                    print("Mux successfully: " + newMKV_name)
-                except subprocess.CalledProcessError as e:
+                    this_task.mux(new_mkv_name, silent=True)
+                    print("Mux successfully: " + new_mkv_name)
+                except subprocess.CalledProcessError:
                     # A mysterious error will not cause any problem
-                    print("MKVMerge raised error: " + newMKV_name)
+                    print("MKVMerge raised error: " + new_mkv_name)
                 print("=" * 20)
             else:
                 print("No task for this MKV")
 
     try:
         # Clean up
-        ExtraFolderIsExists = os.path.exists("Extra")
-        if not ExtraFolderIsExists and len(move_list) >= 1:
+        extra_folder_is_exist = os.path.exists("Extra")
+        if not extra_folder_is_exist and len(move_list) >= 1:
             os.makedirs("Extra")
         if DELETE_FONTS:
             try:
@@ -224,3 +224,7 @@ if __name__ == '__main__':
     except Exception as e:
         print(e)
         input("Error at clean up stage. Press Enter to exit...")
+
+
+if __name__ == '__main__':
+    main()

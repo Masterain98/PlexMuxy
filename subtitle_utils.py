@@ -2,17 +2,17 @@ from config import get_config
 import re
 
 config = get_config()
-# zh-CN
+# CHS
 CHS_LIST = config["Subtitle"]["Keyword"]["CHS"]
-# zh-TW or zh-HK
+# CHT
 CHT_LIST = config["Subtitle"]["Keyword"]["CHT"]
-# Jpn and zh-CN
+# JPN and CHS
 JP_SC_LIST = config["Subtitle"]["Keyword"]["JP_SC"]
-# Jpn and zh-TW/zh-HK
+# JPN and CHT
 JP_TC_LIST = config["Subtitle"]["Keyword"]["JP_TC"]
-# Jpn
+# JPN
 JP_LIST = config["Subtitle"]["Keyword"]["JP"]
-# Rus
+# RUS
 RU_LIST = config["Subtitle"]["Keyword"]["RU"]
 ALLOWED_FONT_EXTENSIONS = config["Font"]["AllowedExtensions"]
 
