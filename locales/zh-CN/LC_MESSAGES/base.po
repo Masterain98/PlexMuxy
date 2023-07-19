@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PlexMuxy\n"
 "POT-Creation-Date: 2023-07-18 18:16-0700\n"
-"PO-Revision-Date: 2023-07-19 01:27\n"
+"PO-Revision-Date: 2023-07-19 01:37\n"
 "Last-Translator: \n"
 "Language-Team: Chinese Simplified\n"
 "MIME-Version: 1.0\n"
@@ -19,112 +19,112 @@ msgstr ""
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:22
 msgid "Config file error, press ENTER to exit"
-msgstr ""
+msgstr "配置文件错误，按回车退出程序"
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:35
 msgid "mkvmerge path not set, using mkvmerge.exe in the working directory"
-msgstr ""
+msgstr "未设置 mkvmerge 路径，使用工作目录中的 mkvmerge.exe"
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:43
 msgid "Please input the working directory (default: current directory): "
-msgstr ""
+msgstr "请输入工作目录路径 （默认当前目录）： "
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:58
 msgid "Find font package file: "
-msgstr ""
+msgstr "找到字体包文件："
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:61
 msgid "Fonts sub-directory created"
-msgstr ""
+msgstr "Fonts 字体子目录已创建"
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:66
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:75
 msgid "Unzipped to /Fonts: "
-msgstr ""
+msgstr "已解压至 /Fonts 目录"
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:68
 msgid "Unsupported encoding, please manually zip the file"
-msgstr ""
+msgstr "不支持的编码，请手动解压文件"
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:81
 msgid "Unrar path not set, please manually unrar the file"
-msgstr ""
+msgstr "UnRaR 路径未设置，请手动解压 rar 文件"
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:83
 msgid "%s is an unrecognized compressed file format, please manually unzip the file"
-msgstr ""
+msgstr "%s 是一个未识别的压缩文件格式，请手动解压文件"
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:87
 msgid "Loading fonts: "
-msgstr ""
+msgstr "正在加载字体："
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:101
 msgid "Task start: "
-msgstr ""
+msgstr "开始任务："
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:107
 msgid "Track %s (%s track) language is undefined, set a language for it"
-msgstr ""
+msgstr "轨道 %s （%s 轨道）的语言未定义，需要为其设置一个语言"
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:109
 msgid "Input a language code for this track (zh-Hans/zh-Hant/jp/en/ru or other language code): "
-msgstr ""
+msgstr "输入此音轨的语言代码 (zh-Hans/zh-Hant/jp/en/ru 或其他语言代码)： "
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:123
 msgid "Subtitle info: "
-msgstr ""
+msgstr "字幕信息： "
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:137
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:189
 msgid " subtitle: "
-msgstr ""
+msgstr "字幕："
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:137
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:189
 msgid "Find "
-msgstr ""
+msgstr "找到"
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:147
 msgid "Find associated audio: "
-msgstr ""
+msgstr "找到关联的音频："
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:172
 msgid " to match subtitle file"
-msgstr ""
+msgstr " 以匹配字幕文件"
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:172
 msgid "Using ep number "
-msgstr ""
+msgstr "使用集数编号 "
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:203
 msgid "Mux successfully: "
-msgstr ""
+msgstr "成功混流："
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:206
 msgid "MKVMerge raised error: "
-msgstr ""
+msgstr "MKVMerge 错误："
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:209
 msgid "No task for this MKV"
-msgstr ""
+msgstr "此 MKV 文件无任务"
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:219
 msgid "Remove Fonts Folder Successfully"
-msgstr ""
+msgstr "成功删除字体文件夹"
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:221
 msgid "Remove Fonts Folder Error"
-msgstr ""
+msgstr "删除字体文件夹错误"
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:226
 msgid "Failed to delete "
-msgstr ""
+msgstr "删除失败 "
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:230
 msgid "Task finished. Press Enter to exit..."
-msgstr ""
+msgstr "任务完成，按回车退出..."
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:233
 msgid "Error at clean up stage. Press Enter to exit"
-msgstr ""
+msgstr "清理阶段时出错。按回车键退出程序"
 
