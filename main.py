@@ -6,15 +6,20 @@ import py7zr
 import re
 import patoolib
 import gettext
+import locale
 from config import get_config
 from compressed import unzip
 from subtitle_utils import subtitle_info_checker, is_font_file
 
 # Global Variable
 # i10n
-for language in ["en", "zh-CN"]:
-    language_translations = gettext.translation("main", localedir="locales", languages=[language])
-    language_translations.install()
+lang_settings = locale.getlocale()
+if "Chinese" in lang_settings[0]:
+    lang_set = ["zh-CN"]
+else:
+    lang_set = ["en"]
+language_translations = gettext.translation("base", localedir="locales", languages=lang_set)
+language_translations.install()
 _ = language_translations.gettext
 try:
     config = get_config()
