@@ -7,12 +7,12 @@ import re
 import patoolib
 import gettext
 import locale
+import zlib
 from config import get_config
 from compressed import unzip
 from subtitle_utils import subtitle_info_checker, is_font_file
 
-# Global Variable
-# i10n
+# l10n
 lang_settings = locale.getlocale()
 if "Chinese" in lang_settings[0]:
     lang_set = ["zh-CN"]
@@ -21,6 +21,7 @@ else:
 language_translations = gettext.translation("base", localedir="locales", languages=lang_set)
 language_translations.install()
 _ = language_translations.gettext
+# Global Variable
 try:
     config = get_config()
 except ValueError:
@@ -70,6 +71,9 @@ def main():
                         unfiltered_font_list = unzip(file_name, "utf-8")
                         print(_("Unzipped to /Fonts: ") + str(unfiltered_font_list))
                     except UnicodeDecodeError:
+                        print(_("Unsupported encoding, please manually zip the file"))
+                        exit(0)
+                    except zlib.error:
                         print(_("Unsupported encoding, please manually zip the file"))
                         exit(0)
                 elif ".7z" in file_name:
