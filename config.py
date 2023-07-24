@@ -1,7 +1,7 @@
 import os
 import json
 
-REQUIRED_CONFIG = ["TaskSettings", "Font", "Subtitle", "mkvmerge"]
+REQUIRED_CONFIG = ["TaskSettings", "Font", "Subtitle", "mkvmerge", "multiprocessing"]
 
 
 def make_default_config():
@@ -32,6 +32,9 @@ def make_default_config():
         },
         "mkvmerge": {
             "path": "C:\\Program Files\\MKVToolNix\\mkvmerge.exe"
+        },
+        "multiprocessing": {
+            "thread_count": 24
         }
     }
     with open(os.path.expandvars("%userprofile%/Documents/PlexMuxy.json"), "w", encoding='utf-8') as output:
