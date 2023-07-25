@@ -9,6 +9,7 @@ import gettext
 import locale
 import zlib
 from multiprocessing.pool import ThreadPool
+from rich.progress import Progress
 from config import get_config
 from compressed import unzip
 from subtitle_utils import subtitle_info_checker, is_font_file
@@ -45,14 +46,15 @@ else:
 if type(T_COUNT) == str:
     if T_COUNT.isnumeric():
         T_COUNT = int(T_COUNT)
-    elif T_COUNT == "auto":
+    elif T_COUNT.lower() == "auto":
         T_COUNT = os.cpu_count()
     else:
         T_COUNT = 1
 task_pool = ThreadPool(processes=T_COUNT)
 
 
-def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: list) -> dict:
+def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: list,
+                 major_progress: Progress, major_process_task) -> dict:
     # Initial variables
     skip_this_task = True
     this_delete_list = []
@@ -60,14 +62,14 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
 
     if SUFFIX_NAME not in mkv_file_name:
         # Generate the task with MKV file
-        print(_("Task start: ") + mkv_file_name)
+        major_progress.console.print(_("Task start: ") + mkv_file_name)
         mkv_name_no_extension = mkv_file_name.replace(".mkv", "")
         this_task = MKVFile(mkv_file_name, mkvmerge_path=MKVMERGE_PATH)
         for track in this_task.tracks:
             if track.track_type == "audio" or track.track_type == "subtitles":
                 if track.language == "und":
-                    print(_("Track %s (%s track) language is undefined, set a language for it")
-                          % (track.track_id, track.track_type))
+                    #this_progress.console.print(_("Track %s (%s track) language is undefined, set a language for it")
+                     #     % (track.track_id, track.track_type))
                     track.language_ietf = input(_("Input a language code for this track"
                                                   " (zh-Hans/zh-Hant/jp/en/ru or other language code): "))
 
@@ -82,7 +84,7 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
                 if item.endswith(".ass"):
                     # Add Subtitle track
                     this_sub_info = subtitle_info_checker(item)
-                    print(_("Subtitle info: ") + str(this_sub_info))
+                    #this_progress.console.print(_("Subtitle info: ") + str(this_sub_info))
                     if this_sub_info["language"] != "":
                         if config["Subtitle"]["ShowSubtitleAuthorInTrackName"]:
                             track_name = this_sub_info["language"] + " " + this_sub_info["sub_author"]
@@ -96,7 +98,7 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
                             this_sub_track.default_track = True
                         skip_this_task = False
                         this_task.add_track(this_sub_track)
-                        print(_("Find ") + this_sub_info["language"] + _(" subtitle: ") + item)
+                        #this_progress.console.print(_("Find ") + this_sub_info["language"] + _(" subtitle: ") + item)
 
                         if DELETE_SUB:
                             this_delete_list.append(item)
@@ -106,7 +108,7 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
                     # Add MKA track
                     skip_this_task = False
                     this_task.add_track(item)
-                    print(_("Find associated audio: ") + item)
+                    #this_progress.console.print(_("Find associated audio: ") + item)
                     if DELETE_ORIGINAL_MKA:
                         this_delete_list.append(item)
                     else:
@@ -131,10 +133,10 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
                         # this_ep_num =  01. (one space before and one dot after the number)
                         sub_matched = True
                     if sub_matched:
-                        print(_("Using ep number ") + this_ep_num + _(" to match subtitle file"))
+                        #this_progress.console.print(_("Using ep number ") + this_ep_num + _(" to match subtitle file"))
                         if item.endswith(".ass"):
                             this_sub_info = subtitle_info_checker(item)
-                            print(this_sub_info)
+                            #this_progress.console.print(this_sub_info)
                             if this_sub_info["language"] != "":
                                 if config["Subtitle"]["ShowSubtitleAuthorInTrackName"]:
                                     track_name = this_sub_info["language"] + " " + this_sub_info["sub_author"]
@@ -148,7 +150,8 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
                                     this_sub_track.default_track = True
                                 skip_this_task = False
                                 this_task.add_track(this_sub_track)
-                                print(_("Find ") + this_sub_info["language"] + _(" subtitle: ") + item)
+                                #this_progress.console.print(_("Find ") + this_sub_info["language"] + _(" subtitle: ")
+                                #                            + item)
 
                                 if DELETE_SUB:
                                     this_delete_list.append(item)
@@ -158,17 +161,19 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
             font = "Fonts/" + font
             this_task.add_attachment(font)
         if not skip_this_task:
+            task_progress_name = "EP " + str(this_ep_num) + " Task"
+            this_task_progress = major_progress.add_task(task_progress_name, total=None, visible=True)
             new_mkv_name = mkv_name_no_extension + SUFFIX_NAME + ".mkv"
             try:
-                print("")
                 this_task.mux(new_mkv_name, silent=True)
-                print(_("Mux successfully: ") + new_mkv_name)
+                major_progress.console.print(_("Mux successfully: ") + new_mkv_name)
             except subprocess.CalledProcessError:
                 # A mysterious error will not cause any problem
-                print(_("MKVMerge raised error: ") + new_mkv_name)
-            print("=" * 20)
+                major_progress.console.print(_("MKVMerge raised error: ") + new_mkv_name)
+            major_progress.update(major_process_task, advance=1, visible=True)
+            major_progress.update(this_task_progress, completed=True, visible=False)
         else:
-            print(_("No task for this MKV"))
+            major_progress.console.print(_("No task for this MKV") + mkv_file_name)
     return {"delete_list": this_delete_list, "move_list": this_move_list}
 
 
@@ -236,12 +241,15 @@ def main():
     for mkv_file_name in folder_mkv_list:
         this_task_result = mkv_mux_task(mkv_file_name, folder_other_file_list, font_list)
     """
-    async_results = [task_pool.apply_async(mkv_mux_task, args=(mkv_file_name, folder_other_file_list, font_list))
-                     for mkv_file_name in folder_mkv_list]
-    results = [ar.get() for ar in async_results]
-    for result in results:
-        delete_list.extend(result["delete_list"])
-        move_list.extend(result["move_list"])
+    with Progress() as progress:
+        main_task_progress = progress.add_task(_("[green]Main task"), total=len(folder_mkv_list), visible=True)
+        async_results = [task_pool.apply_async(mkv_mux_task, args=(mkv_file_name, folder_other_file_list, font_list,
+                                                                   progress, main_task_progress))
+                         for mkv_file_name in folder_mkv_list]
+        results = [ar.get() for ar in async_results]
+        for result in results:
+            delete_list.extend(result["delete_list"])
+            move_list.extend(result["move_list"])
 
     try:
         # Clean up
