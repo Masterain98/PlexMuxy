@@ -8,6 +8,8 @@ import patoolib
 import gettext
 import locale
 import zlib
+import logging
+from datetime import datetime
 from multiprocessing.pool import ThreadPool
 from rich.progress import Progress
 from config import get_config
@@ -51,6 +53,9 @@ if type(T_COUNT) == str:
     else:
         T_COUNT = 1
 task_pool = ThreadPool(processes=T_COUNT)
+logging.basicConfig(filename=os.path.expandvars("%userprofile%/Documents/PlexMuxy/%s.log") % datetime.now().
+                    strftime("%Y%m%d-%H%M%S"), encoding="utf-8", level=logging.DEBUG,
+                    format="%(levelname)s:%(asctime)s:%(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
 
 def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: list,
@@ -68,8 +73,8 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
         for track in this_task.tracks:
             if track.track_type == "audio" or track.track_type == "subtitles":
                 if track.language == "und":
-                    #this_progress.console.print(_("Track %s (%s track) language is undefined, set a language for it")
-                     #     % (track.track_id, track.track_type))
+                    logging.warning(_("Track %s (%s track) language is undefined, set a language for it")
+                                    % (track.track_id, track.track_type))
                     track.language_ietf = input(_("Input a language code for this track"
                                                   " (zh-Hans/zh-Hant/jp/en/ru or other language code): "))
 
@@ -84,7 +89,7 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
                 if item.endswith(".ass"):
                     # Add Subtitle track
                     this_sub_info = subtitle_info_checker(item)
-                    #this_progress.console.print(_("Subtitle info: ") + str(this_sub_info))
+                    logging.info(_("Subtitle info: ") + str(this_sub_info))
                     if this_sub_info["language"] != "":
                         if config["Subtitle"]["ShowSubtitleAuthorInTrackName"]:
                             track_name = this_sub_info["language"] + " " + this_sub_info["sub_author"]
@@ -98,7 +103,7 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
                             this_sub_track.default_track = True
                         skip_this_task = False
                         this_task.add_track(this_sub_track)
-                        #this_progress.console.print(_("Find ") + this_sub_info["language"] + _(" subtitle: ") + item)
+                        logging.info(_("Find ") + this_sub_info["language"] + _(" subtitle: ") + item)
 
                         if DELETE_SUB:
                             this_delete_list.append(item)
@@ -108,7 +113,7 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
                     # Add MKA track
                     skip_this_task = False
                     this_task.add_track(item)
-                    #this_progress.console.print(_("Find associated audio: ") + item)
+                    logging.info(_("Find associated audio: ") + item)
                     if DELETE_ORIGINAL_MKA:
                         this_delete_list.append(item)
                     else:
@@ -133,10 +138,10 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
                         # this_ep_num =  01. (one space before and one dot after the number)
                         sub_matched = True
                     if sub_matched:
-                        #this_progress.console.print(_("Using ep number ") + this_ep_num + _(" to match subtitle file"))
+                        logging.info(_("Using ep number ") + this_ep_num + _(" to match subtitle file"))
                         if item.endswith(".ass"):
                             this_sub_info = subtitle_info_checker(item)
-                            #this_progress.console.print(this_sub_info)
+                            # this_progress.console.print(this_sub_info)
                             if this_sub_info["language"] != "":
                                 if config["Subtitle"]["ShowSubtitleAuthorInTrackName"]:
                                     track_name = this_sub_info["language"] + " " + this_sub_info["sub_author"]
@@ -150,8 +155,7 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
                                     this_sub_track.default_track = True
                                 skip_this_task = False
                                 this_task.add_track(this_sub_track)
-                                #this_progress.console.print(_("Find ") + this_sub_info["language"] + _(" subtitle: ")
-                                #                            + item)
+                                logging.info(_("Find ") + this_sub_info["language"] + _(" subtitle: ") + item)
 
                                 if DELETE_SUB:
                                     this_delete_list.append(item)
@@ -184,6 +188,7 @@ def main():
     custom_workdir = input(_("Please input the working directory (default: current directory): "))
     if custom_workdir != "":
         os.chdir(custom_workdir)
+    logging.info(_("Using working directory: ") + os.getcwd())
     folder_list = os.listdir()
 
     # Prepare fonts
@@ -197,19 +202,24 @@ def main():
             # if there is a zipped fonts file, unzip it
             if "font" in file_name.lower():
                 print(_("Find font package file: ") + file_name)
+                logging.info(_("Find font package file: ") + file_name)
                 if not os.path.exists("Fonts"):
                     os.makedirs("Fonts")
                     print(_("Fonts sub-directory created"))
+                    logging.info(_("Fonts sub-directory created"))
                 if ".zip" in file_name:
                     # zip extension
                     try:
                         unfiltered_font_list = unzip(file_name, "utf-8")
                         print(_("Unzipped to /Fonts: ") + str(unfiltered_font_list))
+                        logging.info(_("Unzipped to /Fonts: ") + str(unfiltered_font_list))
                     except UnicodeDecodeError:
                         print(_("Unsupported encoding, please manually zip the file"))
+                        logging.error(_("Unsupported encoding, please manually zip the file"))
                         exit(0)
                     except zlib.error:
                         print(_("Unsupported encoding, please manually zip the file"))
+                        logging.error(_("Unsupported encoding, please manually zip the file"))
                         exit(0)
                 elif ".7z" in file_name:
                     # 7z extension
@@ -217,18 +227,23 @@ def main():
                         z.extractall("Fonts")
                         unfiltered_font_list = z.getnames()
                         print(_("Unzipped to /Fonts: ") + str(unfiltered_font_list))
+                        logging.info(_("Unzipped to /Fonts: ") + str(unfiltered_font_list))
                 elif ".rar" in file_name:
                     if UNRAR_PATH != "":
                         patoolib.extract_archive(file_name, outdir="./Fonts/", program=UNRAR_PATH)
                         unfiltered_font_list = os.listdir("Fonts")
                     else:
                         print(_("Unrar path not set, please manually unrar the file"))
+                        logging.error(_("Unrar path not set, please manually unrar the file"))
                 else:
                     print(_("%s is an unrecognized compressed file format, please manually unzip the file") % file_name)
+                    logging.error(_("%s is an unrecognized compressed file format, please manually unzip the file")
+                                  % file_name)
                 print("=" * 20)
     # Filter fonts file
     font_list = list(filter(is_font_file, unfiltered_font_list))
     print(_("Loading fonts: ") + str(font_list))
+    logging.info(_("Loading fonts: ") + str(font_list))
 
     # Generate two useful list to reduce chance traversing folder_list in main task loop
     folder_mkv_list = [file for file in folder_list if file.endswith(".mkv")]
@@ -260,20 +275,24 @@ def main():
             try:
                 shutil.rmtree("Fonts/")
                 print(_("Remove Fonts Folder Successfully"))
+                logging.info(_("Remove Fonts Folder Successfully"))
             except OSError:
                 print(_("Remove Fonts Folder Error"))
+                logging.error(_("Remove Fonts Folder Error"))
         for file in delete_list:
             try:
                 os.remove(file)
             except OSError:
                 print(_("Failed to delete ") + file)
+                logging.error(_("Failed to delete ") + file)
         for file in move_list:
             shutil.move(file, "Extra/" + file)
-
+        logging.info(_("Task finished"))
         input(_("Task finished. Press Enter to exit..."))
     except Exception as e:
         print(e)
         input(_("Error at clean up stage. Press Enter to exit"))
+        logging.error(e)
 
 
 if __name__ == '__main__':
