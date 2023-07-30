@@ -1,0 +1,155 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: PlexMuxy\n"
+"POT-Creation-Date: 2023-07-29 20:14-0700\n"
+"PO-Revision-Date: 2023-07-30 16:43\n"
+"Last-Translator: \n"
+"Language-Team: English, United States\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: pygettext.py 1.5\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Crowdin-Project: PlexMuxy\n"
+"X-Crowdin-Project-ID: 602275\n"
+"X-Crowdin-Language: en-US\n"
+"X-Crowdin-File: /main/locales/base.pot\n"
+"X-Crowdin-File-ID: 255\n"
+"Language: en_US\n"
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:32
+msgid "Config file error, press ENTER to exit"
+msgstr "Config file error, press ENTER to exit"
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:46
+msgid "mkvmerge path not set, using mkvmerge.exe in the working directory"
+msgstr "mkvmerge path not set, using mkvmerge.exe in the working directory"
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:70
+msgid "Task start: "
+msgstr "Task start: "
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:76
+msgid "Track %s (%s track) language is undefined, set a language for it"
+msgstr "Track %s (%s track) language is undefined, set a language for it"
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:78
+msgid "Input a language code for this track (zh-Hans/zh-Hant/jp/en/ru or other language code): "
+msgstr "Input a language code for this track (zh-Hans/zh-Hant/jp/en/ru or other language code): "
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:92
+msgid "Subtitle info: "
+msgstr "Subtitle info: "
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:106
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:158
+msgid " subtitle: "
+msgstr " subtitle: "
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:106
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:158
+msgid "Find "
+msgstr "Find "
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:116
+msgid "Find associated audio: "
+msgstr "Find associated audio: "
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:141
+msgid " to match subtitle file"
+msgstr " to match subtitle file"
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:141
+msgid "Using ep number "
+msgstr "Using ep number "
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:173
+msgid "Mux successfully: "
+msgstr "Mux successfully: "
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:176
+msgid "MKVMerge raised error: "
+msgstr "MKVMerge raised error: "
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:180
+msgid "No task for this MKV"
+msgstr "No task for this MKV"
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:188
+msgid "Please input the working directory (default: current directory): "
+msgstr "Please input the working directory (default: current directory): "
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:191
+msgid "Using working directory: "
+msgstr "Using working directory: "
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:204
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:205
+msgid "Find font package file: "
+msgstr "Find font package file: "
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:208
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:209
+msgid "Fonts sub-directory created"
+msgstr "Fonts sub-directory created"
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:214
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:215
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:229
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:230
+msgid "Unzipped to /Fonts: "
+msgstr "Unzipped to /Fonts: "
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:217
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:218
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:221
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:222
+msgid "Unsupported encoding, please manually zip the file"
+msgstr "Unsupported encoding, please manually zip the file"
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:236
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:237
+msgid "Unrar path not set, please manually unrar the file"
+msgstr "Unrar path not set, please manually unrar the file"
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:239
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:240
+msgid "%s is an unrecognized compressed file format, please manually unzip the file"
+msgstr "%s is an unrecognized compressed file format, please manually unzip the file"
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:245
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:246
+msgid "Loading fonts: "
+msgstr "Loading fonts: "
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:260
+msgid "[green]Main task"
+msgstr "[green]Main task"
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:277
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:278
+msgid "Remove Fonts Folder Successfully"
+msgstr "Remove Fonts Folder Successfully"
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:280
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:281
+msgid "Remove Fonts Folder Error"
+msgstr "Remove Fonts Folder Error"
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:286
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:287
+msgid "Failed to delete "
+msgstr "Failed to delete "
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:290
+msgid "Task finished"
+msgstr "Task finished"
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:291
+msgid "Task finished. Press Enter to exit..."
+msgstr "Task finished. Press Enter to exit..."
+
+#: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:294
+msgid "Error at clean up stage. Press Enter to exit"
+msgstr "Error at clean up stage. Press Enter to exit"
+
