@@ -21,7 +21,7 @@ lang_settings = locale.getlocale()
 if "Chinese" in lang_settings[0]:
     lang_set = ["zh-CN"]
 else:
-    lang_set = ["en"]
+    lang_set = ["en-US"]
 language_translations = gettext.translation("base", localedir="locales", languages=lang_set)
 language_translations.install()
 _ = language_translations.gettext
