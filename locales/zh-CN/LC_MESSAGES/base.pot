@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PlexMuxy\n"
 "POT-Creation-Date: 2023-07-29 20:14-0700\n"
-"PO-Revision-Date: 2023-07-30 03:17\n"
+"PO-Revision-Date: 2023-07-30 03:19\n"
 "Last-Translator: \n"
 "Language-Team: Chinese Simplified\n"
 "MIME-Version: 1.0\n"
@@ -81,7 +81,7 @@ msgstr "请输入工作目录路径 （默认当前目录）： "
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:191
 msgid "Using working directory: "
-msgstr ""
+msgstr "当前工作目录："
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:204
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:205
@@ -124,7 +124,7 @@ msgstr "正在加载字体："
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:260
 msgid "[green]Main task"
-msgstr ""
+msgstr "[green] 主任务"
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:277
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:278
@@ -143,7 +143,7 @@ msgstr "删除失败 "
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:290
 msgid "Task finished"
-msgstr ""
+msgstr "任务已完成"
 
 #: C:\Users\i\Documents\GitHub\PlexMuxy\main.py:291
 msgid "Task finished. Press Enter to exit..."
