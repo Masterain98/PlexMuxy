@@ -61,6 +61,7 @@ logging.basicConfig(filename=os.path.expandvars("%userprofile%/Documents/PlexMux
 def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: list,
                  major_progress: Progress, major_process_task) -> dict:
     # Initial variables
+    this_ep_num = "default"
     skip_this_task = True
     this_delete_list = []
     this_move_list = []
@@ -86,6 +87,7 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
         for item in folder_other_file_list:
             # Match resources based on file name
             if mkv_name_no_extension in item:
+                logging.info(_("Find associated file with same name: ") + item)
                 if item.endswith(".ass"):
                     # Add Subtitle track
                     this_sub_info = subtitle_info_checker(item)
@@ -101,6 +103,7 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
                                                   mkvmerge_path=MKVMERGE_PATH)
                         if this_sub_info["default_language"]:
                             this_sub_track.default_track = True
+                            this_sub_track.forced_track = True
                         skip_this_task = False
                         this_task.add_track(this_sub_track)
                         logging.info(_("Find ") + this_sub_info["language"] + _(" subtitle: ") + item)
@@ -121,7 +124,7 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
             else:
                 # Expand the search range for other subgroups
                 # By matching up the episode number
-                this_ep_num = re.search(r'(\[)(SP|sp)?(\d{2})(])', mkv_name_no_extension)
+                this_ep_num = re.search(r'(\[)((SP|sp)?(\d{2}))|((Special)|(OVA))(])', mkv_name_no_extension)
                 if this_ep_num is not None:
                     this_ep_num = this_ep_num.group(0)
                     sub_matched = False
@@ -153,6 +156,7 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
                                                           mkvmerge_path=MKVMERGE_PATH)
                                 if this_sub_info["default_language"]:
                                     this_sub_track.default_track = True
+                                    this_sub_track.forced_track = True
                                 skip_this_task = False
                                 this_task.add_track(this_sub_track)
                                 logging.info(_("Find ") + this_sub_info["language"] + _(" subtitle: ") + item)
@@ -170,7 +174,10 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
             for track in this_task.tracks:
                 if track.track_type == "subtitles":
                     track.default_track = True
-                    logging.info(_("Set default subtitle track: ") + track.track_name)
+                    try:
+                        logging.info(_("Set default subtitle track: ") + track.track_name)
+                    except TypeError:
+                        logging.info(_("Set default subtitle track: ") + "None")
         # Add fonts
         for font in font_list:
             font = "Fonts/" + font
