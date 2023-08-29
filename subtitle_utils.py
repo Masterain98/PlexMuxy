@@ -58,6 +58,10 @@ def subtitle_info_checker(subtitle_file_name: str) -> dict:
 
     if language == user_default_language:
         is_default_language = True
+    elif language == "jp_sc" and user_default_language == "chs":
+        is_default_language = True
+    elif language == "jp_tc" and user_default_language == "cht":
+        is_default_language = True
 
     sub_author = re.search(r'(^\[)(\w|\d|-|_|&|\.|!)+(]+?)', subtitle_file_name)
     if sub_author is not None:
