@@ -161,6 +161,17 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
                                     this_delete_list.append(item)
                                 else:
                                     this_move_list.append(item)
+        # Check all tracks, if only one subtitle track, then mark it as default
+        sub_track_count = 0
+        for track in this_task.tracks:
+            if track.track_type == "subtitles":
+                sub_track_count += 1
+        if sub_track_count == 1:
+            for track in this_task.tracks:
+                if track.track_type == "subtitles":
+                    track.default_track = True
+                    logging.info(_("Set default subtitle track: ") + track.track_name)
+        # Add fonts
         for font in font_list:
             font = "Fonts/" + font
             this_task.add_attachment(font)
