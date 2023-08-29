@@ -124,7 +124,9 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
             else:
                 # Expand the search range for other subgroups
                 # By matching up the episode number
-                this_ep_num = re.search(r'(\[)((SP|sp)?(\d{2}))|((Special)|(OVA))(])', mkv_name_no_extension)
+                this_ep_num = re.search(r'(\[)(SP|sp)?(\d{2})(])', mkv_name_no_extension)
+                if this_ep_num is None:
+                    this_ep_num = re.search(r'(\[)(Special)|(OVA)(])', mkv_name_no_extension)
                 if this_ep_num is not None:
                     this_ep_num = this_ep_num.group(0)
                     sub_matched = False
