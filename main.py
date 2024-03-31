@@ -1,7 +1,7 @@
 import os
 import shutil
 import subprocess
-from pymkv import MKVFile, MKVTrack
+from pymkv.pymkv import MKVFile, MKVTrack
 import py7zr
 import re
 import patoolib
@@ -12,6 +12,7 @@ import logging
 from datetime import datetime
 from multiprocessing.pool import ThreadPool
 from rich.progress import Progress
+from tkinter import filedialog
 from config import get_config
 from compressed import unzip
 from subtitle_utils import subtitle_info_checker, is_font_file
@@ -45,7 +46,7 @@ if config["mkvmerge"]["path"] != "":
 else:
     print(_("mkvmerge path not set, using mkvmerge.exe in the working directory"))
     MKVMERGE_PATH = "mkvmerge"
-if type(T_COUNT) == str:
+if type(T_COUNT) is str:
     if T_COUNT.isnumeric():
         T_COUNT = int(T_COUNT)
     elif T_COUNT.lower() == "auto":
@@ -65,6 +66,7 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
     skip_this_task = True
     this_delete_list = []
     this_move_list = []
+    sub_track_count = 0
 
     if SUFFIX_NAME not in mkv_file_name:
         # Generate the task with MKV file
@@ -90,6 +92,7 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
                 logging.info(_("Find associated file with same name: ") + item)
                 if item.endswith(".ass"):
                     # Add Subtitle track
+                    sub_track_count += 1
                     this_sub_info = subtitle_info_checker(item)
                     logging.info(_("Subtitle info: ") + str(this_sub_info))
                     if this_sub_info["language"] != "":
@@ -145,6 +148,7 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
                     if sub_matched:
                         logging.info(_("Using ep number ") + this_ep_num + _(" to match subtitle file"))
                         if item.endswith(".ass"):
+                            sub_track_count += 1
                             this_sub_info = subtitle_info_checker(item)
                             # this_progress.console.print(this_sub_info)
                             if this_sub_info["language"] != "":
@@ -167,11 +171,35 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
                                     this_delete_list.append(item)
                                 else:
                                     this_move_list.append(item)
+
+        if sub_track_count == 0:
+            this_ep_num = "main movie"
+            # No episode number found, most likely a movie, include all ass files
+            logging.info("No EP number found, use movie mode")
+            all_ass_files = [file for file in folder_other_file_list if file.endswith(".ass")]
+            for sub_file in all_ass_files:
+                this_sub_info = subtitle_info_checker(sub_file)
+                if this_sub_info["language"] != "":
+                    if config["Subtitle"]["ShowSubtitleAuthorInTrackName"]:
+                        track_name = this_sub_info["language"] + " " + this_sub_info["sub_author"]
+                    else:
+                        track_name = this_sub_info["language"]
+                    this_sub_track = MKVTrack(sub_file, track_name=track_name, default_track=False,
+                                              language=this_sub_info["mkv_language"],
+                                              language_ietf=this_sub_info["ietf_language"],
+                                              mkvmerge_path=MKVMERGE_PATH)
+                    if this_sub_info["default_language"]:
+                        this_sub_track.default_track = True
+                        this_sub_track.forced_track = True
+                    skip_this_task = False
+                    this_task.add_track(this_sub_track)
+                    logging.info(_("Find ") + this_sub_info["language"] + _(" subtitle: ") + sub_file)
+                    if DELETE_SUB:
+                        this_delete_list.append(sub_file)
+                    else:
+                        this_move_list.append(sub_file)
+
         # Check all tracks, if only one subtitle track, then mark it as default
-        sub_track_count = 0
-        for track in this_task.tracks:
-            if track.track_type == "subtitles":
-                sub_track_count += 1
         if sub_track_count == 1:
             for track in this_task.tracks:
                 if track.track_type == "subtitles":
@@ -205,9 +233,8 @@ def main():
     delete_list = []
     move_list = []
 
-    custom_workdir = input(_("Please input the working directory (default: current directory): "))
-    if custom_workdir != "":
-        os.chdir(custom_workdir)
+    folder_selected = filedialog.askdirectory()
+    os.chdir(folder_selected)
     logging.info(_("Using working directory: ") + os.getcwd())
     folder_list = os.listdir()
 

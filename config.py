@@ -40,6 +40,7 @@ def make_default_config():
     os.makedirs(os.path.expandvars("%userprofile%/Documents/PlexMuxy"), exist_ok=True)
     with open(os.path.expandvars("%userprofile%/Documents/PlexMuxy/config.json"), "w", encoding='utf-8') as output:
         json.dump(new_config, output, indent=2, ensure_ascii=False)
+    input(f"Default config file has been generated at {os.path.expandvars('%userprofile%/Documents/PlexMuxy/config.json')}, please check and modify it now. Please enter to continue...")
 
 
 def get_config() -> dict:
