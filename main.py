@@ -90,7 +90,7 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
             # Match resources based on file name
             if mkv_name_no_extension in item:
                 logging.info(_("Find associated file with same name: ") + item)
-                if item.endswith(".ass"):
+                if item.lower().endswith(".ass") or item.lower().endswith(".ssa"):
                     # Add Subtitle track
                     sub_track_count += 1
                     this_sub_info = subtitle_info_checker(item)
@@ -147,7 +147,7 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
                         sub_matched = True
                     if sub_matched:
                         logging.info(_("Using ep number ") + this_ep_num + _(" to match subtitle file"))
-                        if item.endswith(".ass"):
+                        if item.lower().endswith(".ass") or item.lower().endswith(".ssa"):
                             sub_track_count += 1
                             this_sub_info = subtitle_info_checker(item)
                             # this_progress.console.print(this_sub_info)
@@ -176,7 +176,7 @@ def mkv_mux_task(mkv_file_name: str, folder_other_file_list: list, font_list: li
             this_ep_num = "main movie"
             # No episode number found, most likely a movie, include all ass files
             logging.info("No EP number found, use movie mode")
-            all_ass_files = [file for file in folder_other_file_list if file.endswith(".ass")]
+            all_ass_files = [file for file in folder_other_file_list if file.lower().endswith((".ass", ".ssa"))]
             for sub_file in all_ass_files:
                 this_sub_info = subtitle_info_checker(sub_file)
                 if this_sub_info["language"] != "":
@@ -293,21 +293,22 @@ def main():
     logging.info(_("Loading fonts: ") + str(font_list))
 
     # Generate two useful list to reduce chance traversing folder_list in main task loop
-    folder_mkv_list = [file for file in folder_list if file.endswith(".mkv")]
+    allowed_extensions = [".mkv", ".avi", ".mp4", ".flv"]
+    folder_video_list = [file for file in folder_list if any(file.lower().endswith(ext) for ext in allowed_extensions)]
     folder_other_file_list = [file for file in folder_list if not file.endswith(".mkv") and "." in file]
 
     # Main tasks
     """
     # Single thread
     # Traverse all MKV files (videos) in folder
-    for mkv_file_name in folder_mkv_list:
+    for mkv_file_name in folder_video_list:
         this_task_result = mkv_mux_task(mkv_file_name, folder_other_file_list, font_list)
     """
     with Progress() as progress:
-        main_task_progress = progress.add_task(_("[green]Main task"), total=len(folder_mkv_list), visible=True)
+        main_task_progress = progress.add_task(_("[green]Main task"), total=len(folder_video_list), visible=True)
         async_results = [task_pool.apply_async(mkv_mux_task, args=(mkv_file_name, folder_other_file_list, font_list,
                                                                    progress, main_task_progress))
-                         for mkv_file_name in folder_mkv_list]
+                         for mkv_file_name in folder_video_list]
         results = [ar.get() for ar in async_results]
         for result in results:
             delete_list.extend(result["delete_list"])
