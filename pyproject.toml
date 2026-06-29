@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plexmuxy"
+version = "0.2.0"
+description = "Batch mux media files with external audio, subtitles, and fonts for Plex."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "patool>=2.2",
+  "py7zr>=0.21",
+  "pymkv2>=2.0",
+  "rich>=13.7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+]
+
+[project.scripts]
+plexmuxy = "plexmuxy.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["plexmuxy*"]

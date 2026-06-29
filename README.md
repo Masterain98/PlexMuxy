@@ -5,7 +5,7 @@ English README | [中文 README](https://github.com/Masterain98/PlexMuxy/blob/ma
 
 ## Feature
 
-- Mux `mkv` video, `mka` audio, `ass` subtitles, and fonts together into a single `mkv` file
+- Mux `mkv`/`mp4`/`avi`/`flv` video, `mka` audio, `ass`/`ssa` subtitles, and fonts together into a single `mkv` file
   - Audio
     - Usually are external 5.1 Channel audio and audio commentary
 
@@ -29,36 +29,62 @@ English README | [中文 README](https://github.com/Masterain98/PlexMuxy/blob/ma
 
 ## Usage
 
-- Download and install [MKVToolNix](https://mkvtoolnix.download/) and add its folder to `PATH ` system environment variables
+- Download and install [MKVToolNix](https://mkvtoolnix.download/) and add its folder to the `PATH` system environment variable, or set `mkvmerge.path` in the config file.
 
-  - Or, you can copy a `mkvmerge.exe` file to the same folder of `main.py`
+- Install for local development:
 
-- Take `main.py` into the work folder where media are stored
+  ```bash
+  pip install -e ".[dev]"
+  ```
 
-  - Change the `Global Variable` part setting with your own decision, default values are shown below:
+- Create or inspect config:
 
-    ```python
-    # Global Variable
-    DELETE_FONTS = False
-    DELETE_ORIGINAL_MKV = False
-    DELETE_ORIGINAL_MKA = False
-    DELETE_SUB = False
-    SUFFIX_NAME = "_Plex"
-    ```
+  ```bash
+  plexmuxy init-config
+  plexmuxy show-config
+  ```
 
-  - `DELETE_FONTS`
-    - Delete `Fonts` subdirectory after the task is finished if `True`, otherwise do nothing
-  - `DELETE_ORIGINAL_MKV`
-    - Delete the original `mkv` file after the task is finished if `True`, otherwise move the file into `Extra` subdirectory
+- Preview a mux plan without changing files:
 
-  - `DELETE_ORIGINAL_MKA` 
-    - Delete the original `mka` file after the task is finished if `True`, otherwise move the file into `Extra` subdirectory
+  ```bash
+  plexmuxy plan /path/to/media
+  ```
 
-  - `DELETE_SUB`
-    - Delete the original `ass` file after the task is finished if `True`, otherwise move the file into `Extra` subdirectory
+  `plan` is a dry-run. It scans files, builds `MuxPlan` objects, prints match reasons, prints skipped files, and does not call `mkvmerge`, create output files, move files, or delete files.
 
-  - `SUFFIX_NAME`
-    - The suffix name in the new multiplexed, to differentiate with the original file; `_Plex` will be used as default if `SUFFIX_NAME = ""` 
+- Run mux:
+
+  ```bash
+  plexmuxy mux /path/to/media
+  ```
+
+  The default output name keeps the historic `_Plex.mkv` suffix. By default, successful source files are moved to `Extra` after the output has been verified.
+
+- Cleanup options:
+
+  ```bash
+  plexmuxy mux /path/to/media --cleanup none
+  plexmuxy mux /path/to/media --cleanup move --extra-dir Extra
+  plexmuxy mux /path/to/media --cleanup delete --yes
+  ```
+
+  Delete cleanup always requires `--yes`. Failed or unverified mux tasks are never cleaned up.
+
+- Output naming:
+
+  ```bash
+  plexmuxy mux /path/to/media --output-suffix _Plex
+  plexmuxy mux /path/to/media --output-dir PlexReady --name-strategy same-name
+  plexmuxy mux /path/to/media --name-strategy template --name-template "{stem}.plex.mkv"
+  ```
+
+- GUI compatibility:
+
+  ```bash
+  python main.py
+  ```
+
+  Running `main.py` with no arguments opens the folder picker and then uses the same core mux pipeline as the CLI.
 
 - **Make sure the name of files used for mux meet the requirements**
 
