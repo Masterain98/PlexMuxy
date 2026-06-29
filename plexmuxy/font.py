@@ -13,6 +13,7 @@ def prepare_fonts(
     media_config: MediaConfig,
     font_config: FontConfig,
     extract_archives: bool = True,
+    preview_archives: bool = False,
 ) -> FontResult:
     root = Path(input_dir).expanduser().resolve()
     fonts_dir = root / "Fonts"
@@ -23,7 +24,11 @@ def prepare_fonts(
         return result
 
     archives = find_font_archives(root, media_config)
-    if not archives or not extract_archives:
+    if not archives:
+        return result
+    if not extract_archives:
+        if preview_archives:
+            result.fonts = preview_font_archives(archives, fonts_dir, media_config, font_config, result)
         return result
 
     fonts_dir.mkdir(parents=True, exist_ok=True)
@@ -35,6 +40,55 @@ def prepare_fonts(
             result.errors.append(f"{archive.name}: {exc}")
     result.fonts = list_font_files(fonts_dir, media_config.font_extensions)
     return result
+
+
+def preview_font_archives(
+    archives: list[Path],
+    fonts_dir: Path,
+    media_config: MediaConfig,
+    font_config: FontConfig,
+    result: FontResult,
+) -> list[Path]:
+    previewed: list[Path] = []
+    for archive in archives:
+        try:
+            previewed.extend(preview_font_archive(archive, fonts_dir, media_config, font_config))
+        except Exception as exc:  # noqa: BLE001 - preview follows the same archive error reporting path.
+            result.errors.append(f"{archive.name}: {exc}")
+    return sorted(previewed, key=lambda item: str(item).lower())
+
+
+def preview_font_archive(
+    archive: Path,
+    destination: Path,
+    media_config: MediaConfig,
+    font_config: FontConfig,
+) -> list[Path]:
+    suffix = archive.suffix.lower()
+    if suffix == ".zip":
+        names = preview_zip_names(archive)
+    elif suffix == ".7z":
+        names = preview_7z_names(archive)
+    elif suffix == ".rar":
+        if not font_config.unrar_path:
+            raise ValueError("Unrar path is not configured")
+        return []
+    else:
+        raise ValueError(f"Unsupported font archive extension: {archive.suffix}")
+    paths = [safe_destination(destination, name) for name in names]
+    return [path for path in paths if is_font_file(path, media_config.font_extensions)]
+
+
+def preview_zip_names(archive: Path) -> list[str]:
+    with zipfile.ZipFile(archive, "r") as this_zip:
+        return [decode_zip_member_name(name) for name in this_zip.namelist() if not name.endswith("/")]
+
+
+def preview_7z_names(archive: Path) -> list[str]:
+    import py7zr
+
+    with py7zr.SevenZipFile(archive, mode="r") as seven_zip:
+        return [name for name in seven_zip.getnames() if not name.endswith("/")]
 
 
 def list_font_files(fonts_dir: Path, allowed_extensions: list[str]) -> list[Path]:
@@ -105,8 +159,9 @@ def extract_7z(archive: Path, destination: Path) -> list[Path]:
 
     with py7zr.SevenZipFile(archive, mode="r") as seven_zip:
         names = seven_zip.getnames()
-        seven_zip.extractall(destination)
-    return [safe_destination(destination, name) for name in names]
+        safe_paths = [safe_destination(destination, name) for name in names]
+        seven_zip.extractall(destination, targets=names)
+    return safe_paths
 
 
 def extract_rar(archive: Path, destination: Path, font_config: FontConfig) -> list[Path]:

@@ -28,7 +28,7 @@ def build_mux_plans(scan: ScanResult, config: AppConfig, fonts: FontResult | Non
     suffix = config.task.output_suffix or "_Plex"
 
     for video in scan.videos:
-        if suffix and suffix in video.name:
+        if config.task.name_strategy == "suffix" and suffix and video.stem.endswith(suffix):
             result.skipped_files.append(SkippedFile(path=video, reason="already_processed", stage="planning"))
             continue
 
@@ -50,7 +50,7 @@ def build_mux_plans(scan: ScanResult, config: AppConfig, fonts: FontResult | Non
                     mkv_language=info.mkv_language,
                     ietf_language=info.ietf_language,
                     default_track=info.default_language,
-                    forced_track=info.default_language,
+                    forced_track=False,
                     match_reason=match.reason,
                 )
             )
@@ -66,13 +66,19 @@ def build_mux_plans(scan: ScanResult, config: AppConfig, fonts: FontResult | Non
             result.skipped_files.extend(plan_skips)
             continue
 
-        cleanup_candidates = unique_paths(
-            [video, *subtitle_cleanup_candidates, *(track.path for track in audio_tracks)]
-        )
+        output_path = build_output_path(video, scan.input_dir, config)
+        if output_path.resolve() == video.resolve():
+            result.skipped_files.append(
+                SkippedFile(path=video, reason="invalid_output_path_same_as_input", stage="planning")
+            )
+            result.skipped_files.extend(plan_skips)
+            continue
+
+        cleanup_candidates = unique_paths([video, *subtitle_cleanup_candidates, *(track.path for track in audio_tracks)])
         result.plans.append(
             MuxPlan(
                 source_video=video,
-                output_path=build_output_path(video, scan.input_dir, config),
+                output_path=output_path,
                 subtitle_tracks=subtitle_tracks,
                 audio_tracks=audio_tracks,
                 attachments=attachments,

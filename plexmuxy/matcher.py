@@ -39,6 +39,7 @@ def match_candidates(
             matches.append(MatchResult(file=candidate, confidence=0.5, reason="movie_mode"))
             matched_paths.add(candidate)
 
+    matches.sort(key=lambda match: (-match.confidence, match.file.name.lower()))
     skipped = [
         SkippedFile(path=candidate, reason="unmatched")
         for candidate in sorted(candidates, key=lambda item: item.name.lower())

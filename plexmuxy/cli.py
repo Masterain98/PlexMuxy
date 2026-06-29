@@ -4,7 +4,6 @@ import argparse
 import copy
 import json
 import logging
-import os
 import sys
 from pathlib import Path
 
@@ -116,9 +115,19 @@ def show_config(args: argparse.Namespace) -> int:
 
 
 def run_gui(args: argparse.Namespace) -> int:
-    from tkinter import filedialog
+    try:
+        from tkinter import TclError, filedialog
+    except ImportError as exc:
+        print(f"GUI mode is unavailable in this environment: {exc}", file=sys.stderr)
+        print("Use `plexmuxy mux <directory>` or `plexmuxy plan <directory>` instead.", file=sys.stderr)
+        return 2
 
-    folder_selected = filedialog.askdirectory()
+    try:
+        folder_selected = filedialog.askdirectory()
+    except (OSError, TclError) as exc:
+        print(f"GUI mode is unavailable in this environment: {exc}", file=sys.stderr)
+        print("Use `plexmuxy mux <directory>` or `plexmuxy plan <directory>` instead.", file=sys.stderr)
+        return 2
     if not folder_selected:
         print("No directory selected.")
         return 1
@@ -151,7 +160,13 @@ def run_mux_job(input_dir: Path, config: AppConfig, dry_run: bool = False, yes: 
     input_dir = input_dir.expanduser().resolve()
     logging.info("Using input directory: %s", input_dir)
     scan = scan_media_dir(input_dir, config.media)
-    font_result = prepare_fonts(input_dir, config.media, config.font, extract_archives=not dry_run)
+    font_result = prepare_fonts(
+        input_dir,
+        config.media,
+        config.font,
+        extract_archives=not dry_run,
+        preview_archives=dry_run,
+    )
     for error in font_result.errors:
         logging.error("Font preparation failed: %s", error)
 
@@ -179,7 +194,7 @@ def apply_job_overrides(config: AppConfig, args: argparse.Namespace) -> AppConfi
     if getattr(args, "output_suffix", None) is not None:
         updated.task.output_suffix = args.output_suffix or "_Plex"
     if getattr(args, "output_dir", None):
-        updated.task.output_dir = Path(args.output_dir)
+        updated.task.output_dir = Path(args.output_dir).expanduser()
     if getattr(args, "name_strategy", None):
         updated.task.name_strategy = args.name_strategy
     if getattr(args, "name_template", None):

@@ -335,6 +335,8 @@ def bool_value(value: Any, field_name: str) -> bool:
 
 
 def thread_count(value: Any, field_name: str) -> int | str:
+    if isinstance(value, bool):
+        raise ConfigError(f'{field_name} must be a positive integer or "auto"')
     if isinstance(value, int) and value >= 1:
         return value
     if isinstance(value, str):
@@ -362,7 +364,7 @@ def optional_path(value: Any) -> Path | None:
         return None
     if not isinstance(value, str):
         raise ConfigError("task.output_dir must be a string or null")
-    return Path(value)
+    return Path(value).expanduser()
 
 
 def optional_string(value: Any) -> str | None:

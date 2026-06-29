@@ -8,6 +8,14 @@ from .models import AppConfig, MuxPlan, MuxResult
 
 
 def execute_mux_plan(plan: MuxPlan, config: AppConfig) -> MuxResult:
+    if plan.output_path.resolve() == plan.source_video.resolve():
+        return MuxResult(
+            plan=plan,
+            success=False,
+            output_path=plan.output_path,
+            error="Output path is the same as the source video; refusing in-place mux.",
+        )
+
     if plan.output_path.exists() and not config.task.overwrite:
         return MuxResult(
             plan=plan,

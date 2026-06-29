@@ -32,18 +32,18 @@ def cleanup_successful_results(
             cleanup_results.append(run_cleanup_action(candidate, action, plan, config, yes=yes))
             cleaned.add(resolved)
 
-    if config.font.delete_fonts_after_mux and any(result.success and result.verified for result in results):
-        fonts_dir = successful_results_input_dir(results) / "Fonts"
-        if not yes:
-            cleanup_results.append(
-                CleanupResult(
-                    path=fonts_dir,
-                    action="delete",
-                    success=False,
-                    error="Deleting Fonts requires --yes",
+    if config.font.delete_fonts_after_mux:
+        for fonts_dir in successful_results_font_dirs(results):
+            if not yes:
+                cleanup_results.append(
+                    CleanupResult(
+                        path=fonts_dir,
+                        action="delete",
+                        success=False,
+                        error="Deleting Fonts requires --yes",
+                    )
                 )
-            )
-        else:
+                continue
             try:
                 remove_fonts_dir(fonts_dir)
                 cleanup_results.append(CleanupResult(path=fonts_dir, action="delete", success=True))
@@ -84,10 +84,11 @@ def run_cleanup_action(
             return CleanupResult(path=path, action="delete", success=False, error=str(exc))
 
     if action == "move":
-        destination_dir = resolve_extra_dir(plan, config)
-        destination_dir.mkdir(parents=True, exist_ok=True)
-        destination = unique_destination(destination_dir / path.name)
+        destination = None
         try:
+            destination_dir = resolve_extra_dir(plan, config)
+            destination_dir.mkdir(parents=True, exist_ok=True)
+            destination = unique_destination(destination_dir / path.name)
             shutil.move(str(path), str(destination))
             return CleanupResult(path=path, action="move", success=True, destination=destination)
         except OSError as exc:
@@ -122,3 +123,18 @@ def successful_results_input_dir(results: list[MuxResult]) -> Path:
         if result.success and result.verified:
             return result.plan.source_video.parent
     return Path.cwd()
+
+
+def successful_results_font_dirs(results: list[MuxResult]) -> list[Path]:
+    seen: set[Path] = set()
+    fonts_dirs: list[Path] = []
+    for result in results:
+        if not result.success or not result.verified:
+            continue
+        fonts_dir = result.plan.source_video.parent / "Fonts"
+        resolved = fonts_dir.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        fonts_dirs.append(fonts_dir)
+    return fonts_dirs

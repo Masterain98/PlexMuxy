@@ -10,6 +10,27 @@ def test_exact_stem_match_explains_reason():
     assert matches[0].reason == "exact_stem"
 
 
+def test_candidate_with_multiple_mechanisms_uses_highest_priority_reason():
+    matches, skipped = match_subtitles(Path("Show [02].mkv"), [Path("Show [02].chs.ass")])
+
+    assert skipped == []
+    assert len(matches) == 1
+    assert matches[0].reason == "exact_stem"
+
+
+def test_multiple_subtitle_candidates_are_sorted_by_priority():
+    video = Path("Show [02].mkv")
+    exact_stem_subtitle = Path("Show [02].chs.ass")
+    episode_token_only_subtitle = Path("Other Release [02].chs.ass")
+
+    matches, skipped = match_subtitles(video, [episode_token_only_subtitle, exact_stem_subtitle])
+
+    assert skipped == []
+    assert [match.file for match in matches] == [exact_stem_subtitle, episode_token_only_subtitle]
+    assert [match.reason for match in matches] == ["exact_stem", "episode_token=[02]"]
+    assert matches[0].confidence >= matches[1].confidence
+
+
 def test_normalized_title_match_keeps_old_subgroup_pattern():
     video = Path("[VCB-Studio] Example Show [01][Ma10p_1080p].mkv")
     subtitle = Path("[Kamigami] Example Show [01].chs.ass")
