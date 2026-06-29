@@ -19,6 +19,10 @@ def prepare_fonts(
     fonts_dir = root / "Fonts"
     result = FontResult(fonts_dir=fonts_dir if fonts_dir.exists() else None)
 
+    if fonts_dir.exists() and not fonts_dir.is_dir():
+        result.errors.append(f"Fonts path exists but is not a directory: {fonts_dir}")
+        return result
+
     if fonts_dir.is_dir():
         result.fonts = list_font_files(fonts_dir, media_config.font_extensions)
         return result
@@ -72,7 +76,7 @@ def preview_font_archive(
     elif suffix == ".rar":
         if not font_config.unrar_path:
             raise ValueError("Unrar path is not configured")
-        return []
+        raise ValueError("RAR archive preview is not supported; run without dry-run to extract it")
     else:
         raise ValueError(f"Unsupported font archive extension: {archive.suffix}")
     paths = [safe_destination(destination, name) for name in names]
@@ -160,7 +164,7 @@ def extract_7z(archive: Path, destination: Path) -> list[Path]:
     with py7zr.SevenZipFile(archive, mode="r") as seven_zip:
         names = seven_zip.getnames()
         safe_paths = [safe_destination(destination, name) for name in names]
-        seven_zip.extractall(destination, targets=names)
+        seven_zip.extract(path=destination, targets=names)
     return safe_paths
 
 

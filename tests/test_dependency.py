@@ -21,5 +21,7 @@ def test_dependency_files_match_runtime_import_name():
 
     assert "pymkv>=1.0.8" in pyproject
     assert "pymkv>=1.0.8" in requirements
+    assert "setuptools<82" in pyproject
+    assert "setuptools<82" in requirements
     assert "pymkv2" not in pyproject
     assert "pymkv2" not in requirements
