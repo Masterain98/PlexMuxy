@@ -1,5 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_submodules
+
+
 block_cipher = None
 
 a = Analysis(
@@ -7,7 +10,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[("plexmuxy_gui/static", "plexmuxy_gui/static")],
-    hiddenimports=[],
+    hiddenimports=collect_submodules("webview"),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

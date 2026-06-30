@@ -4,12 +4,18 @@ import os
 import sys
 from pathlib import Path
 
-import webview
-
 from .api import PlexMuxyApi
 
 
 WEBVIEW2_DOWNLOAD_URL = "https://developer.microsoft.com/en-us/microsoft-edge/webview2/"
+GUI_EXTRA_MESSAGE = 'PlexMuxy GUI requires optional dependencies. Install with `pip install -e ".[gui]"`.'
+WEBVIEW2_ERROR_MARKERS = (
+    "webview2",
+    "edge chromium",
+    "edgechromium",
+    "corewebview2",
+    "icorewebview2",
+)
 
 
 def static_path(name: str) -> str:
@@ -18,7 +24,8 @@ def static_path(name: str) -> str:
     return str(Path(__file__).resolve().parent / "static" / name)
 
 
-def main() -> None:
+def start() -> None:
+    webview = import_webview()
     debug = os.environ.get("PLEXMUXY_GUI_DEBUG") == "1"
     api = PlexMuxyApi()
 
@@ -43,14 +50,41 @@ def main() -> None:
             webview.start(debug=debug, gui="edgechromium")
         else:
             webview.start(debug=debug)
-    except Exception as exc:  # noqa: BLE001 - desktop startup should explain missing WebView2 clearly.
-        if sys.platform == "win32":
+    except Exception as exc:  # noqa: BLE001 - desktop startup should fail cleanly from CLI/script entry points.
+        if sys.platform == "win32" and is_webview2_missing_error(exc):
             raise RuntimeError(
                 "PlexMuxy GUI requires Microsoft Edge WebView2 Runtime.\n\n"
                 "Windows 11 usually includes it. Some Windows 10 devices may need a manual install.\n\n"
                 f"Download: {WEBVIEW2_DOWNLOAD_URL}"
             ) from exc
+        raise RuntimeError(f"PlexMuxy GUI could not start: {exc}") from exc
+
+
+def main() -> None:
+    try:
+        start()
+    except RuntimeError as exc:
+        print(f"GUI mode is unavailable in this environment: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
+
+
+def import_webview():
+    try:
+        import webview
+    except ImportError as exc:
+        if is_missing_webview_import(exc):
+            raise RuntimeError(GUI_EXTRA_MESSAGE) from exc
         raise
+    return webview
+
+
+def is_missing_webview_import(exc: ImportError) -> bool:
+    return exc.name == "webview" or "webview" in str(exc).lower()
+
+
+def is_webview2_missing_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(marker in message for marker in WEBVIEW2_ERROR_MARKERS)
 
 
 if __name__ == "__main__":

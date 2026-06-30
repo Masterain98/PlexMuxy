@@ -62,6 +62,17 @@ def test_empty_string_overrides_do_not_pollute_optional_fields():
     assert updated.task.overwrite is False
 
 
+def test_missing_cleanup_override_preserves_cleanup_overridden_flag():
+    config = default_config()
+    config.task.cleanup = "move"
+    config.task.cleanup_overridden = False
+
+    updated = apply_job_overrides(config, JobOverrides(cleanup=None))
+
+    assert updated.task.cleanup == "move"
+    assert updated.task.cleanup_overridden is False
+
+
 def test_cli_and_gui_payloads_use_same_override_model():
     namespace_overrides = overrides_from_namespace(
         Namespace(

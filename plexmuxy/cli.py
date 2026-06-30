@@ -13,6 +13,9 @@ from .report import format_job_report
 from .service import run_mux_job
 
 
+GUI_EXTRA_MESSAGE = 'PlexMuxy GUI requires optional dependencies. Install with `pip install -e ".[gui]"`.'
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     try:
@@ -111,14 +114,15 @@ def show_config(args: argparse.Namespace) -> int:
 
 def run_gui(args: argparse.Namespace) -> int:
     try:
-        from plexmuxy_gui.app import main as gui_main
+        from plexmuxy_gui.app import start as gui_start
     except ImportError as exc:
-        print(f"GUI mode requires optional GUI dependencies: {exc}", file=sys.stderr)
-        print('Install with `pip install -e ".[gui]"` or use `plexmuxy mux <directory>`.', file=sys.stderr)
-        return 2
+        if exc.name == "webview" or "webview" in str(exc).lower():
+            print(f"GUI mode is unavailable in this environment: {GUI_EXTRA_MESSAGE}", file=sys.stderr)
+            return 2
+        raise
 
     try:
-        gui_main()
+        gui_start()
     except RuntimeError as exc:
         print(f"GUI mode is unavailable in this environment: {exc}", file=sys.stderr)
         return 2

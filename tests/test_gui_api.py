@@ -33,22 +33,44 @@ def test_plan_job_rejects_missing_input_dir(tmp_path):
     assert "does not exist" in response["error"]
 
 
+def test_plan_job_rejects_empty_input_dir():
+    api = PlexMuxyApi()
+
+    response = api.plan_job({"input_dir": "", "overrides": {}})
+
+    assert response["ok"] is False
+    assert "required" in response["error"]
+
+
+def test_plan_job_rejects_non_object_overrides(tmp_path):
+    api = PlexMuxyApi()
+
+    response = api.plan_job({"input_dir": str(tmp_path), "overrides": ["bad"]})
+
+    assert response["ok"] is False
+    assert "overrides must be an object" in response["error"]
+
+
 def test_plan_job_uses_service_and_serializes_report(monkeypatch, tmp_path):
     video = tmp_path / "Example.mkv"
     output = tmp_path / "Example_Plex.mkv"
     plan = MuxPlan(source_video=video, output_path=output)
+    calls = []
 
     monkeypatch.setattr("plexmuxy_gui.api.load_or_default_config", default_config)
-    monkeypatch.setattr(
-        "plexmuxy_gui.api.run_mux_job",
-        lambda input_dir, config, dry_run, yes: JobReport(input_dir=input_dir, plans=[plan]),
-    )
+
+    def fake_run_mux_job(input_dir, config, dry_run, yes):
+        calls.append({"input_dir": input_dir, "dry_run": dry_run, "yes": yes})
+        return JobReport(input_dir=input_dir, plans=[plan])
+
+    monkeypatch.setattr("plexmuxy_gui.api.run_mux_job", fake_run_mux_job)
     api = PlexMuxyApi()
 
     response = api.plan_job({"input_dir": str(tmp_path), "overrides": {}})
 
     assert response["ok"] is True
     assert response["data"]["plans"][0]["source_video_name"] == "Example.mkv"
+    assert calls == [{"input_dir": tmp_path.resolve(), "dry_run": True, "yes": False}]
 
 
 def test_run_job_requires_delete_confirmation(monkeypatch, tmp_path):
@@ -83,15 +105,19 @@ def test_run_job_uses_service_and_serializes_report(monkeypatch, tmp_path):
     video = tmp_path / "Example.mkv"
     output = tmp_path / "Example_Plex.mkv"
     plan = MuxPlan(source_video=video, output_path=output)
+    calls = []
 
     monkeypatch.setattr("plexmuxy_gui.api.load_or_default_config", default_config)
-    monkeypatch.setattr(
-        "plexmuxy_gui.api.run_mux_job",
-        lambda input_dir, config, dry_run, yes: JobReport(input_dir=input_dir, plans=[plan]),
-    )
+
+    def fake_run_mux_job(input_dir, config, dry_run, yes):
+        calls.append({"input_dir": input_dir, "dry_run": dry_run, "yes": yes})
+        return JobReport(input_dir=input_dir, plans=[plan])
+
+    monkeypatch.setattr("plexmuxy_gui.api.run_mux_job", fake_run_mux_job)
     api = PlexMuxyApi()
 
     response = api.run_job({"input_dir": str(tmp_path), "yes": True, "overrides": {}})
 
     assert response["ok"] is True
     assert response["data"]["plans"][0]["output_name"] == "Example_Plex.mkv"
+    assert calls == [{"input_dir": tmp_path.resolve(), "dry_run": False, "yes": True}]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import platform
 import subprocess
@@ -34,6 +35,7 @@ class PlexMuxyApi:
         except ConfigError as exc:
             return self.fail(f"Config error: {exc}")
         except Exception as exc:  # noqa: BLE001 - GUI bridge must never leak Python exceptions.
+            logging.exception("Unhandled GUI API error")
             return self.fail(str(exc))
 
     def get_app_info(self) -> dict[str, Any]:
@@ -60,6 +62,8 @@ class PlexMuxyApi:
             dialog_type = getattr(getattr(webview, "FileDialog", object), "FOLDER", None)
             if dialog_type is None:
                 dialog_type = getattr(webview, "FOLDER_DIALOG", None)
+            if dialog_type is None:
+                return self.fail("Folder picker is not available in this pywebview version")
             result = self.window.create_file_dialog(dialog_type)
             if not result:
                 return self.ok({"cancelled": True, "path": None})
@@ -105,14 +109,22 @@ class PlexMuxyApi:
             if not isinstance(payload, dict):
                 return self.fail("Payload must be an object")
 
-            input_dir = Path(str(payload.get("input_dir", ""))).expanduser()
+            input_dir_raw = payload.get("input_dir")
+            if input_dir_raw is None or str(input_dir_raw).strip() == "":
+                return self.fail("Input directory is required")
+            input_dir = Path(str(input_dir_raw).strip()).expanduser().resolve()
             if not input_dir.exists():
                 return self.fail(f"Input directory does not exist: {input_dir}")
             if not input_dir.is_dir():
                 return self.fail(f"Input path is not a directory: {input_dir}")
 
             config = load_or_default_config()
-            overrides = overrides_from_payload(payload.get("overrides") or {})
+            overrides_raw = payload.get("overrides", {})
+            if overrides_raw is None:
+                overrides_raw = {}
+            if not isinstance(overrides_raw, dict):
+                return self.fail("overrides must be an object")
+            overrides = overrides_from_payload(overrides_raw)
             config = apply_job_overrides(config, overrides)
             yes = bool(payload.get("yes", False))
             if not dry_run and requires_delete_confirmation(config) and not yes:
@@ -152,6 +164,9 @@ def config_summary(config) -> dict[str, Any]:
             "name_strategy": config.task.name_strategy,
             "name_template": config.task.name_template or "",
             "overwrite": config.task.overwrite,
+            "delete_original_video": config.task.delete_original_video,
+            "delete_original_audio": config.task.delete_original_audio,
+            "delete_subtitle": config.task.delete_subtitle,
         },
         "media": {
             "video_extensions": [*config.media.video_extensions],

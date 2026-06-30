@@ -32,15 +32,28 @@ function bindEvents() {
       clearReports();
       updateRunButton();
     }],
+    ["cleanup", "change", handleOverrideChange],
+    ["extra-dir", "input", handleOverrideChange],
+    ["output-suffix", "input", handleOverrideChange],
+    ["output-dir", "input", handleOverrideChange],
+    ["name-strategy", "change", handleOverrideChange],
+    ["name-template", "input", handleOverrideChange],
+    ["overwrite", "change", handleOverrideChange],
   ];
 
   bindings.forEach(([id, eventName, handler]) => {
     const element = $(id);
-    if (element && !element.dataset.bound) {
+    const boundKey = `bound${eventName}`;
+    if (element && !element.dataset[boundKey]) {
       element.addEventListener(eventName, handler);
-      element.dataset.bound = "true";
+      element.dataset[boundKey] = "true";
     }
   });
+}
+
+function handleOverrideChange() {
+  clearReports();
+  updateRunButton();
 }
 
 async function initialize() {
@@ -129,7 +142,7 @@ async function runMux() {
     return;
   }
 
-  if (payload.overrides.cleanup === "delete") {
+  if (requiresDeleteConfirmation(payload)) {
     const ok = confirm("Delete cleanup is destructive. Continue?");
     if (!ok) return;
     payload.yes = true;
@@ -166,6 +179,18 @@ function buildPayload() {
       overwrite: $("overwrite").checked,
     },
   };
+}
+
+function requiresDeleteConfirmation(payload) {
+  const task = state.config && state.config.task ? state.config.task : {};
+  const font = state.config && state.config.font ? state.config.font : {};
+  return Boolean(
+    payload.overrides.cleanup === "delete"
+      || task.delete_original_video
+      || task.delete_original_audio
+      || task.delete_subtitle
+      || font.delete_fonts_after_mux
+  );
 }
 
 async function callApi(method, payload) {
