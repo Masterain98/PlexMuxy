@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PlexMuxy</title>
+  <link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">P</div>
+        <div>
+          <h1>PlexMuxy</h1>
+          <p>Media mux planner</p>
+        </div>
+      </div>
+      <nav class="steps" aria-label="Workflow">
+        <a class="step active" href="#directory-section">Directory</a>
+        <a class="step" href="#options-section">Options</a>
+        <a class="step" href="#plan-section">Plan</a>
+        <a class="step" href="#run-section">Run</a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="mini-label">Config</div>
+        <div id="sidebar-config-path" class="mini-path">Loading...</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h2>Batch mux media for Plex</h2>
+          <p id="app-version">PlexMuxy</p>
+        </div>
+        <div id="runtime-status" class="status-pill">Initializing</div>
+      </header>
+
+      <div id="alert" class="alert hidden" role="alert"></div>
+
+      <section id="directory-section" class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Directory</p>
+            <h3>Input directory</h3>
+          </div>
+          <button id="choose-dir-btn" type="button">Choose folder</button>
+        </div>
+        <input id="input-dir" type="text" placeholder="No directory selected" autocomplete="off" />
+      </section>
+
+      <section class="two-column">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Config</p>
+              <h3>Active settings</h3>
+            </div>
+            <button id="open-config-btn" type="button">Open location</button>
+          </div>
+          <div id="config-summary" class="summary-list"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Runtime</p>
+              <h3>mkvmerge</h3>
+            </div>
+          </div>
+          <div id="mkvmerge-summary" class="summary-list"></div>
+        </div>
+      </section>
+
+      <section id="options-section" class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Options</p>
+            <h3>Session overrides</h3>
+          </div>
+        </div>
+        <div class="options-grid">
+          <label>
+            Cleanup
+            <select id="cleanup">
+              <option value="none">none</option>
+              <option value="move">move</option>
+              <option value="delete">delete</option>
+            </select>
+          </label>
+          <label>
+            Extra directory
+            <input id="extra-dir" type="text" autocomplete="off" />
+          </label>
+          <label>
+            Output suffix
+            <input id="output-suffix" type="text" autocomplete="off" />
+          </label>
+          <label>
+            Output directory
+            <input id="output-dir" type="text" autocomplete="off" />
+          </label>
+          <label>
+            Name strategy
+            <select id="name-strategy">
+              <option value="suffix">suffix</option>
+              <option value="same-name">same-name</option>
+              <option value="template">template</option>
+            </select>
+          </label>
+          <label>
+            Name template
+            <input id="name-template" type="text" placeholder="{stem}.plex.mkv" autocomplete="off" />
+          </label>
+          <label class="toggle-row">
+            <input id="overwrite" type="checkbox" />
+            <span>Overwrite existing outputs</span>
+          </label>
+        </div>
+      </section>
+
+      <section id="plan-section" class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Plan</p>
+            <h3>Preview</h3>
+          </div>
+          <button id="plan-btn" type="button" class="primary">Generate plan</button>
+        </div>
+        <div id="plan-summary" class="count-row"></div>
+        <div id="plans" class="stack empty-state">No plan generated.</div>
+      </section>
+
+      <section id="run-section" class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Run</p>
+            <h3>Results</h3>
+          </div>
+          <button id="run-btn" type="button" class="danger-soft" disabled>Run mux</button>
+        </div>
+        <div id="result-summary" class="count-row"></div>
+        <div id="results" class="stack empty-state">No mux run yet.</div>
+      </section>
+    </main>
+  </div>
+
+  <div id="loading" class="loading hidden" aria-live="polite">
+    <div class="loading-panel">
+      <div class="spinner"></div>
+      <div id="loading-text">Working...</div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

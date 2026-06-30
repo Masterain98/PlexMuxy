@@ -37,6 +37,15 @@ English README | [中文 README](https://github.com/Masterain98/PlexMuxy/blob/ma
   pip install -e ".[dev]"
   ```
 
+- Install the optional desktop GUI:
+
+  ```bash
+  pip install -e ".[gui]"
+  plexmuxy-gui
+  ```
+
+  `plexmuxy gui` is kept as a compatibility launcher. The base CLI install does not include `pywebview`, so CLI-only environments stay small and do not need GUI dependencies.
+
 - Create or inspect config:
 
   ```bash
@@ -78,13 +87,31 @@ English README | [中文 README](https://github.com/Masterain98/PlexMuxy/blob/ma
   plexmuxy mux /path/to/media --name-strategy template --name-template "{stem}.plex.mkv"
   ```
 
-- GUI compatibility:
+- Desktop GUI:
 
   ```bash
-  python main.py
+  plexmuxy-gui
+  plexmuxy gui
   ```
 
-  Running `main.py` with no arguments opens the folder picker and then uses the same core mux pipeline as the CLI.
+  The GUI uses pywebview with local HTML/CSS/JavaScript and calls the same core service used by `plexmuxy plan` and `plexmuxy mux`. On Windows it uses the Edge Chromium WebView2 runtime. PlexMuxy does not bundle a Fixed Version WebView2 runtime; install the Evergreen runtime from [Microsoft WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) if Windows does not already provide it.
+
+- Build packages:
+
+  ```bash
+  pip install -e ".[build]"
+  pyinstaller plexmuxy-cli.spec
+  pyinstaller plexmuxy-gui.spec
+  ```
+
+  The CLI spec excludes `plexmuxy_gui`, `pywebview`, and unused GUI renderers. The GUI spec includes `plexmuxy_gui/static` and excludes unused Qt/CEF backends.
+
+- Common errors:
+
+  - `mkvmerge was not found`: install MKVToolNix, add it to `PATH`, or set `mkvmerge.path`.
+  - `WebView2 Runtime`: install the Evergreen runtime from Microsoft.
+  - `Delete cleanup requires --yes`: use `--yes` in CLI or confirm delete cleanup in the GUI.
+  - `Output file already exists`: choose a different output strategy or enable overwrite.
 
 - **Make sure the name of files used for mux meet the requirements**
 
@@ -125,10 +152,6 @@ English README | [中文 README](https://github.com/Masterain98/PlexMuxy/blob/ma
     - Files only with `ttf`, `otf` and `ttc` extension are considered as fonts
 
   - If there isn't a `Fonts` subdirectory, the program will look for a `zip` or `7z` file including keyword `Fonts`, unzip it and use its contents as the attached fonts
-
-- Run `main.py`
-
-  - `python main.py`
 
 ## Screenshot
 
