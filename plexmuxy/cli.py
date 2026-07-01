@@ -1,21 +1,19 @@
 from __future__ import annotations
 
 import argparse
-import copy
 import json
-import logging
 import sys
 from pathlib import Path
 
-from .cleanup import cleanup_successful_results
 from .config import ConfigError, default_config, default_config_dict, load_config, resolve_config_path, write_default_config
-from .font import prepare_fonts
 from .logging_utils import configure_logging
-from .models import AppConfig, JobReport
-from .muxer import execute_mux_plan
-from .planner import build_mux_plans
+from .models import AppConfig
+from .overrides import apply_job_overrides, overrides_from_namespace
 from .report import format_job_report
-from .scanner import scan_media_dir
+from .service import run_mux_job
+
+
+GUI_EXTRA_MESSAGE = 'PlexMuxy GUI requires optional dependencies. Install with `pip install -e ".[gui]"`.'
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -36,7 +34,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     if argv is None:
         argv = sys.argv[1:]
     if not argv:
-        argv = ["gui"]
+        parser.print_help()
+        raise SystemExit(0)
     return parser.parse_args(argv)
 
 
@@ -56,8 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     mux_parser = subparsers.add_parser("mux", help="Run mux jobs")
     add_job_arguments(mux_parser, dry_run_default=False)
 
-    gui_parser = subparsers.add_parser("gui", help="Choose a directory with a native folder picker")
-    add_job_arguments(gui_parser, include_input=False, dry_run_default=False)
+    subparsers.add_parser("gui", help="Start the optional desktop GUI")
     return parser
 
 
@@ -116,28 +114,24 @@ def show_config(args: argparse.Namespace) -> int:
 
 def run_gui(args: argparse.Namespace) -> int:
     try:
-        from tkinter import TclError, filedialog
+        from plexmuxy_gui.app import start as gui_start
     except ImportError as exc:
-        print(f"GUI mode is unavailable in this environment: {exc}", file=sys.stderr)
-        print("Use `plexmuxy mux <directory>` or `plexmuxy plan <directory>` instead.", file=sys.stderr)
-        return 2
+        if exc.name == "webview" or "webview" in str(exc).lower():
+            print(f"GUI mode is unavailable in this environment: {GUI_EXTRA_MESSAGE}", file=sys.stderr)
+            return 2
+        raise
 
     try:
-        folder_selected = filedialog.askdirectory()
-    except (OSError, TclError) as exc:
+        gui_start()
+    except RuntimeError as exc:
         print(f"GUI mode is unavailable in this environment: {exc}", file=sys.stderr)
-        print("Use `plexmuxy mux <directory>` or `plexmuxy plan <directory>` instead.", file=sys.stderr)
         return 2
-    if not folder_selected:
-        print("No directory selected.")
-        return 1
-    args.input_dir = folder_selected
-    return run_job_command(args)
+    return 0
 
 
 def run_job_command(args: argparse.Namespace) -> int:
     config = load_cli_config(args)
-    config = apply_job_overrides(config, args)
+    config = apply_job_overrides(config, overrides_from_namespace(args))
     configure_logging(verbose=args.verbose)
     report = run_mux_job(Path(args.input_dir), config, dry_run=args.dry_run, yes=args.yes)
     print(format_job_report(report, dry_run=args.dry_run))
@@ -154,54 +148,6 @@ def load_cli_config(args: argparse.Namespace) -> AppConfig:
     config.source_path = path
     print(f"Config not found; using built-in defaults. Run `plexmuxy init-config` to create: {path}")
     return config
-
-
-def run_mux_job(input_dir: Path, config: AppConfig, dry_run: bool = False, yes: bool = False) -> JobReport:
-    input_dir = input_dir.expanduser().resolve()
-    logging.info("Using input directory: %s", input_dir)
-    scan = scan_media_dir(input_dir, config.media)
-    font_result = prepare_fonts(
-        input_dir,
-        config.media,
-        config.font,
-        extract_archives=not dry_run,
-        preview_archives=dry_run,
-    )
-    for error in font_result.errors:
-        logging.error("Font preparation failed: %s", error)
-
-    plan_result = build_mux_plans(scan, config, font_result)
-    report = JobReport(
-        input_dir=input_dir,
-        plans=plan_result.plans,
-        skipped_files=plan_result.skipped_files,
-    )
-    if dry_run:
-        return report
-
-    report.results = [execute_mux_plan(plan, config) for plan in report.plans]
-    report.cleanup_results = cleanup_successful_results(report.results, config, yes=yes)
-    return report
-
-
-def apply_job_overrides(config: AppConfig, args: argparse.Namespace) -> AppConfig:
-    updated = copy.deepcopy(config)
-    if getattr(args, "cleanup", None) is not None:
-        updated.task.cleanup = args.cleanup
-        updated.task.cleanup_overridden = True
-    if getattr(args, "extra_dir", None):
-        updated.task.extra_dir = args.extra_dir
-    if getattr(args, "output_suffix", None) is not None:
-        updated.task.output_suffix = args.output_suffix or "_Plex"
-    if getattr(args, "output_dir", None):
-        updated.task.output_dir = Path(args.output_dir).expanduser()
-    if getattr(args, "name_strategy", None):
-        updated.task.name_strategy = args.name_strategy
-    if getattr(args, "name_template", None):
-        updated.task.name_template = args.name_template
-    if getattr(args, "overwrite", False):
-        updated.task.overwrite = True
-    return updated
 
 
 if __name__ == "__main__":

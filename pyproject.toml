@@ -20,12 +20,26 @@ dependencies = [
 dev = [
   "pytest>=8",
 ]
+gui = [
+  "pywebview>=6.0",
+]
+build = [
+  "pyinstaller>=6",
+]
 
 [project.scripts]
 plexmuxy = "plexmuxy.cli:main"
+plexmuxy-gui = "plexmuxy_gui.app:main"
 
 [tool.setuptools]
 py-modules = ["main", "config", "subtitle_utils"]
 
 [tool.setuptools.packages.find]
-include = ["plexmuxy*"]
+include = ["plexmuxy", "plexmuxy.*", "plexmuxy_gui", "plexmuxy_gui.*"]
+
+[tool.setuptools.package-data]
+plexmuxy_gui = [
+  "static/*.html",
+  "static/*.css",
+  "static/*.js",
+]
