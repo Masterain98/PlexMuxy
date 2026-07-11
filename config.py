@@ -1,3 +1,7 @@
+import warnings
+
+warnings.warn("Top-level config.py is deprecated; import plexmuxy.config.", DeprecationWarning, stacklevel=2)
+
 from plexmuxy.config import (
     ConfigError,
     default_config_dict,
@@ -6,6 +10,7 @@ from plexmuxy.config import (
     load_config,
     platform_config_path,
     resolve_config_path,
+    save_config,
     write_default_config,
 )
 
@@ -17,5 +22,6 @@ __all__ = [
     "load_config",
     "platform_config_path",
     "resolve_config_path",
+    "save_config",
     "write_default_config",
 ]

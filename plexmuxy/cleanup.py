@@ -14,26 +14,30 @@ def cleanup_successful_results(
     yes: bool = False,
 ) -> list[CleanupResult]:
     cleanup_results: list[CleanupResult] = []
-    cleaned: set[Path] = set()
-
+    dependencies: dict[Path, list[MuxResult]] = {}
+    original_paths: dict[Path, Path] = {}
     for result in results:
-        if not result.success or not result.verified:
-            continue
-        plan = result.plan
-        for candidate in plan.cleanup_candidates:
+        for candidate in result.plan.cleanup_candidates:
             resolved = candidate.resolve()
-            if resolved in cleaned:
-                continue
-            action = cleanup_action_for(candidate, plan, config)
-            if action == "none":
-                cleanup_results.append(CleanupResult(path=candidate, action="none", success=True))
-                cleaned.add(resolved)
-                continue
+            dependencies.setdefault(resolved, []).append(result)
+            original_paths.setdefault(resolved, candidate)
+
+    # A shared resource is eligible only when every plan that depends on it
+    # completed and verified. This prevents partial batch failures from moving
+    # an input that a failed/retryable plan still needs.
+    for resolved, dependent_results in dependencies.items():
+        if not all(item.success and item.verified for item in dependent_results):
+            continue
+        candidate = original_paths[resolved]
+        plan = dependent_results[0].plan
+        action = cleanup_action_for(candidate, plan, config)
+        if action == "none":
+            cleanup_results.append(CleanupResult(path=candidate, action="none", success=True))
+        else:
             cleanup_results.append(run_cleanup_action(candidate, action, plan, config, yes=yes))
-            cleaned.add(resolved)
 
     if config.font.delete_fonts_after_mux:
-        for fonts_dir in successful_results_font_dirs(results):
+        for fonts_dir in fully_successful_font_dirs(results):
             if not yes:
                 cleanup_results.append(
                     CleanupResult(
@@ -138,3 +142,17 @@ def successful_results_font_dirs(results: list[MuxResult]) -> list[Path]:
         seen.add(resolved)
         fonts_dirs.append(fonts_dir)
     return fonts_dirs
+
+
+def fully_successful_font_dirs(results: list[MuxResult]) -> list[Path]:
+    directories = {result.plan.source_video.parent.resolve() for result in results}
+    return [
+        directory / "Fonts"
+        for directory in sorted(directories, key=str)
+        if all(
+            result.success and result.verified
+            for result in results
+            if result.plan.source_video.parent.resolve() == directory
+        )
+        and (directory / "Fonts").is_dir()
+    ]

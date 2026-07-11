@@ -1,164 +1,121 @@
 # PlexMuxy
-PlexMuxy is a Python script to multiplex video with each independent audio, subtitle and fonts in bulk, in order to allow Plex Media Server to present media best in visual. 
 
-English README | [中文 README](https://github.com/Masterain98/PlexMuxy/blob/main/README.CN.md)
+PlexMuxy safely batches video, external audio, ASS/SSA subtitles, and font attachments into Matroska files for Plex. The CLI and desktop GUI use the same planning and execution service.
 
-## Feature
+## Safety model
 
-- Mux `mkv`/`mp4`/`avi`/`flv` video, `mka` audio, `ass`/`ssa` subtitles, and fonts together into a single `mkv` file
-  - Audio
-    - Usually are external 5.1 Channel audio and audio commentary
+- Planning never changes media files. Save a reviewable snapshot with `plexmuxy plan MEDIA --json plan.json`.
+- Execution uses that exact snapshot and stops with `PLAN_STALE` if an input, output, or configuration changed.
+- Muxing writes to a temporary file. The final output is replaced only after `mkvmerge -J` confirms the container, video/subtitle tracks, flags, languages, names, and attachments.
+- Cleanup runs only for successful, verified outputs. A shared input is retained unless every dependent plan succeeds.
+- Delete cleanup requires `--yes`; overwrite also requires explicit opt-in. Failed partial output is renamed to `*.mkv.failed` by default.
 
-  - Subtitle
-    - Determine the language by file name, including Simplified Chinese, Traditional Chinese, Japanese, SC&JP, TC&JP, Russian
-      - For Simplified Chinese, track name will be `chs` , and language is marked as `chi`
-      - For Traditional Chinese, track name will be `cht`, and language is marked as `chi`
-      - For Japanese, track name will be `jpn` and language is marked as `jpn`
-      - For SC&JP, track name will be `jp_sc` and language is marked as `chi`
-      - For TC&JP, track name will be `jp_tc` and language is marked as `chi`
-      - For Russian, track name will be `rus` and language is marked as `rus`
+## Install
 
-    - Determine the subtitle author by file name
+PlexMuxy requires Python 3.10–3.13 and [MKVToolNix](https://mkvtoolnix.download/). Ensure `mkvmerge` is on `PATH`, or set `mkvmerge.path` in the config.
 
-  - Fonts
-    - Fonts will be packaged together as attachments
-    - This is designed to allow Plex to fully display the subtitle visual effect, but this is waste significant amount of storage. It is recommended to use font subset instead of full font file.
+```bash
+pip install plexmuxy
+plexmuxy --help
+```
 
-  - Based on user's setting, remove or move the original files to avoid Plex Server's scanning.
+Desktop GUI:
 
+```bash
+pip install "plexmuxy[gui]"
+plexmuxy gui
+# or: plexmuxy-gui
+```
 
-## Usage
+The Windows GUI uses the Microsoft Edge WebView2 Evergreen Runtime. Windows 11 normally includes it; Windows 10 may require the [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). The standalone releases use the same Evergreen dependency to keep downloads small.
 
-- Download and install [MKVToolNix](https://mkvtoolnix.download/) and add its folder to the `PATH` system environment variable, or set `mkvmerge.path` in the config file.
+Windows release archives contain independent CLI and GUI builds and do not require a local Python installation. Verify downloads against `SHA256SUMS.txt`.
 
-- Install for local development:
+## Commands
 
-  ```bash
-  pip install -e ".[dev]"
-  ```
+```bash
+# Create and inspect the platform config
+plexmuxy init-config
+plexmuxy show-config
 
-- Install the optional desktop GUI:
+# Migrate in place (creates config.json.bak-YYYYMMDD-HHMMSS)
+plexmuxy migrate-config
+plexmuxy migrate-config --source old.json --target new.json
 
-  ```bash
-  pip install -e ".[gui]"
-  plexmuxy-gui
-  ```
+# Preview, save, and execute an immutable plan
+plexmuxy plan D:\Media --json plan.json
+plexmuxy execute-plan plan.json
 
-  `plexmuxy gui` is kept as a compatibility launcher. The base CLI install does not include `pywebview`, so CLI-only environments stay small and do not need GUI dependencies.
+# One-shot plan and mux; cleanup is explicitly disabled here
+plexmuxy mux D:\Media --cleanup none
 
-- Create or inspect config:
+# Destructive cleanup requires confirmation
+plexmuxy mux D:\Media --cleanup delete --yes
 
-  ```bash
-  plexmuxy init-config
-  plexmuxy show-config
-  ```
+# Export a redacted report with no media content
+plexmuxy diagnostics --output diagnostics.zip
+```
 
-- Preview a mux plan without changing files:
+Useful job overrides include `--output-dir`, `--output-suffix`, `--name-strategy`, `--name-template`, `--extra-dir`, `--overwrite`, and `--cleanup`.
 
-  ```bash
-  plexmuxy plan /path/to/media
-  ```
+## Configuration
 
-  `plan` is a dry-run. It scans files, builds `MuxPlan` objects, prints match reasons, prints skipped files, and does not call `mkvmerge`, create output files, move files, or delete files.
+The default config lives in `%APPDATA%\PlexMuxy\config.json` (Windows), `~/Library/Application Support/PlexMuxy/config.json` (macOS), or `$XDG_CONFIG_HOME/plexmuxy/config.json` (Linux). Future config versions are rejected rather than guessed. Legacy configuration remains importable in 0.2, emits deprecation guidance through legacy entry points, and should be migrated before 0.3.
 
-- Run mux:
+Important defaults:
 
-  ```bash
-  plexmuxy mux /path/to/media
-  ```
+```json
+{
+  "matching": {
+    "movie_fallback": false,
+    "allow_episode_only_match": true,
+    "minimum_confidence": 0.7,
+    "ambiguous_action": "skip"
+  },
+  "task": {
+    "cleanup": "move",
+    "overwrite": false,
+    "failed_output_action": "rename"
+  },
+  "font": {
+    "mode": "all",
+    "missing_font_action": "warn"
+  },
+  "concurrency": {
+    "max_parallel_mux_jobs": 1
+  }
+}
+```
 
-  The default output name keeps the historic `_Plex.mkv` suffix. By default, successful source files are moved to `Extra` after the output has been verified.
+Parallel mux jobs are intentionally limited to 1–4 and default to 1. The old `thread_count` key is accepted only for migration. Archive limits apply before ZIP/7z extraction; uninspectable RAR archives require explicit permission.
 
-- Cleanup options:
+## Matching
 
-  ```bash
-  plexmuxy mux /path/to/media --cleanup none
-  plexmuxy mux /path/to/media --cleanup move --extra-dir Extra
-  plexmuxy mux /path/to/media --cleanup delete --yes
-  ```
+Each subtitle or external audio file is assigned once using this priority: exact stem (1.0), normalized title (0.85), normalized episode identity (0.70), and optional controlled single-video movie fallback. Episode parsing supports `[1]`, `[100]`, `S01E01`, `S01EP01`, `E01`, `EP01`, `.01.`, `SP01`, `Special`, and `OVA`.
 
-  Delete cleanup always requires `--yes`. Failed or unverified mux tasks are never cleaned up.
+Equal best candidates become `ambiguous_match` and are skipped. Low-confidence candidates become `unmatched`. The GUI and CLI display these reasons; PlexMuxy never chooses by filename ordering.
 
-- Output naming:
+## Fonts and source tracks
 
-  ```bash
-  plexmuxy mux /path/to/media --output-suffix _Plex
-  plexmuxy mux /path/to/media --output-dir PlexReady --name-strategy same-name
-  plexmuxy mux /path/to/media --name-strategy template --name-template "{stem}.plex.mkv"
-  ```
+`font.mode=all` preserves the compatibility-first behavior. `referenced` parses ASS/SSA style font names and `\fn` overrides, matches font metadata, and follows `missing_font_action`. `subset` currently falls back to referenced full fonts and reports that decision; it never emits a knowingly incomplete subset.
 
-- Desktop GUI:
+Source container tracks are read with `mkvmerge -J` and shown in plans. The 0.2 product decision is to preserve all source tracks. Filter configuration is reserved for explicit future use; unknown languages and untitled tracks must remain included.
 
-  ```bash
-  plexmuxy-gui
-  plexmuxy gui
-  ```
+## Development
 
-  The GUI uses pywebview with local HTML/CSS/JavaScript and calls the same core service used by `plexmuxy plan` and `plexmuxy mux`. On Windows it uses the Edge Chromium WebView2 runtime. PlexMuxy does not bundle a Fixed Version WebView2 runtime; install the Evergreen runtime from [Microsoft WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) if Windows does not already provide it.
+```bash
+pip install -e ".[dev,build]"
+pytest -m "not integration"
+pytest -m integration       # requires ffmpeg + mkvmerge
+ruff check plexmuxy plexmuxy_gui tests
+mypy plexmuxy plexmuxy_gui
+python -m build
+python -m PyInstaller --clean --noconfirm plexmuxy-cli.spec
+python -m PyInstaller --clean --noconfirm plexmuxy-gui.spec
+```
 
-- Build packages:
+See [architecture](docs/architecture.md), [troubleshooting](docs/troubleshooting.md), [security](docs/security.md), and [release process](docs/release-process.md).
 
-  ```bash
-  pip install -e ".[build]"
-  pyinstaller plexmuxy-cli.spec
-  pyinstaller plexmuxy-gui.spec
-  ```
+## License
 
-  The CLI spec excludes `plexmuxy_gui`, `pywebview`, and unused GUI renderers. The GUI spec includes `plexmuxy_gui/static` and excludes unused Qt/CEF backends.
-
-- Common errors:
-
-  - `mkvmerge was not found`: install MKVToolNix, add it to `PATH`, or set `mkvmerge.path`.
-  - `WebView2 Runtime`: install the Evergreen runtime from Microsoft.
-  - `Delete cleanup requires --yes`: use `--yes` in CLI or confirm delete cleanup in the GUI.
-  - `Output file already exists`: choose a different output strategy or enable overwrite.
-
-- **Make sure the name of files used for mux meet the requirements**
-
-  - File that name includes the original `mkv` file name is considered as the same group
-
-    - e.g.
-
-      - `[Kamigami] Ansatsu Kyoushitsu [00][Ma10p_1080p][x265_flac].mkv` and `[Kamigami&VCB-Studio] Ansatsu Kyoushitsu [00][Ma10p_1080p][x265_flac].sc.ass` are in the same group
-      - `[VCB-Studio] Tenki no Ko [Ma10p_2160p_HDR][x265_flac].mka`and `[VCB-Studio] Tenki no Ko [Ma10p_2160p_HDR][x265_flac].mkv` are in the same group
-
-    - Based on this rule, if the file is in `ass` extension, and there's key word matched, the language will be decided. The language decision rule is below in the table:
-
-      - |                         Keywords                         | Decision |
-        | :------------------------------------------------------: | :------: |
-        | `.jpsc`, `[jpsc]`, `jp_sc`, `[jp_sc]`, `chs&jap`, `简日` |  jp_sc   |
-        | `.jptc`, `[jptc]`, `jp_tc`, `[jp_tc]`, `cht&jap`, `繁日` |  jp_tc   |
-        |      `.chs`, `.sc`, `[chs]`, `[sc]`, `.gb`, `[gb]`       |   chs    |
-        |     `.cht`, `.tc`, `[cht]`, `[tc]`, `big5`, `[big5]`     |   cht    |
-        |     `.jp`, `.jpn`, `.jap`, `[jp]`, `[jpn]`, `[jap]`      |   jpn    |
-        |     `.ru`, `.rus`, `[ru]`, `[rus]`                       |   rus    |
-
-
-    - If the file name starts with `[`, and the following characters until next `]` will be considered as subtitle author and marked in the track name
-
-      - e.g.
-        - The author of `[Kamigami] Ansatsu Kyoushitsu [00][Ma10p_1080p][x265_flac].sc.as` is `Kamigami&VCB-Studio`，this subtitle track name will be ` chs Kamigami&VCB-Studio`
-
-  - If there's no matching-up file, the program will find the episode number in `[02]` rule (number included by `[]`)
-
-    - Then the program will match the file with same ep number, with the following rule
-      - `[02]`
-      - `.02.`
-      - ` 02 ` (space before and after the ep number)
-      - ` 02.` (One space before the ep number)
-
-  - If there's a `Fonts` subdirectory, fonts in it will be used as attached fronts
-
-    - Files only with `ttf`, `otf` and `ttc` extension are considered as fonts
-
-  - If there isn't a `Fonts` subdirectory, the program will look for a `zip` or `7z` file including keyword `Fonts`, unzip it and use its contents as the attached fonts
-
-## Screenshot
-
-### Program running
-
-![](https://github.com/Masterain98/Repo-README-Images/blob/main/Anime-MKV-Plex-Packager/Cli-sample.png?raw=true)
-
-### Subtitle Choices from Plex 
-
-![](https://raw.githubusercontent.com/Masterain98/Repo-README-Images/main/Anime-MKV-Plex-Packager/Plex-sample-sub-options.png)
+MIT

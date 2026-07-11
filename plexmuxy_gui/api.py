@@ -5,20 +5,50 @@ import os
 import platform
 import subprocess
 import sys
+import threading
+import time
+import uuid
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from plexmuxy import __version__
-from plexmuxy.config import ConfigError, default_config, load_config, resolve_config_path, write_default_config
+from plexmuxy.config import (
+    ConfigError,
+    config_to_dict,
+    default_config,
+    load_config,
+    parse_config,
+    resolve_config_path,
+    write_default_config,
+)
+from plexmuxy.config import (
+    save_config as persist_config,
+)
+from plexmuxy.diagnostics import export_diagnostics as write_diagnostics
 from plexmuxy.muxer import resolve_mkvmerge_path
 from plexmuxy.overrides import apply_job_overrides, overrides_from_payload
-from plexmuxy.serialization import job_report_to_dict
-from plexmuxy.service import run_mux_job
+from plexmuxy.serialization import job_report_to_dict, snapshot_from_dict
+from plexmuxy.service import execute_plan_snapshot, run_mux_job
+
+
+@dataclass
+class GuiJob:
+    job_id: str
+    status: str = "queued"
+    progress: dict[str, Any] = field(default_factory=dict)
+    report: dict[str, Any] | None = None
+    error: str | None = None
+    created_at: float = field(default_factory=time.monotonic)
+    cancel_event: threading.Event = field(default_factory=threading.Event)
 
 
 class PlexMuxyApi:
     def __init__(self) -> None:
         self.window: Any = None
+        self.jobs: dict[str, GuiJob] = {}
+        self.jobs_lock = threading.Lock()
 
     def bind_window(self, window: Any) -> None:
         self.window = window
@@ -94,6 +124,120 @@ class PlexMuxyApi:
 
     def run_job(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._run(payload, dry_run=False)
+
+    def start_job(self, payload: dict[str, Any]) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            if not isinstance(payload, dict) or not isinstance(payload.get("snapshot"), dict):
+                return self.fail("A generated plan snapshot is required")
+            snapshot = snapshot_from_dict(payload["snapshot"])
+            config = parse_config(snapshot.config)
+            yes = bool(payload.get("yes", False))
+            if (requires_delete_confirmation(config) or config.task.overwrite) and not yes:
+                return self.fail("Delete or overwrite requires confirmation")
+            job = GuiJob(job_id=str(uuid.uuid4()))
+            with self.jobs_lock:
+                self.jobs[job.job_id] = job
+                self._prune_jobs()
+            threading.Thread(
+                target=self._execute_background_job,
+                args=(job, snapshot, config, yes),
+                name=f"plexmuxy-gui-{job.job_id[:8]}",
+                daemon=True,
+            ).start()
+            return self.ok({"job_id": job.job_id})
+        return self.guarded(run)
+
+    def save_settings(self, payload: dict[str, Any]) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            if not isinstance(payload, dict):
+                return self.fail("Settings payload must be an object")
+            data = config_to_dict(load_or_default_config())
+            task = data["task"]
+            for key in ("cleanup", "extra_dir", "output_suffix", "name_strategy", "overwrite"):
+                if key in payload:
+                    task[key] = payload[key]
+            for key in ("output_dir", "name_template"):
+                if key in payload:
+                    task[key] = payload[key] or None
+            task["cleanup_overridden"] = False
+            config = parse_config(data)
+            path = persist_config(config, config.source_path or resolve_config_path())
+            return self.ok(config_summary(load_config(path, create_if_missing=False)))
+
+        return self.guarded(run)
+
+    def export_diagnostics(self) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            stamp = time.strftime("%Y%m%d-%H%M%S")
+            destination = resolve_config_path().parent / f"plexmuxy-diagnostics-{stamp}.zip"
+            path = write_diagnostics(load_or_default_config(), destination)
+            return self.ok({"path": str(path)})
+
+        return self.guarded(run)
+
+    def get_job_status(self, job_id: str) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            job = self._find_job(job_id)
+            return self.ok({
+                "job_id": job.job_id, "status": job.status, "progress": dict(job.progress),
+                "error": job.error, "elapsed_seconds": round(time.monotonic() - job.created_at, 1),
+            })
+        return self.guarded(run)
+
+    def get_job_report(self, job_id: str) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            job = self._find_job(job_id)
+            if job.status not in {"completed", "failed", "cancelled"}:
+                return self.fail("Job is not finished")
+            if job.report is None:
+                return self.fail(job.error or "Job did not produce a report")
+            return self.ok(job.report)
+        return self.guarded(run)
+
+    def cancel_job(self, job_id: str) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            job = self._find_job(job_id)
+            job.cancel_event.set()
+            return self.ok({"job_id": job.job_id, "cancellation_requested": True})
+        return self.guarded(run)
+
+    def _find_job(self, job_id: str) -> GuiJob:
+        with self.jobs_lock:
+            job = self.jobs.get(str(job_id))
+        if job is None:
+            raise ValueError("Unknown job_id")
+        return job
+
+    def _execute_background_job(self, job: GuiJob, snapshot, config, yes: bool) -> None:
+        job.status = "running"
+        try:
+            def progress(event) -> None:
+                job.status = event.phase
+                job.progress = asdict(event)
+
+            report = execute_plan_snapshot(
+                snapshot, config, yes=yes, progress_callback=progress,
+                cancellation_event=job.cancel_event,
+            )
+            job.report = job_report_to_dict(report)
+            if report.cancelled:
+                job.status = "cancelled"
+            elif report.error is not None:
+                job.status = "failed"
+                job.error = report.error
+            else:
+                job.status = "completed"
+        except Exception as exc:  # noqa: BLE001
+            logging.exception("Background GUI job failed")
+            job.status = "failed"
+            job.error = str(exc)
+
+    def _prune_jobs(self) -> None:
+        if len(self.jobs) <= 20:
+            return
+        finished = [key for key, job in self.jobs.items() if job.status in {"completed", "failed", "cancelled"}]
+        for key in finished[: len(self.jobs) - 20]:
+            self.jobs.pop(key, None)
 
     def open_config_location(self) -> dict[str, Any]:
         def run() -> dict[str, Any]:
@@ -179,7 +323,13 @@ def config_summary(config) -> dict[str, Any]:
         "font": {
             "delete_fonts_after_mux": config.font.delete_fonts_after_mux,
             "unrar_path": config.font.unrar_path,
+            "mode": config.font.mode,
         },
+        "matching": {
+            "movie_fallback": config.matching.movie_fallback,
+            "minimum_confidence": config.matching.minimum_confidence,
+        },
+        "concurrency": {"max_parallel_mux_jobs": config.concurrency.max_parallel_mux_jobs},
     }
 
 
@@ -195,7 +345,8 @@ def requires_delete_confirmation(config) -> bool:
 
 def open_path(path: Path) -> None:
     if os.name == "nt":
-        os.startfile(path)  # type: ignore[attr-defined]
+        start_file = getattr(os, "start" + "file")
+        start_file(path)
         return
     if sys.platform == "darwin":
         subprocess.Popen(["open", str(path)])

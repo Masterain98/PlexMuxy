@@ -1,4 +1,7 @@
 from pathlib import Path
+import warnings
+
+warnings.warn("subtitle_utils is deprecated; import plexmuxy.subtitle.", DeprecationWarning, stacklevel=2)
 
 from plexmuxy.config import load_config
 from plexmuxy.subtitle import detect_subtitle_info, is_font_file as _is_font_file

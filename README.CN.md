@@ -1,158 +1,95 @@
-# Plex 视频批量封装工具 (PlexMuxy)
+# Plex 视频批量封装工具（PlexMuxy）
 
-PlexMuxy 是一个将字幕组/压制组发布作品进行封装的 Python 脚本，它会将外挂字幕、外挂音频、字幕字体文件进行打包，以允许 Plex 服务器能以最好的方法使用这些资源。
+PlexMuxy 用于将视频、外挂音频、ASS/SSA 字幕和字体安全地批量封装为 Matroska 文件。CLI 与桌面 GUI 共用同一套计划和执行服务。
 
-中文 README | [English README](https://github.com/Masterain98/PlexMuxy/blob/main/README.md)
+## 数据安全保证
 
-## 功能和说明
+- `plan` 只生成计划，不修改媒体文件；可用 `--json` 保存可审查的计划快照。
+- 执行使用同一份快照。输入文件、输出状态或配置发生变化时返回 `PLAN_STALE`，要求重新生成计划。
+- 混流先写临时文件；只有 `mkvmerge -J` 验证容器、轨道、语言、名称、默认/强制标记和附件后，才原子替换正式输出。
+- 只有 `success=true` 且 `verified=true` 的任务才可清理。共享资源必须等所有依赖任务成功后才会移动或删除。
+- 删除必须显式提供 `--yes`，覆盖必须显式启用。失败的临时输出默认改名为 `*.mkv.failed`。
 
-- 将 `mkv`/`mp4`/`avi`/`flv` 视频文件、`mka` 音频文件、`ass`/`ssa` 字幕文件和字体文件重新打包混流成一个`mkv` 格式的单文件
-  - 音频
-    - 外挂的音频文件通常为5.1声道或评论轨
-  - 字幕
-    - 通过文件名判断字幕的语言，包括简体中文、繁体中文、日语、简日、繁日
-      - 简中字幕轨道使用 `chs` 作为名称，轨道语言标记为 `chi`
-      - 繁中字幕轨道使用 `cht`作为名称，轨道语言标记为 `chi`
-      - 日语字幕轨道使用 `jpn` 作为名称，轨道语言标记为 `jpn`
-      - 简日字幕轨道使用 `jp_sc` 作为名称，轨道语言标记为 `chi`
-      - 繁日字幕轨道使用 `jp_tc`作为名称，轨道语言标记为 `chi`
-    - 通过文件名判断字幕作者并将其名称加入字幕轨道
-  - 字体
-    - 字体文件以附件形式与每一个视频一起打包
-    - 这是为了让 Plex 加载字体以保证完整的字幕特效，但会浪费额外的储存空间；当你可以制作字体子集时，建议使用子集字体以减小字体包的大小
-- 根据设置，自动删除原始文件或将原始文件移动至统一的目录以避免 Plex 的媒体扫描
+## 安装
 
-## 使用说明
+需要 Python 3.10–3.13 和 [MKVToolNix](https://mkvtoolnix.download/)。请把 `mkvmerge` 加入 `PATH`，或配置 `mkvmerge.path`。
 
-- 下载并安装 [MKVToolNix](https://mkvtoolnix.download/) 并添加其进入 `PATH` 系统变量，或在配置文件中设置 `mkvmerge.path`。
+```bash
+pip install plexmuxy
+plexmuxy --help
+```
 
-- 本地开发安装：
+桌面 GUI：
 
-  ```bash
-  pip install -e ".[dev]"
-  ```
+```bash
+pip install "plexmuxy[gui]"
+plexmuxy gui
+# 或 plexmuxy-gui
+```
 
-- 安装可选桌面 GUI：
+Windows GUI 采用 Microsoft Edge WebView2 Evergreen Runtime。Windows 11 通常已自带；Windows 10 可能需要安装 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。正式发布的 Windows CLI/GUI 压缩包不依赖本机 Python，请使用 `SHA256SUMS.txt` 校验下载文件。
 
-  ```bash
-  pip install -e ".[gui]"
-  plexmuxy-gui
-  ```
+## 命令示例
 
-  `plexmuxy gui` 保留为兼容启动入口。基础 CLI 安装不会安装 `pywebview`，因此纯命令行环境不会被 GUI 依赖污染。
+```bash
+plexmuxy init-config
+plexmuxy show-config
 
-- 创建或查看配置：
+# 原地迁移会先创建 config.json.bak-时间戳
+plexmuxy migrate-config
+plexmuxy migrate-config --source old.json --target new.json
 
-  ```bash
-  plexmuxy init-config
-  plexmuxy show-config
-  ```
+# 预览、保存并执行完全相同的计划
+plexmuxy plan D:\Media --json plan.json
+plexmuxy execute-plan plan.json
 
-- 预览 mux 计划，不改变文件系统：
+# 一次性执行
+plexmuxy mux D:\Media --cleanup none
 
-  ```bash
-  plexmuxy plan /path/to/media
-  ```
+# 删除策略必须确认
+plexmuxy mux D:\Media --cleanup delete --yes
 
-  `plan` 是 dry-run：只扫描文件、生成 `MuxPlan`、打印匹配原因和跳过原因，不调用 `mkvmerge`，不创建输出文件，不移动或删除文件。
+# 导出不含媒体文件和完整用户路径的诊断包
+plexmuxy diagnostics --output diagnostics.zip
+```
 
-- 执行 mux：
+可用覆盖参数包括 `--output-dir`、`--output-suffix`、`--name-strategy`、`--name-template`、`--extra-dir`、`--overwrite` 和 `--cleanup`。
 
-  ```bash
-  plexmuxy mux /path/to/media
-  ```
+## 配置与兼容性
 
-  默认输出仍保持旧行为：生成 `_Plex.mkv`。默认 cleanup 为 `move`，只在 mux 成功且输出验证通过后，将参与该任务的源文件移动到 `Extra`。
+默认配置位置：Windows 为 `%APPDATA%\PlexMuxy\config.json`，macOS 为 `~/Library/Application Support/PlexMuxy/config.json`，Linux 为 `$XDG_CONFIG_HOME/plexmuxy/config.json`。
 
-- 清理策略：
+程序会拒绝未来版本、损坏配置、未知根字段、重复语言配置、非法模板和无效并发数量。旧配置在 0.2 中仍可读取，建议立即执行 `migrate-config`；0.3 只保留导入兼容，1.0 将移除旧入口。
 
-  ```bash
-  plexmuxy mux /path/to/media --cleanup none
-  plexmuxy mux /path/to/media --cleanup move --extra-dir Extra
-  plexmuxy mux /path/to/media --cleanup delete --yes
-  ```
+默认匹配策略保守：`movie_fallback=false`、最低置信度 0.7、歧义项跳过。并发配置为 `max_parallel_mux_jobs`，范围 1–4，默认 1；旧 `thread_count` 仅用于迁移。
 
-  删除必须显式传入 `--yes`。mux 失败或输出验证失败时不会执行清理。
+## 文件匹配
 
-- 输出命名：
+优先级为：完全同名（1.0）→ 标准化标题（0.85）→ 标准化集数身份（0.70）→ 可选的单视频电影回退。支持 `[1]`、`[100]`、`S01E01`、`S01EP01`、`E01`、`EP01`、`.01.`、`SP01`、`Special`、`OVA`。
 
-  ```bash
-  plexmuxy mux /path/to/media --output-suffix _Plex
-  plexmuxy mux /path/to/media --output-dir PlexReady --name-strategy same-name
-  plexmuxy mux /path/to/media --name-strategy template --name-template "{stem}.plex.mkv"
-  ```
+一个资源若对多个视频具有相同最高分，会以 `ambiguous_match` 跳过；低于阈值则为 `unmatched`。程序不会按文件排序猜测归属。
 
-- 桌面 GUI：
+## 字体、压缩包和源轨道
 
-  ```bash
-  plexmuxy-gui
-  plexmuxy gui
-  ```
+`font.mode=all` 默认附加全部字体；`referenced` 会读取 ASS/SSA 样式字体与 `\fn` 覆盖标签；找不到字体时按 `missing_font_action` 处理。`subset` 当前安全回退为“引用到的完整字体”，不会生成已知缺字的子集。
 
-  GUI 使用 pywebview 和本地 HTML/CSS/JavaScript，并调用与 `plexmuxy plan`、`plexmuxy mux` 相同的核心 service。Windows 下会使用 Edge Chromium WebView2 Runtime。PlexMuxy 不内置 Fixed Version WebView2 Runtime；如果系统缺失，请从 [Microsoft WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) 安装 Evergreen Runtime。
+ZIP/7z 在写入前检查压缩包大小、文件数、展开总大小、单文件大小和目录深度，并阻止路径穿越；RAR 无法可靠预检时必须显式允许。同名同内容字体去重，同名不同内容字体自动改名并报告冲突。
 
-- 打包：
+计划阶段会读取源容器轨道并展示。0.2 的产品决策是默认保留全部源轨道；未知语言、无标题轨道不得自动删除。
 
-  ```bash
-  pip install -e ".[build]"
-  pyinstaller plexmuxy-cli.spec
-  pyinstaller plexmuxy-gui.spec
-  ```
+## 开发与验证
 
-  CLI spec 会排除 `plexmuxy_gui`、`pywebview` 和未使用的 GUI 后端。GUI spec 会包含 `plexmuxy_gui/static`，并排除未使用的 Qt/CEF 后端。
+```bash
+pip install -e ".[dev,build]"
+pytest -m "not integration"
+pytest -m integration
+ruff check plexmuxy plexmuxy_gui tests
+mypy plexmuxy plexmuxy_gui
+python -m build
+```
 
-- 常见错误：
+更多内容见 [架构说明](docs/architecture.md)、[故障排查](docs/troubleshooting.md)、[安全说明](docs/security.md) 和 [发布流程](docs/release-process.md)。
 
-  - `mkvmerge was not found`：安装 MKVToolNix、加入 `PATH`，或设置 `mkvmerge.path`。
-  - `WebView2 Runtime`：从 Microsoft 安装 Evergreen Runtime。
-  - `Delete cleanup requires --yes`：CLI 使用 `--yes`，GUI 中确认 delete cleanup。
-  - `Output file already exists`：更换输出策略或启用 overwrite。
+## 许可证
 
-- **保证你的需要打包文件符合脚本所期待的命名规范**
-
-  - 包含完整原始 `mkv` 文件名的文件会被考虑为同一组文件
-
-    - 比如
-
-      - `[Kamigami] Ansatsu Kyoushitsu [00][Ma10p_1080p][x265_flac].mkv` 和 `[Kamigami&VCB-Studio] Ansatsu Kyoushitsu [00][Ma10p_1080p][x265_flac].sc.ass` 为同一组资源
-
-      - `[VCB-Studio] Tenki no Ko [Ma10p_2160p_HDR][x265_flac].mka`和`[VCB-Studio] Tenki no Ko [Ma10p_2160p_HDR][x265_flac].mkv` 为同一组资源
-
-    - 在此基础上，会在文件名中查找关键字串符，以匹配字幕资源。规则如下表，脚本判断顺序为该表从上至下
-
-      |                        关键字串符                        | 判断结果 |
-      | :------------------------------------------------------: | :------: |
-      | `.jpsc`, `[jpsc]`, `jp_sc`, `[jp_sc]`, `chs&jap`, `简日` |   简日   |
-      | `.jptc`, `[jptc]`, `jp_tc`, `[jp_tc]`, `cht&jap`, `繁日` |   繁日   |
-      |      `.chs`, `.sc`, `[chs]`, `[sc]`, `.gb`, `[gb]`       |   简中   |
-      |     `.cht`, `.tc`, `[cht]`, `[tc]`, `big5`, `[big5]`     |   繁中   |
-      |     `.jp`, `.jpn`, `.jap`, `[jp]`, `[jpn]`, `[jap]`      |   日语   |
-
-    - 文件名的第一个字符若为 `[`，则会匹配所有随后的内容直至下一个`]` ，作为字幕作者名称并添加进轨道名称
-
-      - 比如
-        - `[Kamigami] Ansatsu Kyoushitsu [00][Ma10p_1080p][x265_flac].sc.as`的作者为 `Kamigami&VCB-Studio`，该字幕轨道名称为` chs Kamigami&VCB-Studio`
-
-  - 若没有找到同一组资源文件，则会在原始 `mkv` 文件中寻找 `[01]` 这样的剧集数关键词，即被`[` 和 `]`包围的两位数字
-
-    - 随后使用该剧集数在整个工作目录中寻找包含相同数字的文件，这些文件中的数字必须符合以下的规则才会被读取（以 `[02]` 为例）：
-      - `[02]`
-      - `.02.`
-      - ` 02 ` (前后分别有一个空格)
-      - `02.`（前面有一个空格）
-
-  - 若工作路径下有一个名为 `Fonts`的目录，则会该目录中所有字体文件，不会再有额外的操作
-
-    - `ttf`, `otf `和 `ttc` 格式文件被视为有效的字体
-
-  - 若工作路径下没有名为 `Fonts`的目录，则会将工作路径下文件名包含 `Fonts` 关键词的 `zip`和 `7z` 文件解压，使用其中的字体文件作为附加字体
-
-## 效果预览
-
-### 程序运行
-
-![](https://github.com/Masterain98/Repo-README-Images/blob/main/Anime-MKV-Plex-Packager/Cli-sample.png?raw=true)
-
-### Plex 字幕选择
-
-![](https://raw.githubusercontent.com/Masterain98/Repo-README-Images/main/Anime-MKV-Plex-Packager/Plex-sample-sub-options.png)
+MIT

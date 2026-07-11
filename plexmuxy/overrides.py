@@ -4,9 +4,9 @@ import copy
 from argparse import Namespace
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from .models import AppConfig
+from .models import AppConfig, CleanupMode, NameStrategy
 
 
 @dataclass
@@ -23,7 +23,7 @@ class JobOverrides:
 def apply_job_overrides(config: AppConfig, overrides: JobOverrides) -> AppConfig:
     updated = copy.deepcopy(config)
     if overrides.cleanup is not None:
-        updated.task.cleanup = overrides.cleanup
+        updated.task.cleanup = cast(CleanupMode, overrides.cleanup)
         updated.task.cleanup_overridden = True
     if overrides.extra_dir:
         updated.task.extra_dir = overrides.extra_dir
@@ -32,12 +32,18 @@ def apply_job_overrides(config: AppConfig, overrides: JobOverrides) -> AppConfig
     if overrides.output_dir:
         updated.task.output_dir = Path(overrides.output_dir).expanduser()
     if overrides.name_strategy:
-        updated.task.name_strategy = overrides.name_strategy
+        updated.task.name_strategy = cast(NameStrategy, overrides.name_strategy)
     if overrides.name_template:
         updated.task.name_template = overrides.name_template
     if overrides.overwrite:
         updated.task.overwrite = True
-    return updated
+    # Reuse the same validation path as persisted configuration so malformed
+    # CLI/GUI overrides never reach the planner.
+    from .config import config_to_dict, parse_config
+
+    validated = parse_config(config_to_dict(updated))
+    validated.source_path = config.source_path
+    return validated
 
 
 def overrides_from_namespace(args: Namespace) -> JobOverrides:

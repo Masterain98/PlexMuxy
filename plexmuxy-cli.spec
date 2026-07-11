@@ -1,13 +1,19 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_submodules
+
 block_cipher = None
 
 a = Analysis(
-    ["plexmuxy/cli.py"],
+    ["packaging/cli_entry.py"],
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=[],
+    hiddenimports=(
+        collect_submodules("fontTools")
+        + collect_submodules("patoolib")
+        + collect_submodules("py7zr")
+    ),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

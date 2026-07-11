@@ -8,8 +8,26 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    runs-on: windows-latest
+  unit:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m pytest -m "not integration"
+
+  quality:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
@@ -17,5 +35,27 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.12"
-      - run: pip install -e ".[dev]"
-      - run: pytest
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m ruff check plexmuxy plexmuxy_gui tests
+      - run: python -m mypy plexmuxy plexmuxy_gui
+      - run: python -m pytest -m "not integration" --cov --cov-report=term --cov-fail-under=75
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build
+      - run: python -m build
+      - name: Test wheel in a clean environment
+        run: |
+          python -m venv /tmp/plexmuxy-wheel-test
+          /tmp/plexmuxy-wheel-test/bin/pip install dist/*.whl
+          cd /tmp
+          /tmp/plexmuxy-wheel-test/bin/plexmuxy --help
+          /tmp/plexmuxy-wheel-test/bin/plexmuxy show-config
+          /tmp/plexmuxy-wheel-test/bin/python -m plexmuxy --help

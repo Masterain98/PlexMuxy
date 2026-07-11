@@ -5,7 +5,6 @@ from pathlib import Path
 
 from .models import LanguageProfile, SubtitleConfig, SubtitleInfo
 
-
 AUTHOR_RE = re.compile(r"^\[([^\]]+)\]")
 
 

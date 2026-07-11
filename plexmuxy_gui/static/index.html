@@ -34,7 +34,7 @@
           <h2>Batch mux media for Plex</h2>
           <p id="app-version">PlexMuxy</p>
         </div>
-        <div id="runtime-status" class="status-pill">Initializing</div>
+        <div id="runtime-status" class="status-pill" role="status" aria-live="polite">Initializing</div>
       </header>
 
       <div id="alert" class="alert hidden" role="alert"></div>
@@ -57,7 +57,10 @@
               <p class="eyebrow">Config</p>
               <h3>Active settings</h3>
             </div>
-            <button id="open-config-btn" type="button">Open location</button>
+            <div class="button-row">
+              <button id="diagnostics-btn" type="button">Export diagnostics</button>
+              <button id="open-config-btn" type="button">Open location</button>
+            </div>
           </div>
           <div id="config-summary" class="summary-list"></div>
         </div>
@@ -79,6 +82,7 @@
             <p class="eyebrow">Options</p>
             <h3>Session overrides</h3>
           </div>
+          <button id="save-settings-btn" type="button">Save settings</button>
         </div>
         <div class="options-grid">
           <label>
@@ -138,8 +142,12 @@
             <p class="eyebrow">Run</p>
             <h3>Results</h3>
           </div>
-          <button id="run-btn" type="button" class="danger-soft" disabled>Run mux</button>
+          <div class="button-row">
+            <button id="cancel-btn" type="button" class="danger-soft hidden" disabled>Cancel job</button>
+            <button id="run-btn" type="button" class="danger-soft" disabled>Run mux</button>
+          </div>
         </div>
+        <div id="job-progress" class="summary-list" role="status" aria-live="polite"></div>
         <div id="result-summary" class="count-row"></div>
         <div id="results" class="stack empty-state">No mux run yet.</div>
       </section>

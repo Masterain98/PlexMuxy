@@ -4,8 +4,9 @@ import os
 import sys
 from pathlib import Path
 
-from .api import PlexMuxyApi
+from plexmuxy.logging_utils import configure_logging
 
+from .api import PlexMuxyApi
 
 WEBVIEW2_DOWNLOAD_URL = "https://developer.microsoft.com/en-us/microsoft-edge/webview2/"
 GUI_EXTRA_MESSAGE = 'PlexMuxy GUI requires optional dependencies. Install with `pip install -e ".[gui]"`.'
@@ -25,6 +26,7 @@ def static_path(name: str) -> str:
 
 
 def start() -> None:
+    configure_logging(verbose=os.environ.get("PLEXMUXY_GUI_DEBUG") == "1", json_log=True)
     webview = import_webview()
     debug = os.environ.get("PLEXMUXY_GUI_DEBUG") == "1"
     api = PlexMuxyApi()

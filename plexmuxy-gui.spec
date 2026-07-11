@@ -6,11 +6,16 @@ from PyInstaller.utils.hooks import collect_submodules
 block_cipher = None
 
 a = Analysis(
-    ["plexmuxy_gui/app.py"],
+    ["packaging/gui_entry.py"],
     pathex=[],
     binaries=[],
     datas=[("plexmuxy_gui/static", "plexmuxy_gui/static")],
-    hiddenimports=collect_submodules("webview"),
+    hiddenimports=(
+        collect_submodules("fontTools")
+        + collect_submodules("patoolib")
+        + collect_submodules("py7zr")
+        + collect_submodules("webview")
+    ),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

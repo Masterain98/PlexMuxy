@@ -53,3 +53,17 @@ def test_scan_media_dir_raises_for_file_path(tmp_path):
 
     with pytest.raises(NotADirectoryError):
         scan_media_dir(file_path, default_config().media)
+
+
+def test_recursive_scan_excludes_output_and_extra_directories(tmp_path):
+    output = tmp_path / "Ready"
+    extra = tmp_path / "Extra"
+    output.mkdir()
+    extra.mkdir()
+    (tmp_path / "Source.mkv").write_text("", encoding="utf-8")
+    (output / "Output.mkv").write_text("", encoding="utf-8")
+    (extra / "Old.mkv").write_text("", encoding="utf-8")
+    media = default_config().media
+    media.recursive = True
+    scan = scan_media_dir(tmp_path, media, excluded_dirs=[output, extra])
+    assert [path.name for path in scan.videos] == ["Source.mkv"]

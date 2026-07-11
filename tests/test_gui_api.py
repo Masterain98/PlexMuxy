@@ -121,3 +121,16 @@ def test_run_job_uses_service_and_serializes_report(monkeypatch, tmp_path):
     assert response["ok"] is True
     assert response["data"]["plans"][0]["output_name"] == "Example_Plex.mkv"
     assert calls == [{"input_dir": tmp_path.resolve(), "dry_run": False, "yes": True}]
+
+
+def test_save_settings_persists_validated_config(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.json"
+    monkeypatch.setattr("plexmuxy_gui.api.resolve_config_path", lambda path=None: config_path)
+    api = PlexMuxyApi()
+
+    response = api.save_settings({"cleanup": "none", "output_suffix": "_Ready"})
+
+    assert response["ok"] is True
+    assert config_path.exists()
+    assert response["data"]["task"]["cleanup"] == "none"
+    assert response["data"]["task"]["output_suffix"] == "_Ready"

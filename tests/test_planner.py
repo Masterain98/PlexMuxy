@@ -134,3 +134,14 @@ def test_output_dir_relative_and_absolute_paths(tmp_path):
 
     config.task.output_dir = Path("relative_out")
     assert build_output_path(video, tmp_path, config).parent == tmp_path / "relative_out"
+
+
+def test_existing_output_is_skipped_without_overwrite(tmp_path):
+    (tmp_path / "Example.mkv").write_text("source", encoding="utf-8")
+    (tmp_path / "Example.chs.ass").write_text("subtitle", encoding="utf-8")
+    (tmp_path / "Example_Plex.mkv").write_text("existing", encoding="utf-8")
+    config = default_config()
+    scan = scan_media_dir(tmp_path, config.media)
+    result = build_mux_plans(scan, config)
+    assert not result.plans
+    assert any(item.reason == "output_exists" for item in result.skipped_files)
