@@ -69,9 +69,9 @@ def start() -> None:
 
     try:
         if sys.platform == "win32":
-            webview.start(debug=debug, gui="edgechromium")
+            webview.start(debug=debug, gui="edgechromium", http_server=True)
         else:
-            webview.start(debug=debug)
+            webview.start(debug=debug, http_server=True)
     except Exception as exc:  # noqa: BLE001 - desktop startup should fail cleanly from CLI/script entry points.
         if sys.platform == "win32" and is_webview2_missing_error(exc):
             raise RuntimeError(

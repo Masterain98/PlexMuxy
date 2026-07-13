@@ -9,12 +9,14 @@ All notable changes follow Keep a Changelog categories.
 - Immutable, serializable plan snapshots and `execute-plan`.
 - Versioned config migration, atomic config saving, backup reports, and diagnostics export.
 - Background GUI jobs with progress, cancellation, accessible live status, and safe DOM construction.
+- Crowdin-compatible JSON localization with an English source catalog and Simplified Chinese translations.
 - Real-media integration suite, multi-platform/Python CI, coverage, static checks, wheel verification, PyInstaller release builds, and SHA-256 generation.
 - ASS/SSA referenced-font discovery, archive resource limits, conflict handling, and source-track plan metadata.
 
 ### Changed
 
 - Replaced the unmaintained `pymkv` distribution with `pymkv2` while preserving the `pymkv` runtime import API.
+- Redesigned the desktop GUI around the five-stage workflow, persistent themes, responsive navigation, and clearer task states.
 - Matching now performs global confidence assignment and skips ambiguity by default.
 - Muxing uses cancellable subprocesses, temporary outputs, structural verification, and bounded concurrency.
 - Source tracks are preserved by default; filtering remains opt-in future work.
@@ -22,6 +24,7 @@ All notable changes follow Keep a Changelog categories.
 ### Fixed
 
 - Prevented pywebview from recursively inspecting the native GUI window by exposing only the intended bridge methods.
+- Made sidebar selection transitions target the clicked stage directly instead of cycling through every item.
 - Prevented movie fallback across multi-video directories.
 - Prevented cleanup before output verification and premature cleanup of shared resources.
 - Prevented failed or partial mux output from replacing a valid destination.

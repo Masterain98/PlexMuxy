@@ -49,6 +49,7 @@ plexmuxy_gui = [
   "static/*.html",
   "static/*.css",
   "static/*.js",
+  "static/locales/*.json",
 ]
 
 [tool.pytest.ini_options]

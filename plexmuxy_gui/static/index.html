@@ -1,166 +1,428 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark" data-theme-mode="system" data-locale="en" data-locale-mode="system">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PlexMuxy</title>
+  <meta name="color-scheme" content="dark light" />
+  <meta name="description" content="Plan, review, and run Plex-ready media mux jobs from a focused desktop workspace." data-i18n-content="meta.description" />
+  <title>PlexMuxy · Mux workspace</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%23e5a00d'/%3E%3Cpath d='M10 7h7.5a6 6 0 0 1 0 12H14v6h-4V7Zm4 4v4h3.2a2 2 0 1 0 0-4H14Z' fill='%231c1c1c'/%3E%3C/svg%3E" />
+  <script>
+    (() => {
+      let mode = "system";
+      try {
+        const saved = localStorage.getItem("plexmuxy-theme");
+        if (["system", "light", "dark"].includes(saved)) mode = saved;
+      } catch (_) {
+        // Local storage can be unavailable in hardened webviews; system mode remains safe.
+      }
+      const prefersLight = window.matchMedia?.("(prefers-color-scheme: light)").matches;
+      document.documentElement.dataset.themeMode = mode;
+      document.documentElement.dataset.theme = mode === "system" ? (prefersLight ? "light" : "dark") : mode;
+      let localeMode = "system";
+      try {
+        const savedLocale = localStorage.getItem("plexmuxy-locale");
+        if (["system", "en", "zh-CN"].includes(savedLocale)) localeMode = savedLocale;
+      } catch (_) {
+        // System language remains the safe fallback when storage is unavailable.
+      }
+      const browserLocale = navigator.languages?.[0] || navigator.language || "en";
+      const resolvedLocale = localeMode === "system" ? browserLocale : localeMode;
+      const isSimplifiedChinese = /^(zh$|zh-(CN|Hans|SG)(-|$))/i.test(resolvedLocale);
+      document.documentElement.dataset.localeMode = localeMode;
+      document.documentElement.dataset.locale = isSimplifiedChinese ? "zh-CN" : "en";
+      document.documentElement.lang = document.documentElement.dataset.locale;
+    })();
+  </script>
   <link rel="stylesheet" href="./app.css" />
 </head>
 <body>
-  <div class="app-shell">
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-mark">P</div>
-        <div>
-          <h1>PlexMuxy</h1>
-          <p>Media mux planner</p>
-        </div>
+  <a class="skip-link" href="#main-content" data-i18n="skip.workspace">Skip to workspace</a>
+
+  <svg class="svg-sprite" aria-hidden="true">
+    <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></symbol>
+    <symbol id="icon-folder" viewBox="0 0 24 24"><path d="M3.5 7.5h6l2-2h9v13h-17z" /></symbol>
+    <symbol id="icon-sliders" viewBox="0 0 24 24"><path d="M4 7h7m4 0h5M4 17h3m4 0h9M11 4v6M7 14v6" /></symbol>
+    <symbol id="icon-plan" viewBox="0 0 24 24"><path d="M6 3.5h12v17H6zM9 8h6M9 12h6M9 16h3" /></symbol>
+    <symbol id="icon-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7z" /></symbol>
+    <symbol id="icon-activity" viewBox="0 0 24 24"><path d="M3 12h4l2.2-6 4.2 12 2.2-6H21" /></symbol>
+    <symbol id="icon-settings" viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" /><path d="m19 13.5 1.5 1-2 3.5-1.7-.7a7 7 0 0 1-2.3 1.3L14.2 21h-4.4l-.3-2.4a7 7 0 0 1-2.3-1.3l-1.7.7-2-3.5 1.5-1a7 7 0 0 1 0-3l-1.5-1 2-3.5 1.7.7a7 7 0 0 1 2.3-1.3L9.8 3h4.4l.3 2.4a7 7 0 0 1 2.3 1.3l1.7-.7 2 3.5-1.5 1a7 7 0 0 1 0 3z" /></symbol>
+    <symbol id="icon-monitor" viewBox="0 0 24 24"><path d="M3.5 4.5h17v12h-17zM8 20h8M12 16.5V20" /></symbol>
+    <symbol id="icon-language" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" /></symbol>
+    <symbol id="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5" /><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4" /></symbol>
+    <symbol id="icon-moon" viewBox="0 0 24 24"><path d="M19.5 15.5A8 8 0 0 1 8.5 4.5a8 8 0 1 0 11 11z" /></symbol>
+    <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m8 10 4 4 4-4" /></symbol>
+    <symbol id="icon-external" viewBox="0 0 24 24"><path d="M13 5h6v6M19 5l-8 8M18 14v5H5V6h5" /></symbol>
+    <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 20h16" /></symbol>
+    <symbol id="icon-save" viewBox="0 0 24 24"><path d="M5 3.5h12l2 2v15H5zM8 3.5v6h8v-6M8 20.5v-7h8v7" /></symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7" /></symbol>
+    <symbol id="icon-alert" viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4zM12 9v5M12 17.5v.1" /></symbol>
+    <symbol id="icon-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></symbol>
+  </svg>
+
+  <div class="window-frame">
+    <header class="window-titlebar">
+      <div id="window-drag-region" class="window-drag-region pywebview-drag-region" title="Double-click to maximize or restore" data-i18n-title="window.dragHint">
+        <span class="window-app-mark" aria-hidden="true">P</span>
+        <span class="window-app-title">PlexMuxy</span>
       </div>
-      <nav class="steps" aria-label="Workflow">
-        <a class="step active" href="#directory-section">Directory</a>
-        <a class="step" href="#options-section">Options</a>
-        <a class="step" href="#plan-section">Plan</a>
-        <a class="step" href="#run-section">Run</a>
-      </nav>
-      <div class="sidebar-footer">
-        <div class="mini-label">Config</div>
-        <div id="sidebar-config-path" class="mini-path">Loading...</div>
+      <div class="window-controls" aria-label="Window controls" data-i18n-aria-label="window.controls">
+        <button id="window-minimize-btn" class="window-control" type="button" title="Minimize" aria-label="Minimize window" data-i18n-title="window.minimizeShort" data-i18n-aria-label="window.minimize">
+          <span class="window-icon window-icon-minimize" aria-hidden="true"></span>
+        </button>
+        <button id="window-maximize-btn" class="window-control" type="button" title="Maximize" aria-label="Maximize window" aria-pressed="false" data-i18n-title="window.maximizeShort" data-i18n-aria-label="window.maximize">
+          <span class="window-icon window-icon-maximize" aria-hidden="true"></span>
+          <span class="window-icon window-icon-restore" aria-hidden="true"></span>
+        </button>
+        <button id="window-close-btn" class="window-control window-control-close" type="button" title="Close" aria-label="Close window" data-i18n-title="window.closeShort" data-i18n-aria-label="window.close">
+          <span class="window-icon window-icon-close" aria-hidden="true"></span>
+        </button>
       </div>
-    </aside>
+    </header>
 
-    <main class="main">
-      <header class="topbar">
-        <div>
-          <h2>Batch mux media for Plex</h2>
-          <p id="app-version">PlexMuxy</p>
-        </div>
-        <div id="runtime-status" class="status-pill" role="status" aria-live="polite">Initializing</div>
-      </header>
+    <div id="app-shell" class="app-shell">
+      <button id="sidebar-scrim" class="sidebar-scrim" type="button" tabindex="-1" aria-label="Close navigation" data-i18n-aria-label="sidebar.close"></button>
 
-      <div id="alert" class="alert hidden" role="alert"></div>
-
-      <section id="directory-section" class="panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Directory</p>
-            <h3 id="input-dir-label">Input directory</h3>
+      <aside id="sidebar" class="sidebar" aria-label="Mux workflow navigation" data-i18n-aria-label="sidebar.label">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">P</div>
+          <div class="brand-copy">
+            <h1>PlexMuxy</h1>
+            <p data-i18n="sidebar.brandSubtitle">Media operations</p>
           </div>
-          <button id="choose-dir-btn" type="button">Choose folder</button>
         </div>
-        <input id="input-dir" type="text" placeholder="No directory selected" autocomplete="off" aria-labelledby="input-dir-label" />
-      </section>
 
-      <section class="two-column">
-        <div class="panel">
-          <div class="panel-header">
-            <div>
-              <p class="eyebrow">Config</p>
-              <h3>Active settings</h3>
+        <nav class="steps" aria-label="Workflow" data-i18n-aria-label="sidebar.workflow">
+          <p class="nav-label" data-i18n="sidebar.workflow">Workflow</p>
+          <a class="step active" href="#directory-section" aria-current="step" title="Source directory" data-i18n-title="sidebar.source.tooltip">
+            <svg class="icon" aria-hidden="true"><use href="#icon-folder"></use></svg>
+            <span class="step-copy"><strong data-i18n="sidebar.source.title">Source</strong><small data-i18n="sidebar.source.subtitle">Choose media</small></span>
+            <span class="step-index">01</span>
+          </a>
+          <a class="step" href="#options-section" title="Session options" data-i18n-title="sidebar.options.tooltip">
+            <svg class="icon" aria-hidden="true"><use href="#icon-sliders"></use></svg>
+            <span class="step-copy"><strong data-i18n="sidebar.options.title">Options</strong><small data-i18n="sidebar.options.subtitle">Shape the output</small></span>
+            <span class="step-index">02</span>
+          </a>
+          <a class="step" href="#plan-section" title="Review mux plan" data-i18n-title="sidebar.plan.tooltip">
+            <svg class="icon" aria-hidden="true"><use href="#icon-plan"></use></svg>
+            <span class="step-copy"><strong data-i18n="sidebar.plan.title">Plan</strong><small data-i18n="sidebar.plan.subtitle">Review tracks</small></span>
+            <span class="step-index">03</span>
+          </a>
+          <a class="step" href="#run-section" title="Run mux job" data-i18n-title="sidebar.run.tooltip">
+            <svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg>
+            <span class="step-copy"><strong data-i18n="sidebar.run.title">Run</strong><small data-i18n="sidebar.run.subtitle">Monitor results</small></span>
+            <span class="step-index">04</span>
+          </a>
+
+          <p class="nav-label nav-label-tools" data-i18n="sidebar.tools">Tools</p>
+          <a class="step utility-step" href="#environment-section" title="Runtime and configuration" data-i18n-title="sidebar.environment.tooltip">
+            <svg class="icon" aria-hidden="true"><use href="#icon-activity"></use></svg>
+            <span class="step-copy"><strong data-i18n="sidebar.environment.title">Environment</strong><small data-i18n="sidebar.environment.subtitle">Runtime readiness</small></span>
+          </a>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="sidebar-footer-heading">
+            <span class="sidebar-status-dot" aria-hidden="true"></span>
+            <span class="mini-label" data-i18n="sidebar.localConfig">Local configuration</span>
+          </div>
+          <div id="sidebar-config-path" class="mini-path" data-i18n="sidebar.loadingConfig">Loading configuration…</div>
+        </div>
+      </aside>
+
+      <div class="main-column">
+        <header class="topbar">
+          <div class="topbar-leading">
+            <button id="sidebar-toggle" class="icon-button sidebar-toggle" type="button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false" data-i18n-aria-label="sidebar.open">
+              <svg class="icon" aria-hidden="true"><use href="#icon-menu"></use></svg>
+            </button>
+            <div class="topbar-title">
+              <span data-i18n="topbar.workspace">Workspace</span>
+              <strong data-i18n="topbar.newJob">New mux job</strong>
             </div>
-            <div class="button-row">
-              <button id="diagnostics-btn" type="button">Export diagnostics</button>
-              <button id="open-config-btn" type="button">Open location</button>
+          </div>
+
+          <div class="topbar-actions">
+            <div id="runtime-status" class="runtime-status" role="status" aria-live="polite">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span data-i18n="status.initializing">Initializing</span>
             </div>
-          </div>
-          <div id="config-summary" class="summary-list"></div>
-        </div>
 
-        <div class="panel">
-          <div class="panel-header">
-            <div>
-              <p class="eyebrow">Runtime</p>
-              <h3>mkvmerge</h3>
+            <details id="theme-menu" class="theme-menu">
+              <summary class="theme-summary" aria-label="Choose appearance" data-i18n-aria-label="appearance.choose">
+                <svg class="icon" aria-hidden="true"><use href="#icon-monitor"></use></svg>
+                <span id="theme-label">System</span>
+                <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"></use></svg>
+              </summary>
+              <div class="theme-popover" role="group" aria-label="Appearance" data-i18n-aria-label="appearance.group">
+                <div class="popover-heading">
+                  <strong data-i18n="appearance.title">Appearance</strong>
+                  <span id="theme-detail">Following the system theme</span>
+                </div>
+                <button class="theme-option" type="button" data-theme-mode="system" aria-pressed="true">
+                  <svg class="icon" aria-hidden="true"><use href="#icon-monitor"></use></svg>
+                  <span><strong data-i18n="appearance.system">System</strong><small data-i18n="appearance.systemDescription">Follow this device</small></span>
+                  <svg class="icon option-check" aria-hidden="true"><use href="#icon-check"></use></svg>
+                </button>
+                <button class="theme-option" type="button" data-theme-mode="light" aria-pressed="false">
+                  <svg class="icon" aria-hidden="true"><use href="#icon-sun"></use></svg>
+                  <span><strong data-i18n="appearance.light">Light</strong><small data-i18n="appearance.lightDescription">Media archive</small></span>
+                  <svg class="icon option-check" aria-hidden="true"><use href="#icon-check"></use></svg>
+                </button>
+                <button class="theme-option" type="button" data-theme-mode="dark" aria-pressed="false">
+                  <svg class="icon" aria-hidden="true"><use href="#icon-moon"></use></svg>
+                  <span><strong data-i18n="appearance.dark">Dark</strong><small data-i18n="appearance.darkDescription">Home theater</small></span>
+                  <svg class="icon option-check" aria-hidden="true"><use href="#icon-check"></use></svg>
+                </button>
+              </div>
+            </details>
+
+            <details id="language-menu" class="theme-menu language-menu">
+              <summary class="theme-summary" aria-label="Choose language" data-i18n-aria-label="language.choose">
+                <svg class="icon" aria-hidden="true"><use href="#icon-language"></use></svg>
+                <span id="language-label">English</span>
+                <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"></use></svg>
+              </summary>
+              <div class="theme-popover language-popover" role="group" aria-label="Language" data-i18n-aria-label="language.group">
+                <div class="popover-heading">
+                  <strong data-i18n="language.title">Language</strong>
+                  <span id="language-detail">Following the device language</span>
+                </div>
+                <button class="theme-option language-option" type="button" data-locale-mode="system" aria-pressed="true">
+                  <svg class="icon" aria-hidden="true"><use href="#icon-monitor"></use></svg>
+                  <span><strong data-i18n="language.system">System</strong><small data-i18n="language.systemDescription">Use the device language</small></span>
+                  <svg class="icon option-check" aria-hidden="true"><use href="#icon-check"></use></svg>
+                </button>
+                <button class="theme-option language-option" type="button" data-locale-mode="en" aria-pressed="false">
+                  <svg class="icon" aria-hidden="true"><use href="#icon-language"></use></svg>
+                  <span><strong data-i18n="language.english">English</strong><small data-i18n="language.englishDescription">English interface</small></span>
+                  <svg class="icon option-check" aria-hidden="true"><use href="#icon-check"></use></svg>
+                </button>
+                <button class="theme-option language-option" type="button" data-locale-mode="zh-CN" aria-pressed="false">
+                  <svg class="icon" aria-hidden="true"><use href="#icon-language"></use></svg>
+                  <span><strong data-i18n="language.chinese">简体中文</strong><small data-i18n="language.chineseDescription">Simplified Chinese interface</small></span>
+                  <svg class="icon option-check" aria-hidden="true"><use href="#icon-check"></use></svg>
+                </button>
+              </div>
+            </details>
+
+            <span id="app-version" class="app-version">PlexMuxy</span>
+          </div>
+        </header>
+
+        <main id="main-content" class="main" tabindex="-1">
+          <div class="content">
+            <header class="page-intro">
+              <p class="breadcrumb"><span data-i18n="page.breadcrumb">Media workflow</span> <span aria-hidden="true">/</span> <span data-i18n="topbar.newJob">New job</span></p>
+              <div class="page-intro-row">
+                <div>
+                  <h2 data-i18n="page.title">Prepare a mux job</h2>
+                  <p data-i18n="page.description">Choose a media folder, tune this session, then inspect the exact track plan before any files change.</p>
+                </div>
+                <span class="local-only-note"><span class="local-only-dot" aria-hidden="true"></span><span data-i18n="page.localOnly">Runs locally</span></span>
+              </div>
+            </header>
+
+            <div id="loading" class="activity-banner hidden" aria-live="polite" aria-busy="true">
+              <div class="activity-copy">
+                <svg class="icon" aria-hidden="true"><use href="#icon-activity"></use></svg>
+                <div><strong data-i18n="activity.title">Working on your request</strong><span id="loading-text" data-i18n="loading.initializing">Initializing…</span></div>
+              </div>
+              <div class="activity-progress" aria-hidden="true"><span></span></div>
             </div>
-          </div>
-          <div id="mkvmerge-summary" class="summary-list"></div>
-        </div>
-      </section>
 
-      <section id="options-section" class="panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Options</p>
-            <h3>Session overrides</h3>
-          </div>
-          <button id="save-settings-btn" type="button">Save settings</button>
-        </div>
-        <div class="options-grid">
-          <label>
-            Cleanup
-            <select id="cleanup">
-              <option value="none">none</option>
-              <option value="move">move</option>
-              <option value="delete">delete</option>
-            </select>
-          </label>
-          <label>
-            Extra directory
-            <input id="extra-dir" type="text" autocomplete="off" />
-          </label>
-          <label>
-            Output suffix
-            <input id="output-suffix" type="text" autocomplete="off" />
-          </label>
-          <label>
-            Output directory
-            <input id="output-dir" type="text" autocomplete="off" />
-          </label>
-          <label>
-            Name strategy
-            <select id="name-strategy">
-              <option value="suffix">suffix</option>
-              <option value="same-name">same-name</option>
-              <option value="template">template</option>
-            </select>
-          </label>
-          <label>
-            Name template
-            <input id="name-template" type="text" placeholder="{stem}.plex.mkv" autocomplete="off" />
-          </label>
-          <label class="toggle-row">
-            <input id="overwrite" type="checkbox" />
-            <span>Overwrite existing outputs</span>
-          </label>
-        </div>
-      </section>
+            <div id="alert" class="alert hidden" role="alert" tabindex="-1">
+              <svg class="icon alert-icon" aria-hidden="true"><use href="#icon-alert"></use></svg>
+              <div class="alert-copy"><strong data-i18n="alert.title">Action needed</strong><span id="alert-message"></span></div>
+              <button id="alert-close-btn" class="icon-button alert-close" type="button" aria-label="Dismiss error" data-i18n-aria-label="alert.dismiss">
+                <svg class="icon" aria-hidden="true"><use href="#icon-x"></use></svg>
+              </button>
+            </div>
 
-      <section id="plan-section" class="panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Plan</p>
-            <h3>Preview</h3>
-          </div>
-          <button id="plan-btn" type="button" class="primary">Generate plan</button>
-        </div>
-        <div id="plan-summary" class="count-row"></div>
-        <div id="plans" class="stack empty-state">No plan generated.</div>
-      </section>
+            <section id="directory-section" class="panel panel-source" aria-labelledby="input-dir-label">
+              <div class="panel-header">
+                <div class="section-heading">
+                  <span class="section-number" aria-hidden="true">01</span>
+                  <div>
+                    <p class="eyebrow" data-i18n="source.eyebrow">Source</p>
+                    <h3 id="input-dir-label" data-i18n="source.title">Select the media directory</h3>
+                    <p class="section-description" data-i18n="source.description">PlexMuxy scans this folder for video, audio, subtitle, and font candidates.</p>
+                  </div>
+                </div>
+                <button id="choose-dir-btn" class="primary" type="button">
+                  <svg class="icon" aria-hidden="true"><use href="#icon-folder"></use></svg>
+                  <span data-i18n="source.choose">Choose folder</span>
+                </button>
+              </div>
+              <label class="path-field" for="input-dir">
+                <svg class="icon" aria-hidden="true"><use href="#icon-folder"></use></svg>
+                <input id="input-dir" type="text" placeholder="No directory selected" autocomplete="off" data-i18n-placeholder="source.placeholder" />
+              </label>
+              <p class="field-help" data-i18n="source.help">You can also paste an absolute path. Changing the source clears the current plan.</p>
+            </section>
 
-      <section id="run-section" class="panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Run</p>
-            <h3>Results</h3>
-          </div>
-          <div class="button-row">
-            <button id="cancel-btn" type="button" class="danger-soft hidden" disabled>Cancel job</button>
-            <button id="run-btn" type="button" class="danger-soft" disabled>Run mux</button>
-          </div>
-        </div>
-        <div id="job-progress" class="summary-list" role="status" aria-live="polite"></div>
-        <div id="result-summary" class="count-row"></div>
-        <div id="results" class="stack empty-state">No mux run yet.</div>
-      </section>
-    </main>
-  </div>
+            <section id="environment-section" class="panel" aria-labelledby="environment-title">
+              <div class="panel-header">
+                <div class="section-heading">
+                  <span class="section-number" aria-hidden="true">●</span>
+                  <div>
+                    <p class="eyebrow" data-i18n="environment.eyebrow">Environment</p>
+                    <h3 id="environment-title" data-i18n="environment.title">Runtime readiness</h3>
+                    <p class="section-description" data-i18n="environment.description">Review the active configuration and confirm that mkvmerge is available.</p>
+                  </div>
+                </div>
+                <div class="button-row">
+                  <button id="diagnostics-btn" class="secondary" type="button">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-download"></use></svg>
+                    <span data-i18n="environment.export">Export diagnostics</span>
+                  </button>
+                  <button id="open-config-btn" class="ghost" type="button">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-external"></use></svg>
+                    <span data-i18n="environment.open">Open location</span>
+                  </button>
+                </div>
+              </div>
+              <div class="environment-grid">
+                <article class="environment-group" aria-labelledby="config-summary-title">
+                  <div class="group-heading"><h4 id="config-summary-title" data-i18n="environment.configTitle">Active configuration</h4><span>Config</span></div>
+                  <div id="config-summary" class="summary-list"></div>
+                </article>
+                <article class="environment-group" aria-labelledby="mkvmerge-summary-title">
+                  <div class="group-heading"><h4 id="mkvmerge-summary-title" data-i18n="environment.engineTitle">Mux engine</h4><span>mkvmerge</span></div>
+                  <div id="mkvmerge-summary" class="summary-list"></div>
+                </article>
+              </div>
+            </section>
 
-  <div id="loading" class="loading hidden" aria-live="polite">
-    <div class="loading-panel">
-      <div class="spinner"></div>
-      <div id="loading-text">Working...</div>
+            <section id="options-section" class="panel" aria-labelledby="options-title">
+              <div class="panel-header">
+                <div class="section-heading">
+                  <span class="section-number" aria-hidden="true">02</span>
+                  <div>
+                    <p class="eyebrow" data-i18n="options.eyebrow">Session options</p>
+                    <h3 id="options-title" data-i18n="options.title">Shape the output</h3>
+                    <p class="section-description" data-i18n="options.description">These values apply to the next plan and can be saved as your local defaults.</p>
+                  </div>
+                </div>
+                <button id="save-settings-btn" class="secondary" type="button" disabled>
+                  <svg class="icon" aria-hidden="true"><use href="#icon-save"></use></svg>
+                  <span data-i18n="options.save">Save settings</span>
+                </button>
+              </div>
+
+              <div class="settings-list">
+                <div class="setting-row">
+                  <label class="setting-copy" for="cleanup"><strong data-i18n="options.cleanup.label">Cleanup policy</strong><span data-i18n="options.cleanup.help">Keep sources, move them after success, or delete confirmed inputs.</span></label>
+                  <div class="control-wrap"><select id="cleanup"><option value="none" data-i18n="options.cleanup.none">Keep source files</option><option value="move" data-i18n="options.cleanup.move">Move after mux</option><option value="delete" data-i18n="options.cleanup.delete">Delete after mux</option></select></div>
+                </div>
+                <div class="setting-row">
+                  <label class="setting-copy" for="extra-dir"><strong data-i18n="options.extraDir.label">Extra media directory</strong><span data-i18n="options.extraDir.help">Search a second folder for companion tracks and attachments.</span></label>
+                  <input id="extra-dir" type="text" placeholder="Optional absolute path" autocomplete="off" data-i18n-placeholder="options.extraDir.placeholder" />
+                </div>
+                <div class="setting-row">
+                  <label class="setting-copy" for="output-dir"><strong data-i18n="options.outputDir.label">Output directory</strong><span data-i18n="options.outputDir.help">Leave empty to write the muxed file beside its source video.</span></label>
+                  <input id="output-dir" type="text" placeholder="Use the source folder" autocomplete="off" data-i18n-placeholder="options.outputDir.placeholder" />
+                </div>
+                <div class="setting-row">
+                  <label class="setting-copy" for="output-suffix"><strong data-i18n="options.outputSuffix.label">Output suffix</strong><span data-i18n="options.outputSuffix.help">Added before the file extension when the suffix strategy is active.</span></label>
+                  <input id="output-suffix" type="text" placeholder=".plex" autocomplete="off" />
+                </div>
+                <div class="setting-row">
+                  <label class="setting-copy" for="name-strategy"><strong data-i18n="options.nameStrategy.label">Naming strategy</strong><span data-i18n="options.nameStrategy.help">Choose how PlexMuxy derives the final file name.</span></label>
+                  <div class="control-wrap"><select id="name-strategy"><option value="suffix" data-i18n="options.nameStrategy.suffix">Append suffix</option><option value="same-name" data-i18n="options.nameStrategy.same-name">Keep source name</option><option value="template" data-i18n="options.nameStrategy.template">Use template</option></select></div>
+                </div>
+                <div class="setting-row">
+                  <label class="setting-copy" for="name-template"><strong data-i18n="options.nameTemplate.label">Name template</strong><span data-i18n="options.nameTemplate.help">Available when the template strategy is selected.</span></label>
+                  <input id="name-template" type="text" placeholder="{stem}.plex.mkv" autocomplete="off" />
+                </div>
+                <label class="setting-row setting-row-toggle" for="overwrite">
+                  <span class="setting-copy"><strong data-i18n="options.overwrite.label">Overwrite existing outputs</strong><span data-i18n="options.overwrite.help">Requires confirmation before the job starts and can replace existing files.</span></span>
+                  <span class="toggle-row">
+                    <input id="overwrite" class="visually-hidden" type="checkbox" />
+                    <span class="toggle-control" aria-hidden="true"></span>
+                    <span class="toggle-label" data-i18n="options.overwrite.allow">Allow overwrite</span>
+                  </span>
+                </label>
+              </div>
+            </section>
+
+            <section id="plan-section" class="panel workflow-panel" aria-labelledby="plan-title">
+              <div class="panel-header">
+                <div class="section-heading">
+                  <span class="section-number" aria-hidden="true">03</span>
+                  <div>
+                    <p class="eyebrow" data-i18n="plan.eyebrow">Review</p>
+                    <h3 id="plan-title" data-i18n="plan.title">Inspect the mux plan</h3>
+                    <p class="section-description" data-i18n="plan.description">Nothing is written until you review the matched tracks and start the job.</p>
+                  </div>
+                </div>
+                <button id="plan-btn" class="primary" type="button">
+                  <svg class="icon" aria-hidden="true"><use href="#icon-plan"></use></svg>
+                  <span data-i18n="plan.generate">Generate plan</span>
+                </button>
+              </div>
+              <div id="plan-summary" class="count-row" aria-label="Plan summary" data-i18n-aria-label="plan.summary"></div>
+              <div id="plans" class="stack empty-state">
+                <span class="empty-icon" aria-hidden="true">03</span>
+                <h4 data-i18n="plan.empty.title">No plan yet</h4>
+                <p data-i18n="plan.empty.detail">Choose a source directory and generate a plan to review matched tracks.</p>
+              </div>
+            </section>
+
+            <section id="run-section" class="panel workflow-panel" aria-labelledby="run-title">
+              <div class="panel-header">
+                <div class="section-heading">
+                  <span class="section-number" aria-hidden="true">04</span>
+                  <div>
+                    <p class="eyebrow" data-i18n="run.eyebrow">Execute</p>
+                    <h3 id="run-title" data-i18n="run.title">Run and verify</h3>
+                    <p class="section-description" data-i18n="run.description">Monitor progress, verification, warnings, and cleanup results in one place.</p>
+                  </div>
+                </div>
+                <div class="button-row">
+                  <button id="cancel-btn" class="destructive hidden" type="button" disabled data-i18n="run.cancel">Cancel job</button>
+                  <button id="run-btn" class="primary" type="button" disabled>
+                    <svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg>
+                    <span data-i18n="run.start">Run mux</span>
+                  </button>
+                </div>
+              </div>
+              <div id="job-progress" class="job-progress" role="status" aria-live="polite"></div>
+              <div id="result-summary" class="count-row" aria-label="Result summary" data-i18n-aria-label="run.summary"></div>
+              <div id="results" class="stack empty-state">
+                <span class="empty-icon" aria-hidden="true">04</span>
+                <h4 data-i18n="run.empty.title">No run yet</h4>
+                <p data-i18n="run.empty.detail">Generate and review a plan before starting the mux job.</p>
+              </div>
+            </section>
+
+            <footer class="workspace-footer">
+              <span data-i18n="footer.local">PlexMuxy processes media on this device.</span>
+              <span data-i18n="footer.review">Review destructive options before every run.</span>
+            </footer>
+          </div>
+        </main>
+      </div>
     </div>
   </div>
 
+  <dialog id="confirm-dialog" class="confirm-dialog" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-body">
+    <form method="dialog">
+      <div class="dialog-mark" aria-hidden="true"><svg class="icon"><use href="#icon-alert"></use></svg></div>
+      <div class="dialog-copy">
+        <p class="eyebrow" data-i18n="confirm.eyebrow">Review required</p>
+        <h2 id="confirm-dialog-title" data-i18n="confirm.title">Start this mux job?</h2>
+        <p id="confirm-dialog-body"></p>
+      </div>
+      <div class="dialog-actions">
+        <button class="secondary" type="submit" value="cancel" data-i18n="confirm.back">Go back</button>
+        <button class="primary" type="submit" value="confirm" data-i18n="confirm.run">Run mux</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="./i18n.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
