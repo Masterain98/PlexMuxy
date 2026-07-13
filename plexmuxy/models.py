@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
 CleanupMode = Literal["none", "move", "delete"]
@@ -11,6 +11,19 @@ FailedOutputAction = Literal["keep", "delete", "rename"]
 AmbiguousAction = Literal["skip"]
 FontMode = Literal["all", "referenced", "subset"]
 MissingFontAction = Literal["warn", "skip-video", "fail-job", "fallback-all"]
+SubsetFailureAction = Literal["fallback-full", "skip-video", "fail-job"]
+FontOutlineType = Literal["truetype", "cff", "cff2", "unknown"]
+PLAN_SCHEMA_VERSION = 2
+
+
+def _is_sha256(value: object) -> bool:
+    if not isinstance(value, str) or len(value) != 64:
+        return False
+    try:
+        int(value, 16)
+    except ValueError:
+        return False
+    return True
 
 
 @dataclass(frozen=True)
@@ -26,7 +39,7 @@ class MediaConfig:
     video_extensions: list[str] = field(default_factory=lambda: [".mkv", ".mp4", ".avi", ".flv"])
     audio_extensions: list[str] = field(default_factory=lambda: [".mka"])
     subtitle_extensions: list[str] = field(default_factory=lambda: [".ass", ".ssa"])
-    font_extensions: list[str] = field(default_factory=lambda: [".ttf", ".otf", ".ttc"])
+    font_extensions: list[str] = field(default_factory=lambda: [".ttf", ".otf", ".ttc", ".otc"])
     font_archive_extensions: list[str] = field(default_factory=lambda: [".zip", ".7z", ".rar"])
     recursive: bool = False
     include_hidden: bool = False
@@ -80,12 +93,23 @@ class FontConfig:
     unrar_path: str = ""
     mode: FontMode = "all"
     missing_font_action: MissingFontAction = "warn"
+    subset_failure_action: SubsetFailureAction = "fallback-full"
     archive_limits: ArchiveLimits = field(default_factory=ArchiveLimits)
 
 
 @dataclass
 class MkvMergeConfig:
     path: str = ""
+
+
+@dataclass
+class FfmpegConfig:
+    path: str = ""
+
+
+@dataclass
+class NotificationConfig:
+    enabled: bool = False
 
 
 @dataclass
@@ -107,13 +131,15 @@ class TrackFilterConfig:
 
 @dataclass
 class AppConfig:
-    config_version: int = 2
+    config_version: int = 3
     media: MediaConfig = field(default_factory=MediaConfig)
     task: TaskConfig = field(default_factory=TaskConfig)
     matching: MatchingConfig = field(default_factory=MatchingConfig)
     subtitle: SubtitleConfig = field(default_factory=SubtitleConfig)
     font: FontConfig = field(default_factory=FontConfig)
     mkvmerge: MkvMergeConfig = field(default_factory=MkvMergeConfig)
+    ffmpeg: FfmpegConfig = field(default_factory=FfmpegConfig)
+    notifications: NotificationConfig = field(default_factory=NotificationConfig)
     concurrency: ConcurrencyConfig = field(default_factory=ConcurrencyConfig)
     tracks: TrackFilterConfig = field(default_factory=TrackFilterConfig)
     source_path: Path | None = None
@@ -157,6 +183,134 @@ class AudioTrackPlan:
 @dataclass(frozen=True)
 class AttachmentPlan:
     path: Path
+    expected_name: str | None = None
+    expected_mime_type: str | None = None
+
+    @property
+    def name(self) -> str:
+        return self.expected_name or self.path.name
+
+
+@dataclass(frozen=True)
+class FontFaceRef:
+    """Stable reference to one face in a direct font file or archive member.
+
+    ``source_digest`` identifies the font payload itself. Archive-backed faces
+    additionally carry the archive digest so execution can reject a replaced
+    archive before materializing ``archive_member``.
+    """
+
+    source_path: Path | None
+    face_index: int
+    source_digest: str
+    family_names: tuple[str, ...]
+    typographic_family_names: tuple[str, ...]
+    subfamily_names: tuple[str, ...]
+    full_names: tuple[str, ...]
+    postscript_names: tuple[str, ...]
+    weight: int
+    width: int
+    italic: bool
+    unicode_codepoints: tuple[int, ...]
+    archive_path: Path | None = None
+    archive_member: str | None = None
+    archive_digest: str | None = None
+    outline_type: FontOutlineType = "unknown"
+    is_variable: bool = False
+    has_color: bool = False
+    has_bitmap: bool = False
+    has_vertical_metrics: bool = False
+    table_tags: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        direct = self.source_path is not None
+        archived = any(value is not None for value in (
+            self.archive_path, self.archive_member, self.archive_digest,
+        ))
+        if direct == archived:
+            raise ValueError("FontFaceRef must use exactly one direct or archive source")
+        if archived and (self.archive_path is None or not self.archive_member):
+            raise ValueError("Archive-backed FontFaceRef requires archive_path and archive_member")
+        if archived and not self.archive_digest:
+            raise ValueError("Archive-backed FontFaceRef requires archive_digest")
+        if not _is_sha256(self.source_digest):
+            raise ValueError("FontFaceRef source_digest must be a SHA-256 hex digest")
+        if self.archive_digest is not None and not _is_sha256(self.archive_digest):
+            raise ValueError("FontFaceRef archive_digest must be a SHA-256 hex digest")
+        if self.archive_member is not None:
+            member = PurePosixPath(self.archive_member.replace("\\", "/"))
+            if member.is_absolute() or any(part in {"", ".", ".."} for part in member.parts):
+                raise ValueError("FontFaceRef archive_member must be a safe relative path")
+        if self.face_index < 0:
+            raise ValueError("Font face_index cannot be negative")
+        if any(
+            isinstance(codepoint, bool)
+            or not isinstance(codepoint, int)
+            or not 0 <= codepoint <= 0x10FFFF
+            for codepoint in self.unicode_codepoints
+        ):
+            raise ValueError("FontFaceRef unicode_codepoints must be sorted unique Unicode values")
+        normalized_codepoints = tuple(sorted(set(self.unicode_codepoints)))
+        if normalized_codepoints != self.unicode_codepoints:
+            raise ValueError("FontFaceRef unicode_codepoints must be sorted unique Unicode values")
+
+    @property
+    def is_archive_backed(self) -> bool:
+        return self.archive_path is not None
+
+    @property
+    def stable_source_path(self) -> Path:
+        source = self.archive_path if self.is_archive_backed else self.source_path
+        if source is None:  # Guard for type checkers; __post_init__ rejects it.
+            raise ValueError("Font face has no stable source path")
+        return source
+
+
+@dataclass(frozen=True)
+class FontUsage:
+    requested_family: str
+    normalized_family: str
+    weight: int
+    italic: bool
+    codepoints: tuple[int, ...]
+    subtitle_paths: tuple[Path, ...]
+
+
+@dataclass(frozen=True)
+class FontSubsetIssue:
+    code: str
+    message: str
+    requested_family: str | None = None
+    subtitle_path: Path | None = None
+    codepoints: tuple[int, ...] = ()
+    fatal: bool = True
+
+
+@dataclass(frozen=True)
+class FontSubsetSummary:
+    subtitle_count: int = 0
+    requested_family_count: int = 0
+    matched_face_count: int = 0
+    expected_attachment_count: int = 0
+    fallback_family_count: int = 0
+
+
+@dataclass(frozen=True)
+class FontSubsetGroupIntent:
+    requested_names: tuple[str, ...]
+    alias_family: str
+    faces: tuple[FontFaceRef, ...]
+    codepoint_ranges: tuple[tuple[int, int], ...]
+
+
+@dataclass(frozen=True)
+class FontSubsetIntent:
+    analyzer_version: int
+    subset_profile_version: int
+    groups: tuple[FontSubsetGroupIntent, ...]
+    subtitle_digests: tuple[tuple[Path, str], ...]
+    issues: tuple[FontSubsetIssue, ...] = ()
+    summary: FontSubsetSummary = field(default_factory=FontSubsetSummary)
 
 
 @dataclass(frozen=True)
@@ -220,6 +374,24 @@ class MuxPlan:
     cleanup_candidates: list[Path] = field(default_factory=list)
     skipped_files: list[SkippedFile] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    font_subset_intent: FontSubsetIntent | None = None
+
+
+@dataclass
+class PreparedMuxPlan:
+    original_plan: MuxPlan
+    subtitle_tracks: list[SubtitleTrackPlan]
+    attachments: list[AttachmentPlan]
+    generated_files: list[Path] = field(default_factory=list)
+    subset_warnings: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_original(cls, plan: MuxPlan) -> PreparedMuxPlan:
+        return cls(
+            original_plan=plan,
+            subtitle_tracks=list(plan.subtitle_tracks),
+            attachments=list(plan.attachments),
+        )
 
 
 @dataclass
@@ -233,6 +405,7 @@ class FileSnapshot:
     path: Path
     size: int
     modified_time_ns: int
+    sha256: str | None = None
 
 
 @dataclass
@@ -245,6 +418,7 @@ class MuxPlanSnapshot:
     plans: list[MuxPlan]
     files: list[FileSnapshot]
     outputs_existing: list[Path] = field(default_factory=list)
+    schema_version: int = PLAN_SCHEMA_VERSION
 
     @classmethod
     def timestamp(cls) -> str:
@@ -288,6 +462,9 @@ class ProgressEvent:
     succeeded: int = 0
     failed: int = 0
     current_file: str | None = None
+    total_families: int = 0
+    completed_families: int = 0
+    current_family: str | None = None
 
 
 @dataclass

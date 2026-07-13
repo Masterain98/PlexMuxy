@@ -2,7 +2,16 @@ from pathlib import Path
 
 import pytest
 
-from plexmuxy.config import ConfigError, cleanup_mode, extension_list, name_strategy, parse_config, parse_v2_config
+from plexmuxy.config import (
+    ConfigError,
+    cleanup_mode,
+    config_to_dict,
+    default_config,
+    extension_list,
+    name_strategy,
+    parse_config,
+    parse_v2_config,
+)
 
 
 def test_legacy_config_is_migrated_in_memory():
@@ -86,3 +95,45 @@ def test_config_validation_helpers_reject_invalid_values():
 
 def test_extension_list_normalizes_extensions():
     assert extension_list(["MKV", ".mka", "Mp3"], "media.extensions") == [".mkv", ".mka", ".mp3"]
+
+
+def test_default_config_v3_contains_environment_and_subset_contracts():
+    config = default_config()
+
+    assert config.config_version == 3
+    assert config.media.font_extensions == [".ttf", ".otf", ".ttc", ".otc"]
+    assert config.font.subset_failure_action == "fallback-full"
+    assert config.ffmpeg.path == ""
+    assert config.notifications.enabled is False
+    assert set(config_to_dict(config)) >= {"ffmpeg", "notifications"}
+
+
+def test_v2_config_without_v3_sections_migrates_in_memory():
+    config = parse_config({
+        "config_version": 2,
+        "mkvmerge": {"path": "C:/tools/mkvmerge.exe"},
+        "font": {"mode": "subset"},
+    })
+
+    assert config.config_version == 3
+    assert config.mkvmerge.path == "C:/tools/mkvmerge.exe"
+    assert config.ffmpeg.path == ""
+    assert config.notifications.enabled is False
+    assert config.font.subset_failure_action == "fallback-full"
+
+
+def test_v3_environment_and_subset_fields_are_validated_strictly():
+    config = parse_config({
+        "config_version": 3,
+        "ffmpeg": {"path": "C:/tools/ffmpeg.exe"},
+        "notifications": {"enabled": True},
+        "font": {"subset_failure_action": "skip-video"},
+    })
+    assert config.ffmpeg.path == "C:/tools/ffmpeg.exe"
+    assert config.notifications.enabled is True
+    assert config.font.subset_failure_action == "skip-video"
+
+    with pytest.raises(ConfigError, match="Unknown notifications"):
+        parse_config({"notifications": {"surprise": True}})
+    with pytest.raises(ConfigError, match=r"font\.subset_failure_action"):
+        parse_config({"font": {"subset_failure_action": "continue-anyway"}})

@@ -16,20 +16,22 @@ from .models import (
     AppConfig,
     ArchiveLimits,
     ConcurrencyConfig,
+    FfmpegConfig,
     FontConfig,
     LanguageProfile,
     MatchingConfig,
     MediaConfig,
     MkvMergeConfig,
+    NotificationConfig,
     SubtitleConfig,
     TaskConfig,
     TrackFilterConfig,
 )
 
-CURRENT_CONFIG_VERSION = 2
+CURRENT_CONFIG_VERSION = 3
 ROOT_FIELDS = {
     "config_version", "media", "task", "matching", "subtitle", "font",
-    "mkvmerge", "concurrency", "tracks",
+    "mkvmerge", "ffmpeg", "notifications", "concurrency", "tracks",
 }
 
 LANGUAGE_PROFILES = [
@@ -184,6 +186,8 @@ def parse_v2_config(data: dict[str, Any]) -> AppConfig:
     font_data = require_mapping(data, "font", default={})
     limit_data = require_mapping(font_data, "archive_limits", default={})
     mkvmerge_data = require_mapping(data, "mkvmerge", default={})
+    ffmpeg_data = require_mapping(data, "ffmpeg", default={})
+    notifications_data = require_mapping(data, "notifications", default={})
     concurrency_data = require_mapping(data, "concurrency", default={})
     tracks_data = require_mapping(data, "tracks", default={})
     reject_unknown(media_data, {
@@ -200,13 +204,16 @@ def parse_v2_config(data: dict[str, Any]) -> AppConfig:
     }, "matching")
     reject_unknown(subtitle_data, {"default_language", "show_author_in_track_name", "profiles"}, "subtitle")
     reject_unknown(font_data, {
-        "delete_fonts_after_mux", "unrar_path", "mode", "missing_font_action", "archive_limits",
+        "delete_fonts_after_mux", "unrar_path", "mode", "missing_font_action",
+        "subset_failure_action", "archive_limits",
     }, "font")
     reject_unknown(limit_data, {
         "max_archive_size", "max_files", "max_total_size", "max_file_size", "max_depth",
         "allow_uninspected_archives",
     }, "font.archive_limits")
     reject_unknown(mkvmerge_data, {"path"}, "mkvmerge")
+    reject_unknown(ffmpeg_data, {"path"}, "ffmpeg")
+    reject_unknown(notifications_data, {"enabled"}, "notifications")
     reject_unknown(concurrency_data, {"max_parallel_mux_jobs", "thread_count"}, "concurrency")
     reject_unknown(tracks_data, {
         "exclude_audio_title_patterns", "keep_audio_languages", "keep_all_when_unknown",
@@ -216,7 +223,7 @@ def parse_v2_config(data: dict[str, Any]) -> AppConfig:
         video_extensions=extension_list(media_data.get("video_extensions", [".mkv", ".mp4", ".avi", ".flv"]), "media.video_extensions"),
         audio_extensions=extension_list(media_data.get("audio_extensions", [".mka"]), "media.audio_extensions"),
         subtitle_extensions=extension_list(media_data.get("subtitle_extensions", [".ass", ".ssa"]), "media.subtitle_extensions"),
-        font_extensions=extension_list(media_data.get("font_extensions", [".ttf", ".otf", ".ttc"]), "media.font_extensions"),
+        font_extensions=extension_list(media_data.get("font_extensions", [".ttf", ".otf", ".ttc", ".otc"]), "media.font_extensions"),
         font_archive_extensions=extension_list(media_data.get("font_archive_extensions", [".zip", ".7z", ".rar"]), "media.font_archive_extensions"),
         recursive=bool_value(media_data.get("recursive", False), "media.recursive"),
         include_hidden=bool_value(media_data.get("include_hidden", False), "media.include_hidden"),
@@ -268,6 +275,11 @@ def parse_v2_config(data: dict[str, Any]) -> AppConfig:
         unrar_path=str(font_data.get("unrar_path", "")),
         mode=choice(font_data.get("mode", "all"), {"all", "referenced", "subset"}, "font.mode"),
         missing_font_action=choice(font_data.get("missing_font_action", "warn"), {"warn", "skip-video", "fail-job", "fallback-all"}, "font.missing_font_action"),
+        subset_failure_action=choice(
+            font_data.get("subset_failure_action", "fallback-full"),
+            {"fallback-full", "skip-video", "fail-job"},
+            "font.subset_failure_action",
+        ),
         archive_limits=limits,
     )
     using_legacy_thread_count = "max_parallel_mux_jobs" not in concurrency_data and "thread_count" in concurrency_data
@@ -284,6 +296,10 @@ def parse_v2_config(data: dict[str, Any]) -> AppConfig:
     return AppConfig(
         config_version=CURRENT_CONFIG_VERSION, media=media, task=task, matching=matching,
         subtitle=subtitle, font=font, mkvmerge=MkvMergeConfig(path=str(mkvmerge_data.get("path", ""))),
+        ffmpeg=FfmpegConfig(path=str(ffmpeg_data.get("path", ""))),
+        notifications=NotificationConfig(
+            enabled=bool_value(notifications_data.get("enabled", False), "notifications.enabled")
+        ),
         concurrency=concurrency, tracks=tracks,
     )
 
@@ -306,7 +322,7 @@ def parse_legacy_config(data: dict[str, Any]) -> AppConfig:
     if legacy_threads == "auto":
         legacy_threads = 1
     return AppConfig(
-        media=MediaConfig(font_extensions=extension_list(font_data.get("AllowedExtensions", [".ttf", ".otf", ".ttc"]), "Font.AllowedExtensions")),
+        media=MediaConfig(font_extensions=extension_list(font_data.get("AllowedExtensions", [".ttf", ".otf", ".ttc", ".otc"]), "Font.AllowedExtensions")),
         task=TaskConfig(
             output_suffix=str(task_data.get("OutputSuffixName", "_Plex") or "_Plex"), cleanup="move", extra_dir="Extra",
             delete_original_video=bool_value(task_data.get("DeleteOriginalMKV", False), "TaskSettings.DeleteOriginalMKV"),

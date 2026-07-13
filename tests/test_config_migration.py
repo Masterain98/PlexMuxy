@@ -51,4 +51,7 @@ def test_migrate_config_creates_backup(tmp_path):
     target, backup = migrate_config(path)
     assert target == path
     assert backup is not None and backup.exists()
-    assert json.loads(path.read_text(encoding="utf-8"))["config_version"] == 2
+    migrated = json.loads(path.read_text(encoding="utf-8"))
+    assert migrated["config_version"] == 3
+    assert migrated["ffmpeg"] == {"path": ""}
+    assert migrated["notifications"] == {"enabled": False}
