@@ -1017,6 +1017,14 @@ p {
   background: var(--color-brand-pressed);
 }
 
+.primary:disabled,
+.primary:disabled:hover {
+  color: var(--color-on-brand);
+  background: var(--color-brand);
+  border-color: var(--color-brand);
+  opacity: 0.6;
+}
+
 .secondary {
   background: var(--color-control);
 }
