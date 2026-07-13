@@ -9,8 +9,10 @@ from pathlib import Path
 from .cleanup import cleanup_successful_results
 from .errors import StalePlanError
 from .font import prepare_fonts
-from .models import AppConfig, JobReport, MuxPlanSnapshot, ProgressEvent
-from .muxer import execute_mux_plan, inspect_source_tracks, resolve_mkvmerge_path
+from .font_catalog import build_font_catalog
+from .font_prepare import FontPreparationError, SubsetWorkspace, prepare_subset_plan
+from .models import AppConfig, JobReport, MuxPlanSnapshot, MuxResult, PreparedMuxPlan, ProgressEvent
+from .muxer import execute_mux_plan, execute_prepared_mux_plan, inspect_source_tracks, resolve_mkvmerge_path
 from .planner import build_mux_plans
 from .scanner import scan_media_dir
 from .snapshot import create_plan_snapshot, validate_plan_snapshot
@@ -18,7 +20,11 @@ from .snapshot import create_plan_snapshot, validate_plan_snapshot
 ProgressCallback = Callable[[ProgressEvent], None]
 
 
-def build_job_plan(input_dir: Path, config: AppConfig) -> JobReport:
+def build_job_plan(
+    input_dir: Path,
+    config: AppConfig,
+    progress_callback: ProgressCallback | None = None,
+) -> JobReport:
     input_dir = input_dir.expanduser().resolve()
     logging.info("Planning input directory: %s", input_dir)
     exclusions: list[Path] = []
@@ -32,20 +38,40 @@ def build_job_plan(input_dir: Path, config: AppConfig) -> JobReport:
         if output_path.resolve() != input_dir:
             exclusions.append(output_path)
     scan = scan_media_dir(input_dir, config.media, excluded_dirs=exclusions)
+    emit(progress_callback, ProgressEvent("preparing_fonts"))
     fonts = prepare_fonts(input_dir, config.media, config.font, extract_archives=False, preview_archives=True)
-    plan_result = build_mux_plans(scan, config, fonts)
+    catalog = build_font_catalog(
+        fonts.fonts,
+        archives=scan.font_archives,
+        media_config=config.media,
+        font_config=config.font,
+    )
+    plan_result = build_mux_plans(
+        scan,
+        config,
+        fonts,
+        catalog,
+        lambda phase: emit(progress_callback, ProgressEvent(phase)),
+    )
     mkvmerge = resolve_mkvmerge_path(config)
     if mkvmerge:
         for plan in plan_result.plans:
             plan.source_tracks = inspect_source_tracks(plan.source_video, mkvmerge)
     snapshot = create_plan_snapshot(input_dir, plan_result.plans, config, extra_inputs=scan.font_archives)
-    warnings = [*scan.warnings, *fonts.warnings, *fonts.errors, *fonts.conflicts]
+    warnings = [
+        *scan.warnings,
+        *fonts.warnings,
+        *fonts.errors,
+        *fonts.conflicts,
+        *catalog.warnings,
+        *catalog.errors,
+    ]
     report = JobReport(
         input_dir=input_dir, plans=plan_result.plans, skipped_files=plan_result.skipped_files,
         snapshot=snapshot, warnings=warnings,
     )
     if config.font.missing_font_action == "fail-job" and any(
-        item.reason == "missing_referenced_font" for item in plan_result.skipped_files
+        item.stage == "font" for item in plan_result.skipped_files
     ):
         report.error_code = "MISSING_REFERENCED_FONT"
         report.error = "A referenced font is missing and font.missing_font_action is fail-job"
@@ -69,6 +95,7 @@ def execute_plan_snapshot(
         report.error_code = "DELETE_CONFIRMATION_REQUIRED"
         report.error = "Delete cleanup requires explicit confirmation"
         return report
+    emit(progress_callback, ProgressEvent("validating_snapshot", total=len(snapshot.plans)))
     try:
         validate_plan_snapshot(snapshot, config)
     except StalePlanError as exc:
@@ -76,8 +103,10 @@ def execute_plan_snapshot(
         report.error = str(exc)
         return report
 
-    # Materialize archive-backed fonts after the immutable input snapshot has
-    # been validated and before any mux subprocess starts.
+    # Materialize legacy full-font attachments only after the immutable input
+    # snapshot has been validated. Subset sources are additionally revalidated
+    # by digest when copied into the execution workspace.
+    emit(progress_callback, ProgressEvent("preparing_fonts", total=len(snapshot.plans)))
     font_result = prepare_fonts(snapshot.input_dir, config.media, config.font, extract_archives=True)
     report.warnings.extend([*font_result.warnings, *font_result.errors, *font_result.conflicts])
     missing_attachments = sorted({
@@ -94,39 +123,79 @@ def execute_plan_snapshot(
         return report
 
     total = len(snapshot.plans)
-    emit(progress_callback, ProgressEvent("running", total=total))
-    max_workers = config.concurrency.max_parallel_mux_jobs
-    if max_workers == 1:
+    with SubsetWorkspace(snapshot.plan_id) as workspace:
+        prepared_plans: list[PreparedMuxPlan] = []
         for index, plan in enumerate(snapshot.plans):
             if cancel.is_set():
                 report.cancelled = True
                 break
-            emit(progress_callback, ProgressEvent(
-                "running", total, index, report.success_count, report.failure_count, plan.source_video.name
-            ))
-            report.results.append(execute_mux_plan(plan, config, cancel))
-            logging.info(
-                "Mux result source=%s success=%s verified=%s code=%s",
-                plan.source_video.name,
-                report.results[-1].success,
-                report.results[-1].verified,
-                report.results[-1].error_code,
-            )
-    else:
-        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="plexmuxy-mux") as executor:
-            future_map = {
-                executor.submit(execute_mux_plan, plan, config, cancel): plan for plan in snapshot.plans
-            }
-            for future in as_completed(future_map):
-                report.results.append(future.result())
+            if config.font.mode != "subset":
+                prepared_plans.append(PreparedMuxPlan.from_original(plan))
+                continue
+
+            def preparation_progress(
+                phase: str,
+                total_families: int,
+                completed_families: int,
+                current_family: str | None,
+                *,
+                plan_index: int = index,
+                current_file: str = plan.source_video.name,
+            ) -> None:
                 emit(progress_callback, ProgressEvent(
-                    "running", total, len(report.results), report.success_count, report.failure_count,
-                    future_map[future].source_video.name,
+                    phase=phase,
+                    total=total,
+                    completed=plan_index,
+                    succeeded=report.success_count,
+                    failed=report.failure_count,
+                    current_file=current_file,
+                    total_families=total_families,
+                    completed_families=completed_families,
+                    current_family=current_family,
                 ))
+
+            try:
+                prepared_plans.append(prepare_subset_plan(
+                    plan,
+                    config.font,
+                    workspace,
+                    cancellation_event=cancel,
+                    progress_callback=preparation_progress,
+                ))
+            except FontPreparationError as exc:
                 if cancel.is_set():
                     report.cancelled = True
-    if cancel.is_set():
-        report.cancelled = True
+                    break
+                if config.font.subset_failure_action == "fail-job":
+                    report.error_code = "FONT_SUBSET_FAILED"
+                    report.error = str(exc)
+                    logging.error("[%s] %s", report.error_code, report.error)
+                    return report
+                report.results.append(MuxResult(
+                    plan=plan,
+                    success=False,
+                    output_path=plan.output_path,
+                    error_code="FONT_SUBSET_FAILED",
+                    error=str(exc),
+                    verified=False,
+                ))
+
+        # No mux subprocess may start until every plan has either been prepared
+        # successfully or converted into an explicit per-video failure.
+        if not report.cancelled:
+            emit(progress_callback, ProgressEvent(
+                "running_mux", total, len(report.results), report.success_count, report.failure_count
+            ))
+            _execute_prepared_plans(
+                prepared_plans,
+                config,
+                cancel,
+                report,
+                total,
+                progress_callback,
+            )
+        if cancel.is_set():
+            report.cancelled = True
     emit(progress_callback, ProgressEvent(
         "cleaning", total, len(report.results), report.success_count, report.failure_count
     ))
@@ -138,6 +207,71 @@ def execute_plan_snapshot(
     return report
 
 
+def _execute_prepared_plans(
+    prepared_plans: list[PreparedMuxPlan],
+    config: AppConfig,
+    cancel: threading.Event,
+    report: JobReport,
+    total: int,
+    progress_callback: ProgressCallback | None,
+) -> None:
+    max_workers = config.concurrency.max_parallel_mux_jobs
+    if max_workers == 1:
+        for prepared in prepared_plans:
+            if cancel.is_set():
+                report.cancelled = True
+                break
+            plan = prepared.original_plan
+            emit(progress_callback, ProgressEvent(
+                "running_mux", total, len(report.results), report.success_count,
+                report.failure_count, plan.source_video.name,
+            ))
+            result = _execute_one_prepared(prepared, config, cancel)
+            emit(progress_callback, ProgressEvent(
+                "verifying_outputs", total, len(report.results), report.success_count,
+                report.failure_count, plan.source_video.name,
+            ))
+            report.results.append(result)
+            logging.info(
+                "Mux result source=%s success=%s verified=%s code=%s",
+                plan.source_video.name,
+                result.success,
+                result.verified,
+                result.error_code,
+            )
+        return
+
+    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="plexmuxy-mux") as executor:
+        future_map = {
+            executor.submit(_execute_one_prepared, prepared, config, cancel): prepared.original_plan
+            for prepared in prepared_plans
+        }
+        for future in as_completed(future_map):
+            plan = future_map[future]
+            emit(progress_callback, ProgressEvent(
+                "verifying_outputs", total, len(report.results), report.success_count,
+                report.failure_count, plan.source_video.name,
+            ))
+            report.results.append(future.result())
+            if cancel.is_set():
+                report.cancelled = True
+
+
+def _execute_one_prepared(
+    prepared: PreparedMuxPlan,
+    config: AppConfig,
+    cancel: threading.Event,
+) -> MuxResult:
+    if (
+        prepared.subtitle_tracks == prepared.original_plan.subtitle_tracks
+        and prepared.attachments == prepared.original_plan.attachments
+        and not prepared.generated_files
+        and not prepared.subset_warnings
+    ):
+        return execute_mux_plan(prepared.original_plan, config, cancel)
+    return execute_prepared_mux_plan(prepared, config, cancel)
+
+
 def run_mux_job(
     input_dir: Path,
     config: AppConfig,
@@ -147,7 +281,7 @@ def run_mux_job(
     cancellation_event: threading.Event | None = None,
 ) -> JobReport:
     emit(progress_callback, ProgressEvent("planning"))
-    report = build_job_plan(input_dir, config)
+    report = build_job_plan(input_dir, config, progress_callback=progress_callback)
     if dry_run or report.snapshot is None or report.error is not None:
         return report
     executed = execute_plan_snapshot(
