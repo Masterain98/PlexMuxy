@@ -446,42 +446,17 @@ p {
   transition: width var(--duration-normal) var(--ease-emphasized), transform var(--duration-normal) var(--ease-emphasized), background-color var(--duration-normal) var(--ease-standard);
 }
 
-.brand {
+.sidebar-head {
   display: flex;
-  align-items: center;
-  gap: 11px;
+  align-items: flex-start;
   min-width: 0;
-  padding: 0 16px;
+  height: 64px;
+  padding: 24px 20px 0;
   border-bottom: 1px solid var(--color-divider);
-}
-
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  border-radius: var(--radius-sm);
-  background: var(--color-brand);
-  box-shadow: var(--shadow-media);
-  color: var(--color-on-brand);
-  font-size: 17px;
-  font-weight: 800;
-}
-
-.brand-copy {
-  min-width: 0;
-}
-
-.brand h1 {
-  font-size: 16px;
-  line-height: 20px;
-}
-
-.brand p {
   color: var(--color-text-tertiary);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
 }
 
 .steps {
@@ -490,7 +465,7 @@ p {
   gap: 4px;
   min-height: 0;
   overflow-y: auto;
-  padding: 20px 12px;
+  padding: 12px 12px;
 }
 
 .nav-label {
@@ -1708,12 +1683,13 @@ progress::-moz-progress-bar {
     grid-template-rows: 64px minmax(0, 1fr) 56px;
   }
 
-  .brand {
+  .sidebar-head {
     justify-content: center;
-    padding: 0 8px;
+    align-items: center;
+    padding: 0;
+    font-size: 0;
   }
 
-  .brand-copy,
   .nav-label,
   .step-copy,
   .step-index,
@@ -1778,12 +1754,13 @@ progress::-moz-progress-bar {
     transform: translateX(0);
   }
 
-  .sidebar .brand {
+  .sidebar .sidebar-head {
     justify-content: flex-start;
-    padding: 0 16px;
+    align-items: flex-start;
+    padding: 24px 20px 0;
+    font-size: 11px;
   }
 
-  .sidebar .brand-copy,
   .sidebar .mini-path {
     display: block;
   }

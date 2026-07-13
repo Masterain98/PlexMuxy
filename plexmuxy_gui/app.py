@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+import ctypes
 import os
 import sys
+import threading
+import time
 from pathlib import Path
+
+if sys.platform == "win32":
+    # Python 3.13 no longer lazily imports ctypes submodules; this makes
+    # ``ctypes.wintypes`` available for the icon/app-id helpers below.
+    import ctypes.wintypes  # noqa: F401
 
 from plexmuxy.logging_utils import configure_logging
 
@@ -46,6 +54,124 @@ def static_path(name: str) -> str:
     return str(Path(__file__).resolve().parent / "static" / name)
 
 
+_WINDOW_TITLE = "PlexMuxy"
+_APP_USER_MODEL_ID = "com.plexmuxy.gui"
+
+
+def _set_windows_app_id(app_id: str) -> None:
+    """Group the taskbar button under a stable identity instead of python.exe."""
+    try:
+        shell32 = ctypes.windll.shell32
+    except AttributeError:
+        return
+    try:
+        set_app_id = shell32.SetCurrentProcessExplicitAppUserModelID
+        set_app_id.argtypes = [ctypes.wintypes.LPCWSTR]
+        set_app_id.restype = ctypes.HRESULT
+        set_app_id(app_id)
+    except Exception:  # noqa: BLE001 - cosmetic; never block startup.
+        pass
+
+
+def _apply_window_icon_when_ready(icon_path: str) -> None:
+    """Apply our icon once pywebview has created the native window.
+
+    pywebview only honors ``icon`` on GTK/Qt back-ends, so on Windows the
+    edgechromium window keeps the host process icon (python.exe in dev mode).
+    We poll for the window and set the icon directly on its native handle.
+    """
+    deadline = time.monotonic() + 10.0
+    while time.monotonic() < deadline:
+        if _set_native_window_icon(icon_path):
+            return
+        time.sleep(0.2)
+
+
+def _set_native_window_icon(icon_path: str) -> bool:
+    """Set the big/small icons on the PlexMuxy top-level window. Returns True if applied."""
+    try:
+        user32 = ctypes.windll.user32
+    except AttributeError:
+        return False
+
+    IMAGE_ICON = 1
+    LR_LOADFROMFILE = 0x0010
+    WM_SETICON = 0x0080
+    ICON_SMALL, ICON_BIG = 0, 1
+
+    load_image = user32.LoadImageW
+    load_image.argtypes = [
+        ctypes.wintypes.HANDLE,
+        ctypes.wintypes.LPCWSTR,
+        ctypes.wintypes.UINT,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.wintypes.UINT,
+    ]
+    load_image.restype = ctypes.wintypes.HANDLE
+
+    big = load_image(0, icon_path, IMAGE_ICON, 256, 256, LR_LOADFROMFILE)
+    if not big:
+        big = load_image(0, icon_path, IMAGE_ICON, 0, 0, LR_LOADFROMFILE)
+    small = load_image(0, icon_path, IMAGE_ICON, 32, 32, LR_LOADFROMFILE)
+    if not small:
+        small = big
+    if not (big or small):
+        return False
+
+    send_message = user32.SendMessageW
+    send_message.argtypes = [
+        ctypes.wintypes.HWND,
+        ctypes.wintypes.UINT,
+        ctypes.wintypes.WPARAM,
+        ctypes.wintypes.LPARAM,
+    ]
+    send_message.restype = ctypes.wintypes.LPARAM
+
+    get_window_thread_process_id = user32.GetWindowThreadProcessId
+    get_window_thread_process_id.argtypes = [ctypes.wintypes.HWND, ctypes.POINTER(ctypes.wintypes.DWORD)]
+    get_window_thread_process_id.restype = ctypes.wintypes.DWORD
+
+    get_window_text_length = user32.GetWindowTextLengthW
+    get_window_text_length.argtypes = [ctypes.wintypes.HWND]
+    get_window_text_length.restype = ctypes.c_int
+
+    get_window_text = user32.GetWindowTextW
+    get_window_text.argtypes = [ctypes.wintypes.HWND, ctypes.wintypes.LPWSTR, ctypes.c_int]
+    get_window_text.restype = ctypes.c_int
+
+    enum_windows = user32.EnumWindows
+    enum_proc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+    pid = os.getpid()
+    applied = False
+
+    def _match(hwnd, _lparam):
+        nonlocal applied
+        owner = ctypes.wintypes.DWORD()
+        get_window_thread_process_id(hwnd, ctypes.byref(owner))
+        if owner.value != pid:
+            return True
+        length = get_window_text_length(hwnd)
+        if length <= 0:
+            return True
+        buffer = ctypes.create_unicode_buffer(length + 1)
+        get_window_text(hwnd, buffer, length + 1)
+        if buffer.value != _WINDOW_TITLE:
+            return True
+        if big:
+            send_message(hwnd, WM_SETICON, ICON_BIG, big)
+        if small:
+            send_message(hwnd, WM_SETICON, ICON_SMALL, small)
+        applied = True
+        return False
+
+    try:
+        enum_windows(enum_proc(_match), 0)
+    except Exception:  # noqa: BLE001 - cosmetic; never block startup.
+        return False
+    return applied
+
+
 def start() -> None:
     enable_per_monitor_v2()
     configure_logging(verbose=os.environ.get("PLEXMUXY_GUI_DEBUG") == "1", json_log=True)
@@ -56,8 +182,22 @@ def start() -> None:
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
     webview.settings["ALLOW_DOWNLOADS"] = False
 
+    icon_path = static_path("assets/plexmuxy-app.ico")
+    icon_thread = None
+    if sys.platform == "win32":
+        # pywebview only applies `icon` on GTK/Qt; on Windows the edgechromium
+        # window keeps the host process icon (python.exe in dev mode). Set our
+        # identity up front and patch the native icon once the window exists.
+        _set_windows_app_id(_APP_USER_MODEL_ID)
+        icon_thread = threading.Thread(
+            target=_apply_window_icon_when_ready,
+            args=(icon_path,),
+            name="plexmuxy-gui-icon",
+            daemon=True,
+        )
+
     window = webview.create_window(
-        title="PlexMuxy",
+        title=_WINDOW_TITLE,
         url=static_path("index.html"),
         js_api=None,
         width=1280,
@@ -73,11 +213,14 @@ def start() -> None:
     api.bind_window(window)
     window.expose(*(getattr(api, name) for name in EXPOSED_API_METHODS))
 
+    if icon_thread is not None:
+        icon_thread.start()
+
     try:
         if sys.platform == "win32":
-            webview.start(debug=debug, gui="edgechromium", http_server=True, icon=static_path("assets/plexmuxy-app.ico"))
+            webview.start(debug=debug, gui="edgechromium", http_server=True, icon=icon_path)
         else:
-            webview.start(debug=debug, http_server=True, icon=static_path("assets/plexmuxy-app.ico"))
+            webview.start(debug=debug, http_server=True, icon=icon_path)
     except Exception as exc:  # noqa: BLE001 - desktop startup should fail cleanly from CLI/script entry points.
         if sys.platform == "win32" and is_webview2_missing_error(exc):
             raise RuntimeError(
