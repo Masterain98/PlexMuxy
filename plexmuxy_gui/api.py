@@ -46,12 +46,23 @@ class GuiJob:
 
 class PlexMuxyApi:
     def __init__(self) -> None:
-        self.window: Any = None
-        self.jobs: dict[str, GuiJob] = {}
-        self.jobs_lock = threading.Lock()
+        self._window: Any = None
+        self._window_maximized = False
+        self._jobs: dict[str, GuiJob] = {}
+        self._jobs_lock = threading.Lock()
 
     def bind_window(self, window: Any) -> None:
-        self.window = window
+        self._window = window
+        events = getattr(window, "events", None)
+        if events is not None:
+            events.maximized += self._handle_window_maximized
+            events.restored += self._handle_window_restored
+
+    def _handle_window_maximized(self) -> None:
+        self._window_maximized = True
+
+    def _handle_window_restored(self) -> None:
+        self._window_maximized = False
 
     def ok(self, data: Any | None = None) -> dict[str, Any]:
         return {"ok": True, "data": data if data is not None else {}}
@@ -85,7 +96,7 @@ class PlexMuxyApi:
 
     def choose_directory(self) -> dict[str, Any]:
         def run() -> dict[str, Any]:
-            if self.window is None:
+            if self._window is None:
                 return self.fail("Window is not ready")
             import webview
 
@@ -94,10 +105,46 @@ class PlexMuxyApi:
                 dialog_type = getattr(webview, "FOLDER_DIALOG", None)
             if dialog_type is None:
                 return self.fail("Folder picker is not available in this pywebview version")
-            result = self.window.create_file_dialog(dialog_type)
+            result = self._window.create_file_dialog(dialog_type)
             if not result:
                 return self.ok({"cancelled": True, "path": None})
             return self.ok({"cancelled": False, "path": str(result[0])})
+
+        return self.guarded(run)
+
+    def minimize_window(self) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            if self._window is None:
+                return self.fail("Window is not ready")
+            self._window.minimize()
+            return self.ok()
+
+        return self.guarded(run)
+
+    def toggle_maximize_window(self) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            if self._window is None:
+                return self.fail("Window is not ready")
+            if self._window_maximized:
+                self._window.restore()
+                self._window_maximized = False
+            else:
+                self._window.maximize()
+                self._window_maximized = True
+            return self.ok({"maximized": self._window_maximized})
+
+        return self.guarded(run)
+
+    def close_window(self) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            if self._window is None:
+                return self.fail("Window is not ready")
+
+            # Let pywebview deliver this bridge response before closing its WebView.
+            timer = threading.Timer(0.1, self._window.destroy)
+            timer.daemon = True
+            timer.start()
+            return self.ok()
 
         return self.guarded(run)
 
@@ -135,8 +182,8 @@ class PlexMuxyApi:
             if (requires_delete_confirmation(config) or config.task.overwrite) and not yes:
                 return self.fail("Delete or overwrite requires confirmation")
             job = GuiJob(job_id=str(uuid.uuid4()))
-            with self.jobs_lock:
-                self.jobs[job.job_id] = job
+            with self._jobs_lock:
+                self._jobs[job.job_id] = job
                 self._prune_jobs()
             threading.Thread(
                 target=self._execute_background_job,
@@ -202,8 +249,8 @@ class PlexMuxyApi:
         return self.guarded(run)
 
     def _find_job(self, job_id: str) -> GuiJob:
-        with self.jobs_lock:
-            job = self.jobs.get(str(job_id))
+        with self._jobs_lock:
+            job = self._jobs.get(str(job_id))
         if job is None:
             raise ValueError("Unknown job_id")
         return job
@@ -233,11 +280,11 @@ class PlexMuxyApi:
             job.error = str(exc)
 
     def _prune_jobs(self) -> None:
-        if len(self.jobs) <= 20:
+        if len(self._jobs) <= 20:
             return
-        finished = [key for key, job in self.jobs.items() if job.status in {"completed", "failed", "cancelled"}]
-        for key in finished[: len(self.jobs) - 20]:
-            self.jobs.pop(key, None)
+        finished = [key for key, job in self._jobs.items() if job.status in {"completed", "failed", "cancelled"}]
+        for key in finished[: len(self._jobs) - 20]:
+            self._jobs.pop(key, None)
 
     def open_config_location(self) -> dict[str, Any]:
         def run() -> dict[str, Any]:

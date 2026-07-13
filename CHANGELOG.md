@@ -21,6 +21,7 @@ All notable changes follow Keep a Changelog categories.
 
 ### Fixed
 
+- Prevented pywebview from recursively inspecting the native GUI window by exposing only the intended bridge methods.
 - Prevented movie fallback across multi-video directories.
 - Prevented cleanup before output verification and premature cleanup of shared resources.
 - Prevented failed or partial mux output from replacing a valid destination.

@@ -3,6 +3,45 @@ from plexmuxy.models import JobReport, MuxPlan
 from plexmuxy_gui.api import PlexMuxyApi
 
 
+class FakeDesktopWindow:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def minimize(self) -> None:
+        self.calls.append("minimize")
+
+    def maximize(self) -> None:
+        self.calls.append("maximize")
+
+    def restore(self) -> None:
+        self.calls.append("restore")
+
+    def destroy(self) -> None:
+        self.calls.append("destroy")
+
+
+class ImmediateTimer:
+    def __init__(self, _delay, callback) -> None:
+        self.callback = callback
+        self.daemon = False
+
+    def start(self) -> None:
+        self.callback()
+
+
+def test_window_controls_delegate_to_bound_desktop_window(monkeypatch):
+    monkeypatch.setattr("plexmuxy_gui.api.threading.Timer", ImmediateTimer)
+    api = PlexMuxyApi()
+    window = FakeDesktopWindow()
+    api.bind_window(window)
+
+    assert api.minimize_window()["ok"] is True
+    assert api.toggle_maximize_window()["data"] == {"maximized": True}
+    assert api.toggle_maximize_window()["data"] == {"maximized": False}
+    assert api.close_window()["ok"] is True
+    assert window.calls == ["minimize", "maximize", "restore", "destroy"]
+
+
 def test_get_app_info_returns_ok(monkeypatch, tmp_path):
     monkeypatch.setattr("plexmuxy_gui.api.resolve_config_path", lambda path=None: tmp_path / "config.json")
     api = PlexMuxyApi()

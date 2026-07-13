@@ -17,6 +17,22 @@ WEBVIEW2_ERROR_MARKERS = (
     "corewebview2",
     "icorewebview2",
 )
+EXPOSED_API_METHODS = (
+    "cancel_job",
+    "choose_directory",
+    "close_window",
+    "export_diagnostics",
+    "get_app_info",
+    "get_job_report",
+    "get_job_status",
+    "load_config",
+    "minimize_window",
+    "open_config_location",
+    "plan_job",
+    "save_settings",
+    "start_job",
+    "toggle_maximize_window",
+)
 
 
 def static_path(name: str) -> str:
@@ -37,15 +53,19 @@ def start() -> None:
     window = webview.create_window(
         title="PlexMuxy",
         url=static_path("index.html"),
-        js_api=api,
-        width=1180,
-        height=760,
+        js_api=None,
+        width=1280,
+        height=800,
         min_size=(960, 640),
-        background_color="#101014",
+        frameless=True,
+        easy_drag=False,
+        shadow=True,
+        background_color="#1c1c1c",
         text_select=True,
         confirm_close=True,
     )
     api.bind_window(window)
+    window.expose(*(getattr(api, name) for name in EXPOSED_API_METHODS))
 
     try:
         if sys.platform == "win32":
