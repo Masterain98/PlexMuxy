@@ -5,6 +5,7 @@ import shutil
 import zipfile
 from pathlib import Path
 
+from .dependencies import resolve_unrar
 from .models import ArchiveLimits, FontConfig, FontResult, MediaConfig
 from .subtitle import is_font_file
 
@@ -79,8 +80,6 @@ def preview_font_archive(
     elif suffix == ".7z":
         names = preview_7z_names(archive, font_config.archive_limits)
     elif suffix == ".rar":
-        if not font_config.unrar_path:
-            raise ValueError("Unrar path is not configured")
         raise ValueError("RAR archive preview is not supported; run without dry-run to extract it")
     else:
         raise ValueError(f"Unsupported font archive extension: {archive.suffix}")
@@ -208,12 +207,13 @@ def extract_7z(archive: Path, destination: Path, limits: ArchiveLimits | None = 
 
 
 def extract_rar(archive: Path, destination: Path, font_config: FontConfig) -> list[Path]:
-    if not font_config.unrar_path:
+    resolution = resolve_unrar(font_config.unrar_path)
+    if resolution.resolved_path is None:
         raise ValueError("Unrar path is not configured")
     import patoolib
 
     before = set(destination.rglob("*"))
-    patoolib.extract_archive(str(archive), outdir=str(destination), program=font_config.unrar_path)
+    patoolib.extract_archive(str(archive), outdir=str(destination), program=resolution.resolved_path)
     after = set(destination.rglob("*"))
     return sorted((path for path in after - before if path.is_file()), key=lambda item: str(item).lower())
 

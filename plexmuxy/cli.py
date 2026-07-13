@@ -96,6 +96,7 @@ def add_job_arguments(parser: argparse.ArgumentParser, dry_run_default: bool = F
     parser.add_argument("--output-dir")
     parser.add_argument("--name-strategy", choices=["suffix", "same-name", "template"])
     parser.add_argument("--name-template")
+    parser.add_argument("--font-mode", choices=["all", "referenced", "subset"])
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--yes", action="store_true")
     parser.add_argument("--verbose", action="store_true")

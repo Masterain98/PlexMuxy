@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from .models import AppConfig, CleanupMode, NameStrategy
+from .models import AppConfig, CleanupMode, FontMode, NameStrategy
 
 
 @dataclass
@@ -17,6 +17,7 @@ class JobOverrides:
     output_dir: str | None = None
     name_strategy: str | None = None
     name_template: str | None = None
+    font_mode: FontMode | None = None
     overwrite: bool = False
 
 
@@ -35,6 +36,8 @@ def apply_job_overrides(config: AppConfig, overrides: JobOverrides) -> AppConfig
         updated.task.name_strategy = cast(NameStrategy, overrides.name_strategy)
     if overrides.name_template:
         updated.task.name_template = overrides.name_template
+    if overrides.font_mode is not None:
+        updated.font.mode = overrides.font_mode
     if overrides.overwrite:
         updated.task.overwrite = True
     # Reuse the same validation path as persisted configuration so malformed
@@ -54,6 +57,7 @@ def overrides_from_namespace(args: Namespace) -> JobOverrides:
         output_dir=getattr(args, "output_dir", None),
         name_strategy=getattr(args, "name_strategy", None),
         name_template=getattr(args, "name_template", None),
+        font_mode=cast(FontMode | None, getattr(args, "font_mode", None)),
         overwrite=bool(getattr(args, "overwrite", False)),
     )
 
@@ -66,6 +70,7 @@ def overrides_from_payload(payload: dict[str, Any]) -> JobOverrides:
         output_dir=optional_str(payload.get("output_dir")),
         name_strategy=optional_str(payload.get("name_strategy")),
         name_template=optional_str(payload.get("name_template")),
+        font_mode=cast(FontMode | None, optional_str(payload.get("font_mode"))),
         overwrite=bool(payload.get("overwrite", False)),
     )
 

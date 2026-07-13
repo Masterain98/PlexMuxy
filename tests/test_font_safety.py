@@ -1,11 +1,13 @@
 import zipfile
 
 import pytest
+from fontTools.ttLib import TTCollection, TTFont
 
 from plexmuxy.config import default_config
 from plexmuxy.font import extract_zip, prepare_fonts, validate_members
 from plexmuxy.font_usage import extract_referenced_font_names, select_referenced_fonts
 from plexmuxy.models import ArchiveLimits
+from tests.font_test_utils import build_test_ttf
 
 
 def test_extract_referenced_font_names_reads_styles_and_overrides(tmp_path):
@@ -24,6 +26,25 @@ def test_select_referenced_fonts_falls_back_to_file_stem_for_invalid_font(tmp_pa
     font.write_bytes(b"not a real font")
     selected, missing = select_referenced_fonts([subtitle], [font])
     assert selected == [font]
+    assert missing == set()
+
+
+def test_select_referenced_fonts_reads_every_collection_face(tmp_path):
+    first = build_test_ttf(tmp_path / "first.ttf", family="First Family")
+    second = build_test_ttf(tmp_path / "second.ttf", family="Second Family")
+    collection_path = tmp_path / "collection.ttc"
+    collection = TTCollection()
+    collection.fonts = [TTFont(first), TTFont(second)]
+    try:
+        collection.save(collection_path)
+    finally:
+        collection.close()
+    subtitle = tmp_path / "test.ass"
+    subtitle.write_text("Style: Default, Second Family,20,x", encoding="utf-8")
+
+    selected, missing = select_referenced_fonts([subtitle], [collection_path])
+
+    assert selected == [collection_path]
     assert missing == set()
 
 

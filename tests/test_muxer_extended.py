@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from plexmuxy.config import default_config
 from plexmuxy.models import AttachmentPlan, MuxPlan, VerificationResult
-from plexmuxy.muxer import execute_mux_plan, inspect_source_tracks, verify_mux_output
+from plexmuxy.muxer import build_mkvmerge_command, execute_mux_plan, inspect_source_tracks, verify_mux_output
 
 
 class FakeProcess:
@@ -20,6 +20,30 @@ class FakeProcess:
 
     def communicate(self):
         return self.stdout, self.stderr
+
+
+def test_mkvmerge_command_uses_planned_attachment_name_and_mime(tmp_path):
+    font = tmp_path / "cache-key.ttf"
+    plan = MuxPlan(
+        tmp_path / "source.mkv",
+        tmp_path / "output.mkv",
+        attachments=[AttachmentPlan(
+            font,
+            expected_name="PMX_DEMO-Regular.ttf",
+            expected_mime_type="application/x-truetype-font",
+        )],
+    )
+
+    command = build_mkvmerge_command(plan, plan.output_path, "mkvmerge")
+
+    assert command[-6:] == [
+        "--attachment-name",
+        "PMX_DEMO-Regular.ttf",
+        "--attachment-mime-type",
+        "application/x-truetype-font",
+        "--attach-file",
+        str(font),
+    ]
 
 
 def test_execute_mux_plan_success_uses_verified_temp_then_replaces(monkeypatch, tmp_path):

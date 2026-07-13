@@ -14,7 +14,10 @@ def test_structural_verifier_checks_tracks_and_attachments(monkeypatch, tmp_path
     payload = {"tracks": [
         {"type": "video", "properties": {}},
         {"type": "subtitles", "properties": {"language": "chi", "language_ietf": "zh-Hans", "track_name": "chs Author", "default_track": True, "forced_track": False}},
-    ], "attachments": [{"file_name": "font.ttf"}], "container": {"type": "Matroska"}}
+    ], "attachments": [{
+        "file_name": "font.ttf",
+        "content_type": "application/x-truetype-font",
+    }], "container": {"type": "Matroska"}}
     monkeypatch.setattr("plexmuxy.muxer.subprocess.run", lambda *a, **k: SimpleNamespace(returncode=0, stdout=json.dumps(payload), stderr=""))
     result = verify_mux_output(plan, output, "mkvmerge")
     assert result.success is True
@@ -29,3 +32,26 @@ def test_structural_verifier_rejects_missing_video(monkeypatch, tmp_path):
     result = verify_mux_output(plan, output, "mkvmerge")
     assert result.success is False
     assert result.error_code == "TRACK_COUNT_MISMATCH"
+
+
+def test_structural_verifier_rejects_attachment_mime_mismatch(monkeypatch, tmp_path):
+    output = tmp_path / "output.mkv"
+    output.write_bytes(b"mkv")
+    attachment = AttachmentPlan(
+        tmp_path / "font.ttf",
+        expected_name="font.ttf",
+        expected_mime_type="application/x-truetype-font",
+    )
+    plan = MuxPlan(tmp_path / "source.mkv", output, attachments=[attachment])
+    payload = {
+        "tracks": [{"type": "video", "properties": {}}],
+        "attachments": [{"file_name": "font.ttf", "content_type": "application/octet-stream"}],
+    }
+    monkeypatch.setattr(
+        "plexmuxy.muxer.subprocess.run",
+        lambda *a, **k: SimpleNamespace(returncode=0, stdout=json.dumps(payload), stderr=""),
+    )
+
+    result = verify_mux_output(plan, output, "mkvmerge")
+
+    assert result.error_code == "ATTACHMENT_PROPERTY_MISMATCH"

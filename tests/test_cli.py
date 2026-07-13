@@ -4,7 +4,13 @@ from argparse import Namespace
 
 import pytest
 
-from plexmuxy.cli import run_gui
+from plexmuxy.cli import build_parser, run_gui
+
+
+def test_job_commands_accept_font_mode_override():
+    args = build_parser().parse_args(["plan", "media", "--font-mode", "subset"])
+
+    assert args.font_mode == "subset"
 
 
 def test_run_gui_reports_clean_error_when_pywebview_is_unavailable(monkeypatch, capsys):

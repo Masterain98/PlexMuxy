@@ -3,15 +3,42 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from .ass_analysis import iter_override_tags, parse_ass_file
+from .font_catalog import (
+    build_font_catalog,
+)
+from .font_catalog import (
+    normalize_font_name as normalize_catalog_name,
+)
+
 STYLE_RE = re.compile(r"(?im)^Style:\s*[^,]*,\s*([^,\r\n]+)")
 OVERRIDE_RE = re.compile(r"(?i)\\fn([^\\}\r\n]+)")
 
 
 def normalize_font_name(name: str) -> str:
-    return re.sub(r"\s+", " ", name).strip().casefold()
+    return normalize_catalog_name(name)
 
 
 def extract_referenced_font_names(subtitle_path: Path) -> set[str]:
+    names: set[str] = set()
+    try:
+        document = parse_ass_file(subtitle_path)
+        names.update(normalize_font_name(style.fontname) for style in document.styles)
+        for event in document.events:
+            if event.kind.casefold() != "dialogue":
+                continue
+            for block in re.findall(r"\{([^}]*)}", event.text):
+                for tag in iter_override_tags(block):
+                    if tag.name == "fn" and tag.parameter.strip() not in {"", "0"}:
+                        names.add(normalize_font_name(tag.parameter))
+    except (OSError, UnicodeError, ValueError):
+        pass
+    if names:
+        return {name for name in names if name}
+
+    # Keep a best-effort compatibility path for malformed legacy scripts. Such
+    # input is never accepted by subset mode, but referenced mode can still
+    # attach a conservatively selected complete font.
     raw = subtitle_path.read_bytes()
     text = ""
     for encoding in ("utf-8-sig", "utf-16", "gb18030", "shift_jis"):
@@ -28,23 +55,16 @@ def extract_referenced_font_names(subtitle_path: Path) -> set[str]:
 
 
 def font_family_names(font_path: Path) -> set[str]:
-    try:
-        from fontTools.ttLib import TTFont
-    except ImportError:
-        return {normalize_font_name(font_path.stem)}
     names: set[str] = {normalize_font_name(font_path.stem)}
-    try:
-        font = TTFont(font_path, lazy=True, fontNumber=0)
-        for record in font["name"].names:
-            if record.nameID not in {1, 4, 6, 16, 17}:
-                continue
-            try:
-                names.add(normalize_font_name(record.toUnicode()))
-            except UnicodeError:
-                continue
-        font.close()
-    except Exception:
-        return names
+    catalog = build_font_catalog([font_path])
+    for face in catalog.faces:
+        for value in (
+            *face.family_names,
+            *face.typographic_family_names,
+            *face.full_names,
+            *face.postscript_names,
+        ):
+            names.add(normalize_font_name(value))
     return {name for name in names if name}
 
 

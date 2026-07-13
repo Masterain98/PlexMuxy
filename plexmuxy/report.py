@@ -39,6 +39,7 @@ def format_job_report(report: JobReport, dry_run: bool = False) -> str:
             lines.append(f"Result: {status}")
             if result.error:
                 lines.append(f"  error: [{result.error_code or 'PLEXMUXY_ERROR'}] {result.error}")
+            lines.extend(f"  warning: {warning}" for warning in result.warnings)
         lines.append("")
 
     if report.skipped_files:
@@ -81,6 +82,18 @@ def format_plan(plan: MuxPlan) -> list[str]:
         lines.append("Attachments:")
         for attachment in plan.attachments:
             lines.append(f"  + {attachment.path}")
+    if plan.font_subset_intent is not None:
+        summary = plan.font_subset_intent.summary
+        lines.append("Font subset intent:")
+        lines.append(f"  subtitles: {summary.subtitle_count}")
+        lines.append(f"  families: {summary.requested_family_count}")
+        lines.append(f"  matched faces: {summary.matched_face_count}")
+        lines.append(f"  expected attachments: {summary.expected_attachment_count}")
+        lines.append(f"  full-font fallbacks: {summary.fallback_family_count}")
+        lines.extend(
+            f"  issue: [{issue.code}] {issue.message}"
+            for issue in plan.font_subset_intent.issues
+        )
     if plan.cleanup_candidates:
         lines.append("Cleanup candidates:")
         for candidate in plan.cleanup_candidates:

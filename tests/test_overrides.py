@@ -1,7 +1,9 @@
 from argparse import Namespace
 from pathlib import Path
 
-from plexmuxy.config import default_config
+import pytest
+
+from plexmuxy.config import ConfigError, default_config
 from plexmuxy.overrides import (
     JobOverrides,
     apply_job_overrides,
@@ -21,6 +23,7 @@ def test_apply_job_overrides_updates_task_fields_without_mutating_original(tmp_p
             output_dir=str(tmp_path / "out"),
             name_strategy="template",
             name_template="{stem}.plex",
+            font_mode="subset",
             overwrite=True,
         ),
     )
@@ -33,6 +36,7 @@ def test_apply_job_overrides_updates_task_fields_without_mutating_original(tmp_p
     assert updated.task.output_dir == tmp_path / "out"
     assert updated.task.name_strategy == "template"
     assert updated.task.name_template == "{stem}.plex"
+    assert updated.font.mode == "subset"
     assert updated.task.overwrite is True
 
 
@@ -82,6 +86,7 @@ def test_cli_and_gui_payloads_use_same_override_model():
             output_dir="Ready",
             name_strategy="same-name",
             name_template=None,
+            font_mode="referenced",
             overwrite=True,
         )
     )
@@ -93,8 +98,17 @@ def test_cli_and_gui_payloads_use_same_override_model():
             "output_dir": "Ready",
             "name_strategy": "same-name",
             "name_template": None,
+            "font_mode": "referenced",
             "overwrite": True,
         }
     )
 
     assert namespace_overrides == payload_overrides
+
+
+def test_invalid_font_mode_override_uses_config_validation():
+    config = default_config()
+    overrides = overrides_from_payload({"font_mode": "not-a-mode"})
+
+    with pytest.raises(ConfigError, match=r"font\.mode"):
+        apply_job_overrides(config, overrides)

@@ -3,14 +3,24 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
-import shutil
 import subprocess
 import threading
 import uuid
+from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from .models import AppConfig, MuxPlan, MuxResult, SourceTrackInfo, VerificationResult
+from .dependencies import resolve_mkvmerge
+from .models import (
+    AppConfig,
+    AttachmentPlan,
+    MuxPlan,
+    MuxResult,
+    PreparedMuxPlan,
+    SourceTrackInfo,
+    VerificationResult,
+)
 
 
 def execute_mux_plan(
@@ -18,19 +28,59 @@ def execute_mux_plan(
     config: AppConfig,
     cancellation_event: threading.Event | None = None,
 ) -> MuxResult:
-    if plan.output_path.resolve() == plan.source_video.resolve():
-        return failure(plan, "OUTPUT_EQUALS_INPUT", "Output path is the same as the source video; refusing in-place mux.")
-    if plan.output_path.exists() and not config.task.overwrite:
-        return failure(plan, "OUTPUT_EXISTS", f"Output file already exists: {plan.output_path}")
+    return _execute_runtime_plan(plan, plan, config, cancellation_event)
+
+
+def execute_prepared_mux_plan(
+    prepared: PreparedMuxPlan,
+    config: AppConfig,
+    cancellation_event: threading.Event | None = None,
+) -> MuxResult:
+    runtime = replace(
+        prepared.original_plan,
+        subtitle_tracks=list(prepared.subtitle_tracks),
+        attachments=list(prepared.attachments),
+    )
+    return _execute_runtime_plan(
+        prepared.original_plan,
+        runtime,
+        config,
+        cancellation_event,
+        prepared.subset_warnings,
+    )
+
+
+def _execute_runtime_plan(
+    original_plan: MuxPlan,
+    runtime_plan: MuxPlan,
+    config: AppConfig,
+    cancellation_event: threading.Event | None,
+    preparation_warnings: list[str] | None = None,
+) -> MuxResult:
+    def runtime_failure(
+        code: str,
+        message: str,
+        verification: VerificationResult | None = None,
+    ) -> MuxResult:
+        result = failure(original_plan, code, message, verification=verification)
+        result.warnings.extend(preparation_warnings or [])
+        return result
+
+    if runtime_plan.output_path.resolve() == runtime_plan.source_video.resolve():
+        return runtime_failure("OUTPUT_EQUALS_INPUT", "Output path is the same as the source video; refusing in-place mux.")
+    if runtime_plan.output_path.exists() and not config.task.overwrite:
+        return runtime_failure("OUTPUT_EXISTS", f"Output file already exists: {runtime_plan.output_path}")
     mkvmerge_path = resolve_mkvmerge_path(config)
     if mkvmerge_path is None:
-        return failure(plan, "MKVMERGE_NOT_FOUND", "mkvmerge was not found. Set mkvmerge.path or add it to PATH.")
+        return runtime_failure("MKVMERGE_NOT_FOUND", "mkvmerge was not found. Set mkvmerge.path or add it to PATH.")
     if cancellation_event is not None and cancellation_event.is_set():
-        return failure(plan, "CANCELLED", "Mux was cancelled before starting")
+        return runtime_failure("CANCELLED", "Mux was cancelled before starting")
 
-    plan.output_path.parent.mkdir(parents=True, exist_ok=True)
-    partial = plan.output_path.with_name(f".{plan.output_path.name}.{uuid.uuid4().hex}.plexmuxy-part")
-    command = build_mkvmerge_command(plan, partial, mkvmerge_path)
+    runtime_plan.output_path.parent.mkdir(parents=True, exist_ok=True)
+    partial = runtime_plan.output_path.with_name(
+        f".{runtime_plan.output_path.name}.{uuid.uuid4().hex}.plexmuxy-part"
+    )
+    command = build_mkvmerge_command(runtime_plan, partial, mkvmerge_path)
     try:
         process = subprocess.Popen(
             command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
@@ -39,8 +89,8 @@ def execute_mux_plan(
         while process.poll() is None:
             if cancellation_event is not None and cancellation_event.wait(0.2):
                 terminate_process(process)
-                handle_failed_output(partial, plan.output_path, config.task.failed_output_action)
-                return failure(plan, "CANCELLED", "Mux was cancelled")
+                handle_failed_output(partial, runtime_plan.output_path, config.task.failed_output_action)
+                return runtime_failure("CANCELLED", "Mux was cancelled")
             if cancellation_event is None:
                 try:
                     process.wait(timeout=0.2)
@@ -48,31 +98,31 @@ def execute_mux_plan(
                     pass
         stdout, stderr = process.communicate()
     except OSError as exc:
-        handle_failed_output(partial, plan.output_path, config.task.failed_output_action)
-        return failure(plan, "MUX_EXECUTION_FAILED", str(exc))
+        handle_failed_output(partial, runtime_plan.output_path, config.task.failed_output_action)
+        return runtime_failure("MUX_EXECUTION_FAILED", str(exc))
     if process.returncode not in {0, 1}:  # mkvmerge uses 1 for warnings.
-        handle_failed_output(partial, plan.output_path, config.task.failed_output_action)
-        return failure(plan, "MUX_EXECUTION_FAILED", (stderr or stdout or "mkvmerge failed").strip())
+        handle_failed_output(partial, runtime_plan.output_path, config.task.failed_output_action)
+        return runtime_failure("MUX_EXECUTION_FAILED", (stderr or stdout or "mkvmerge failed").strip())
 
-    verification = verify_mux_output(plan, partial, mkvmerge_path)
+    verification = verify_mux_output(runtime_plan, partial, mkvmerge_path)
     if not verification.success:
-        handled = handle_failed_output(partial, plan.output_path, config.task.failed_output_action)
+        handled = handle_failed_output(partial, runtime_plan.output_path, config.task.failed_output_action)
         warnings = [f"Failed output retained as: {handled}"] if handled else []
         return MuxResult(
-            plan=plan, success=False, output_path=plan.output_path,
+            plan=original_plan, success=False, output_path=runtime_plan.output_path,
             error_code=verification.error_code, error=verification.error,
-            warnings=warnings, verified=False, verification=verification,
+            warnings=[*(preparation_warnings or []), *warnings], verified=False, verification=verification,
         )
     try:
-        os.replace(partial, plan.output_path)
+        os.replace(partial, runtime_plan.output_path)
     except OSError as exc:
-        handle_failed_output(partial, plan.output_path, config.task.failed_output_action)
-        return failure(plan, "OUTPUT_REPLACE_FAILED", str(exc), verification=verification)
-    warnings = []
+        handle_failed_output(partial, runtime_plan.output_path, config.task.failed_output_action)
+        return runtime_failure("OUTPUT_REPLACE_FAILED", str(exc), verification=verification)
+    warnings = list(preparation_warnings or [])
     if process.returncode == 1:
         warnings.append((stderr or stdout or "mkvmerge completed with warnings").strip())
     return MuxResult(
-        plan=plan, success=True, output_path=plan.output_path, warnings=warnings,
+        plan=original_plan, success=True, output_path=runtime_plan.output_path, warnings=warnings,
         verified=True, verification=verification,
     )
 
@@ -90,12 +140,11 @@ def build_mkvmerge_command(plan: MuxPlan, output_path: Path, mkvmerge_path: str)
         ])
     command.extend(str(track.path) for track in plan.audio_tracks)
     for attachment in plan.attachments:
-        mime = mimetypes.guess_type(attachment.path.name)[0]
-        if attachment.path.suffix.casefold() == ".ttf":
-            mime = "application/x-truetype-font"
-        elif attachment.path.suffix.casefold() in {".otf", ".ttc"}:
-            mime = "application/vnd.ms-opentype"
-        command.extend(["--attachment-mime-type", mime or "application/octet-stream", "--attach-file", str(attachment.path)])
+        command.extend([
+            "--attachment-name", attachment.name,
+            "--attachment-mime-type", attachment_mime_type(attachment),
+            "--attach-file", str(attachment.path),
+        ])
     return command
 
 
@@ -133,10 +182,28 @@ def verify_mux_output(plan: MuxPlan, output_path: Path, mkvmerge_path: str) -> V
                 False, "TRACK_PROPERTY_MISMATCH",
                 f"Subtitle track properties were not preserved: {expected.track_name}", data,
             )
-    expected_names = {item.path.name.casefold() for item in plan.attachments}
-    actual_names = {str(item.get("file_name", "")).casefold() for item in attachments}
-    if not expected_names.issubset(actual_names):
+    expected_names = Counter(item.name.casefold() for item in plan.attachments)
+    actual_names = Counter(str(item.get("file_name", "")).casefold() for item in attachments)
+    if any(actual_names[name] < count for name, count in expected_names.items()):
         return VerificationResult(False, "ATTACHMENT_COUNT_MISMATCH", "Planned font attachments are missing", data)
+    expected_properties = Counter(
+        (item.name.casefold(), attachment_mime_type(item).casefold())
+        for item in plan.attachments
+    )
+    actual_properties = Counter(
+        (
+            str(item.get("file_name", "")).casefold(),
+            str(item.get("content_type", "")).casefold(),
+        )
+        for item in attachments
+    )
+    if any(actual_properties[value] < count for value, count in expected_properties.items()):
+        return VerificationResult(
+            False,
+            "ATTACHMENT_PROPERTY_MISMATCH",
+            "A planned font attachment has an unexpected name or MIME type",
+            data,
+        )
     return VerificationResult(True, details={
         "video_tracks": len(video_tracks), "subtitle_tracks": len(subtitle_tracks),
         "attachments": len(attachments), "container": data.get("container", {}),
@@ -179,22 +246,19 @@ def inspect_source_tracks(source: Path, mkvmerge_path: str) -> list[SourceTrackI
 
 
 def resolve_mkvmerge_path(config: AppConfig) -> str | None:
-    configured = config.mkvmerge.path.strip()
-    if configured:
-        path = Path(configured)
-        if path.is_dir():
-            path = path / ("mkvmerge.exe" if os.name == "nt" else "mkvmerge")
-        if path.is_file():
-            return str(path)
-        return shutil.which(configured)
-    found = shutil.which("mkvmerge")
-    if found:
-        return found
-    for name in ("mkvmerge.exe", "mkvmerge"):
-        local = Path.cwd() / name
-        if local.is_file():
-            return str(local)
-    return None
+    return resolve_mkvmerge(config.mkvmerge.path).resolved_path
+
+
+def attachment_mime_type(attachment: AttachmentPlan) -> str:
+    if attachment.expected_mime_type:
+        return attachment.expected_mime_type
+    mime = mimetypes.guess_type(attachment.name)[0]
+    suffix = Path(attachment.name).suffix.casefold()
+    if suffix == ".ttf":
+        return "application/x-truetype-font"
+    if suffix in {".otf", ".ttc", ".otc"}:
+        return "application/vnd.ms-opentype"
+    return mime or "application/octet-stream"
 
 
 def verify_output(output_path: Path, started_at: float | None = None) -> str | None:
