@@ -49,6 +49,9 @@ plexmuxy_gui = [
   "static/*.html",
   "static/*.css",
   "static/*.js",
+  "static/assets/*.svg",
+  "static/assets/*.png",
+  "static/assets/*.ico",
   "static/locales/*.json",
 ]
 
