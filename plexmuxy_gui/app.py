@@ -19,6 +19,7 @@ WEBVIEW2_ERROR_MARKERS = (
 )
 EXPOSED_API_METHODS = (
     "cancel_job",
+    "choose_dependency",
     "choose_directory",
     "close_window",
     "export_diagnostics",
@@ -28,9 +29,13 @@ EXPOSED_API_METHODS = (
     "load_config",
     "minimize_window",
     "open_config_location",
+    "open_diagnostics_location",
     "plan_job",
+    "reset_dependency_path",
+    "save_environment_settings",
     "save_settings",
     "start_job",
+    "test_notification",
     "toggle_maximize_window",
 )
 
@@ -42,6 +47,7 @@ def static_path(name: str) -> str:
 
 
 def start() -> None:
+    enable_per_monitor_v2()
     configure_logging(verbose=os.environ.get("PLEXMUXY_GUI_DEBUG") == "1", json_log=True)
     webview = import_webview()
     debug = os.environ.get("PLEXMUXY_GUI_DEBUG") == "1"
@@ -62,16 +68,16 @@ def start() -> None:
         shadow=True,
         background_color="#1c1c1c",
         text_select=True,
-        confirm_close=True,
+        confirm_close=False,
     )
     api.bind_window(window)
     window.expose(*(getattr(api, name) for name in EXPOSED_API_METHODS))
 
     try:
         if sys.platform == "win32":
-            webview.start(debug=debug, gui="edgechromium", http_server=True)
+            webview.start(debug=debug, gui="edgechromium", http_server=True, icon=static_path("assets/plexmuxy-app.ico"))
         else:
-            webview.start(debug=debug, http_server=True)
+            webview.start(debug=debug, http_server=True, icon=static_path("assets/plexmuxy-app.ico"))
     except Exception as exc:  # noqa: BLE001 - desktop startup should fail cleanly from CLI/script entry points.
         if sys.platform == "win32" and is_webview2_missing_error(exc):
             raise RuntimeError(
@@ -107,6 +113,24 @@ def is_missing_webview_import(exc: ImportError) -> bool:
 def is_webview2_missing_error(exc: Exception) -> bool:
     message = str(exc).lower()
     return any(marker in message for marker in WEBVIEW2_ERROR_MARKERS)
+
+
+def enable_per_monitor_v2() -> bool:
+    """Request Per-Monitor V2 scaling before any native GUI objects are created."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        set_awareness = user32.SetProcessDpiAwarenessContext
+        set_awareness.argtypes = [ctypes.c_void_p]
+        set_awareness.restype = ctypes.c_bool
+        return bool(set_awareness(ctypes.c_void_p(-4)))
+    except (AttributeError, OSError):
+        # Packaged Windows builds also carry a PerMonitorV2 manifest. Older
+        # Windows releases can safely continue with their manifest/default DPI mode.
+        return False
 
 
 if __name__ == "__main__":

@@ -2008,3 +2008,384 @@ progress::-moz-progress-bar {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Routed views keep task state mounted while separating workflow and system setup. */
+.view {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+
+.custom-select {
+  position: relative;
+  min-width: 0;
+}
+
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::after {
+  position: absolute;
+  z-index: 500;
+  top: calc(100% + 7px);
+  left: 50%;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 24px));
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  padding: 5px 8px;
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-popover);
+  color: var(--color-text-body);
+  content: attr(data-tooltip);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  opacity: 0;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  transform: translate(-50%, -3px);
+  transition: opacity var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard);
+  visibility: hidden;
+  white-space: normal;
+}
+
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  visibility: visible;
+}
+
+.custom-select.is-open {
+  z-index: 40;
+}
+
+.select-trigger {
+  width: 100%;
+  min-height: 42px;
+  justify-content: space-between;
+  padding: 8px 11px;
+  background: var(--color-control);
+  color: var(--color-text-primary);
+  text-align: left;
+}
+
+.custom-select:has(.select-trigger:disabled) {
+  opacity: 0.72;
+}
+
+.select-trigger:disabled {
+  border-color: var(--color-divider);
+  background: color-mix(in srgb, var(--color-control) 72%, var(--color-canvas) 28%);
+}
+
+.select-trigger .icon-chevron {
+  flex: 0 0 auto;
+  transition: transform var(--duration-fast) var(--ease-standard);
+}
+
+.custom-select.is-open .select-trigger .icon-chevron {
+  transform: rotate(180deg);
+}
+
+.select-listbox {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  max-height: min(280px, calc(100vh - 96px));
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 5px;
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-popover);
+}
+
+.select-listbox[hidden] {
+  display: none;
+}
+
+.custom-select.opens-up .select-listbox {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.select-listbox [role="option"] {
+  width: 100%;
+  min-height: 38px;
+  justify-content: flex-start;
+  border-color: transparent;
+  padding: 7px 9px;
+  background: transparent;
+  color: var(--color-text-body);
+  text-align: left;
+}
+
+.select-listbox [role="option"][aria-selected="true"] {
+  background: var(--color-selected);
+  color: var(--color-accent-ink);
+  font-weight: 650;
+}
+
+input:disabled,
+input[aria-disabled="true"] {
+  border-color: var(--color-divider);
+  background: color-mix(in srgb, var(--color-control) 72%, var(--color-canvas) 28%);
+  color: var(--color-text-disabled);
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
+.setting-row-toggle:has(input:disabled) {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.dependency-list {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--color-divider);
+  padding-top: 18px;
+}
+
+.dependency-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  background: var(--color-canvas-soft);
+}
+
+.dependency-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.dependency-heading h4 {
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: 680;
+}
+
+.dependency-heading h4 span {
+  margin-left: 6px;
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dependency-heading p,
+.dependency-card > label {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  line-height: 19px;
+}
+
+.dependency-path-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.dependency-path-row input[readonly] {
+  background: var(--color-control);
+  color: var(--color-text-secondary);
+  font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+}
+
+.dependency-detail {
+  min-height: 18px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.dependency-badge {
+  flex: 0 0 auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 4px 9px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.dependency-badge.ok {
+  border-color: color-mix(in srgb, var(--color-success) 48%, transparent);
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
+  color: var(--color-success);
+}
+
+.dependency-badge.danger {
+  border-color: color-mix(in srgb, var(--color-danger) 48%, transparent);
+  background: var(--color-danger-surface);
+  color: var(--color-danger-text);
+}
+
+.dependency-badge.muted {
+  color: var(--color-text-tertiary);
+}
+
+.subset-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  border-top: 1px solid var(--color-divider);
+  padding-top: 13px;
+}
+
+.subset-summary > strong {
+  margin-right: 3px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.family-progress {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(140px, 2fr) auto;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--color-divider);
+  padding-top: 11px;
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+}
+
+.family-progress progress {
+  width: 100%;
+}
+
+.toast-region {
+  position: fixed;
+  z-index: 2000;
+  top: 78px;
+  right: 20px;
+  display: grid;
+  gap: 10px;
+  width: min(440px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.toast {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: start;
+  gap: 10px;
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-focus);
+  border-radius: var(--radius-sm);
+  padding: 13px 13px 13px 15px;
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-popover);
+  color: var(--color-text-body);
+  pointer-events: auto;
+  animation: toast-enter var(--duration-normal) var(--ease-standard);
+}
+
+.toast.success { border-left-color: var(--color-success); }
+.toast.warning { border-left-color: var(--color-brand); }
+.toast.error { border-left-color: var(--color-danger); }
+
+.toast-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.toast-copy strong {
+  color: var(--color-text-primary);
+  font-size: 13px;
+}
+
+.toast-copy p {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 19px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.toast-action,
+.toast-dismiss {
+  min-height: 32px;
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
+.toast-dismiss {
+  width: 32px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font-size: 18px;
+}
+
+.confirm-dialog {
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+}
+
+@keyframes toast-enter {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 760px) {
+  .dependency-path-row,
+  .family-progress {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dependency-path-row button {
+    width: 100%;
+  }
+
+  .toast-region {
+    top: 70px;
+    right: 12px;
+  }
+}
+
+@media (min-width: 900px) and (max-width: 1199px) {
+  .step[data-tooltip]::after {
+    top: 50%;
+    left: calc(100% + 8px);
+    transform: translate(0, -50%);
+  }
+}
+
+@media (forced-colors: active) {
+  .step.active,
+  .select-listbox [role="option"][aria-selected="true"],
+  .toast,
+  .dependency-badge,
+  .toggle-control {
+    border: 1px solid CanvasText;
+    background: Canvas;
+    color: CanvasText;
+    forced-color-adjust: none;
+  }
+
+  .status-dot,
+  .sidebar-status-dot,
+  .local-only-dot {
+    background: CanvasText;
+    box-shadow: none;
+  }
+
+  :where(button, input, summary, a):focus-visible {
+    outline: 2px solid Highlight;
+    box-shadow: none;
+  }
+}

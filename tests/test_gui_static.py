@@ -33,6 +33,46 @@ def test_gui_provides_custom_frameless_window_controls():
     assert 'callApi("close_window")' in javascript
 
 
+def test_gui_ships_and_references_approved_brand_assets():
+    static_dir = ROOT / "plexmuxy_gui" / "static"
+    asset_dir = static_dir / "assets"
+    html = (static_dir / "index.html").read_text(encoding="utf-8")
+    package_config = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+    source_assets = {
+        "plexmuxy-app-icon.svg": ROOT / "logo" / "svg" / "plexmuxy-app-icon.svg",
+        "plexmuxy-app-icon-32.png": ROOT / "logo" / "png" / "plexmuxy-app-icon-32.png",
+        "plexmuxy-app-icon-64.png": ROOT / "logo" / "png" / "plexmuxy-app-icon-64.png",
+        "plexmuxy-app.ico": ROOT / "logo" / "plexmuxy-app.ico",
+    }
+    for name, source in source_assets.items():
+        packaged = asset_dir / name
+        assert packaged.read_bytes() == source.read_bytes()
+
+    assert 'href="./assets/plexmuxy-app-icon.svg"' in html
+    assert 'href="./assets/plexmuxy-app-icon-32.png"' in html
+    assert html.count('src="./assets/plexmuxy-app-icon-64.png"') == 2
+    assert "data:image/svg+xml" not in html
+    assert '"static/assets/*.svg"' in package_config
+    assert '"static/assets/*.png"' in package_config
+    assert '"static/assets/*.ico"' in package_config
+
+
+def test_windows_binaries_and_readmes_use_approved_brand_assets():
+    gui_spec = (ROOT / "plexmuxy-gui.spec").read_text(encoding="utf-8")
+    cli_spec = (ROOT / "plexmuxy-cli.spec").read_text(encoding="utf-8")
+    readmes = [
+        (ROOT / "README.md").read_text(encoding="utf-8"),
+        (ROOT / "README.CN.md").read_text(encoding="utf-8"),
+    ]
+
+    assert 'icon="logo/plexmuxy-app.ico"' in gui_spec
+    assert 'icon="logo/plexmuxy-app.ico"' in cli_spec
+    for readme in readmes:
+        assert "./logo/svg/plexmuxy-lockup-dark.svg" in readme
+        assert "./logo/svg/plexmuxy-lockup-light.svg" in readme
+
+
 def test_gui_implements_product_themes_and_desktop_navigation():
     html = (ROOT / "plexmuxy_gui" / "static" / "index.html").read_text(encoding="utf-8")
     css = (ROOT / "plexmuxy_gui" / "static" / "app.css").read_text(encoding="utf-8")
@@ -124,3 +164,97 @@ def test_gui_source_catalog_covers_static_and_dynamic_translation_keys():
 
     assert used_keys
     assert used_keys <= english.keys()
+
+
+def test_gui_separates_workspace_and_persistent_environment_routes():
+    static_dir = ROOT / "plexmuxy_gui" / "static"
+    html = (static_dir / "index.html").read_text(encoding="utf-8")
+    javascript = (static_dir / "app.js").read_text(encoding="utf-8")
+
+    assert 'id="workspace-view"' in html
+    assert 'id="environment-view"' in html
+    assert 'href="#/environment"' in html
+    assert 'href="#/workspace/directory-section"' in html
+    assert "function parseRoute" in javascript
+    assert "function handleRoute" in javascript
+    assert 'state.currentView = route.view' in javascript
+
+
+def test_gui_replaces_native_selects_with_accessible_listboxes():
+    static_dir = ROOT / "plexmuxy_gui" / "static"
+    html = (static_dir / "index.html").read_text(encoding="utf-8")
+    javascript = (static_dir / "app.js").read_text(encoding="utf-8")
+    css = (static_dir / "app.css").read_text(encoding="utf-8")
+
+    assert "<select" not in html
+    assert html.count('role="combobox"') == 2
+    assert html.count('role="listbox"') == 2
+    assert 'aria-haspopup="listbox"' in html
+    for behavior in (
+        "handleSelectTriggerKey",
+        "handleSelectOptionKey",
+        "findTypeaheadMatch",
+        "handleOutsideSelectPointer",
+        "opens-up",
+    ):
+        assert behavior in javascript
+    assert '.select-listbox [role="option"][aria-selected="true"]' in css
+
+
+def test_gui_uses_toasts_for_transient_results_and_custom_close_confirmation():
+    static_dir = ROOT / "plexmuxy_gui" / "static"
+    html = (static_dir / "index.html").read_text(encoding="utf-8")
+    javascript = (static_dir / "app.js").read_text(encoding="utf-8")
+
+    assert 'id="toast-region"' in html
+    assert 'id="close-dialog"' in html
+    assert 'callApi("open_diagnostics_location")' in javascript
+    assert "function showToast" in javascript
+    assert "window.PlexMuxyRequestClose = closeWindow" in javascript
+    assert 'setRuntimeStatus(t("status.diagnostics"' not in javascript
+    assert 'setRuntimeStatus(t("status.settingsSaved"' not in javascript
+
+
+def test_gui_exposes_persistent_dependency_paths_notifications_and_font_subsetting():
+    static_dir = ROOT / "plexmuxy_gui" / "static"
+    html = (static_dir / "index.html").read_text(encoding="utf-8")
+    javascript = (static_dir / "app.js").read_text(encoding="utf-8")
+
+    for identifier in (
+        "mkvmerge-path",
+        "ffmpeg-path",
+        "unrar-path",
+        "notifications-enabled",
+        "test-notification-btn",
+        "font-subset",
+    ):
+        assert f'id="{identifier}"' in html
+    assert 'callApi("choose_dependency", dependency)' in javascript
+    assert 'callApi("save_environment_settings"' in javascript
+    assert 'callApi("test_notification"' in javascript
+    assert 'font_mode: $("font-subset").checked ? "subset" : state.lastNonSubsetFontMode' in javascript
+    assert "font_subset_intent?.summary" in javascript
+    assert "completed_families" in javascript
+    for phase in ("running_mux", "verifying_outputs", "subsetting_fonts", "validating_subsets"):
+        assert f'"progress.phase.{phase}"' in (static_dir / "locales" / "en.json").read_text(encoding="utf-8")
+
+
+def test_gui_disables_every_workflow_input_while_busy():
+    javascript = (ROOT / "plexmuxy_gui" / "static" / "app.js").read_text(encoding="utf-8")
+
+    assert '"input-dir", "cleanup", "extra-dir", "output-dir", "output-suffix"' in javascript
+    assert '"name-strategy", "name-template", "font-subset", "overwrite"' in javascript
+    assert "control.disabled = busy" in javascript
+    assert 'control.setAttribute("aria-disabled", String(busy))' in javascript
+
+
+def test_gui_has_high_contrast_disabled_and_per_monitor_v2_support():
+    css = (ROOT / "plexmuxy_gui" / "static" / "app.css").read_text(encoding="utf-8")
+    manifest = (ROOT / "packaging" / "plexmuxy-gui.manifest").read_text(encoding="utf-8")
+    spec = (ROOT / "plexmuxy-gui.spec").read_text(encoding="utf-8")
+
+    assert "@media (forced-colors: active)" in css
+    assert "input:disabled" in css
+    assert "max-height: calc(100dvh - 32px)" in css
+    assert "PerMonitorV2,PerMonitor" in manifest
+    assert 'manifest="packaging/plexmuxy-gui.manifest"' in spec
