@@ -50,7 +50,7 @@ def redact_config(data: dict) -> dict:
 
 def dependency_versions() -> dict[str, str]:
     result: dict[str, str] = {}
-    for name in ("pymkv", "py7zr", "patool", "rich", "fonttools", "pywebview"):
+    for name in ("pymkv2", "py7zr", "patool", "rich", "fonttools", "pywebview"):
         try:
             result[name] = metadata.version(name)
         except metadata.PackageNotFoundError:

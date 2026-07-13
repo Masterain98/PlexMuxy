@@ -1,7 +1,9 @@
 __pycache__
 .coverage
 .mypy_cache/
+.venv/
 .ruff_cache/
+.uv-cache/
 .pytest_cache/
 *.egg-info/
 dist/

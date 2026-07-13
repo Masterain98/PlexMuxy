@@ -14,6 +14,7 @@ All notable changes follow Keep a Changelog categories.
 
 ### Changed
 
+- Replaced the unmaintained `pymkv` distribution with `pymkv2` while preserving the `pymkv` runtime import API.
 - Matching now performs global confidence assignment and skips ambiguity by default.
 - Muxing uses cancellable subprocesses, temporary outputs, structural verification, and bounded concurrency.
 - Source tracks are preserved by default; filtering remains opt-in future work.

@@ -1,6 +1,5 @@
 patool>=2.2
 py7zr>=0.21
-pymkv>=1.0.8
+pymkv2>=2.3.2
 rich>=13.7
 fonttools>=4.53
-setuptools<82

@@ -103,15 +103,54 @@ Source container tracks are read with `mkvmerge -J` and shown in plans. The 0.2 
 
 ## Development
 
+Create a local environment with the development and GUI dependencies:
+
 ```bash
-pip install -e ".[dev,build]"
-pytest -m "not integration"
-pytest -m integration       # requires ffmpeg + mkvmerge
-ruff check plexmuxy plexmuxy_gui tests
-mypy plexmuxy plexmuxy_gui
-python -m build
-python -m PyInstaller --clean --noconfirm plexmuxy-cli.spec
-python -m PyInstaller --clean --noconfirm plexmuxy-gui.spec
+uv sync --extra dev --extra gui
+```
+
+### Debug the CLI from source
+
+Run the package module so edits are picked up directly from the working tree:
+
+```bash
+uv run python -m plexmuxy show-config
+uv run python -m plexmuxy plan D:\Media --json plan.json
+```
+
+For an IDE debugger, select `.venv/Scripts/python.exe` on Windows or `.venv/bin/python` on macOS/Linux, launch the `plexmuxy` module, and put the desired CLI arguments in the debugger configuration. Useful breakpoint entry points are `plexmuxy/cli.py` and `plexmuxy/service.py`.
+
+### Debug the GUI from source
+
+`PLEXMUXY_GUI_DEBUG=1` enables debug logging and pywebview/WebView2 developer mode:
+
+```powershell
+# PowerShell
+$env:PLEXMUXY_GUI_DEBUG = "1"
+uv run --extra gui python -m plexmuxy_gui.app
+Remove-Item Env:PLEXMUXY_GUI_DEBUG
+```
+
+```bash
+# macOS/Linux
+PLEXMUXY_GUI_DEBUG=1 uv run --extra gui python -m plexmuxy_gui.app
+```
+
+For an IDE debugger, launch the `plexmuxy_gui.app` module with the same environment variable. The Python bridge lives in `plexmuxy_gui/api.py`, the shared execution path in `plexmuxy/service.py`, and the frontend in `plexmuxy_gui/static/app.js`. GUI logs are written under the platform config directory: `%APPDATA%\PlexMuxy\logs` on Windows, `~/Library/Application Support/PlexMuxy/logs` on macOS, or `$XDG_CONFIG_HOME/plexmuxy/logs` on Linux.
+
+### Validate and build
+
+```bash
+uv run --extra dev pytest -m "not integration"
+uv run --extra dev pytest -m integration       # requires ffmpeg + mkvmerge
+uv run --extra dev ruff check plexmuxy plexmuxy_gui tests
+uv run --extra dev mypy plexmuxy plexmuxy_gui
+uv run --extra dev python -m build
+
+# Install the build extra before creating standalone executables.
+uv sync --extra dev --extra gui --extra build
+uv run --extra build python -m PyInstaller --clean --noconfirm plexmuxy-cli.spec
+uv run --extra build python -m PyInstaller --clean --noconfirm plexmuxy-gui.spec
 ```
 
 See [architecture](docs/architecture.md), [troubleshooting](docs/troubleshooting.md), [security](docs/security.md), and [release process](docs/release-process.md).
