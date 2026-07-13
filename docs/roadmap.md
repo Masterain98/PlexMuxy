@@ -1,10 +1,11 @@
 # Deferred follow-up work
 
-The 0.2 scope intentionally preserves source tracks and full/referenced fonts. Proposed follow-up issues:
+PlexMuxy now includes structural ASS/SSA analysis, real FontTools glyph subsetting, deterministic alias rewriting, TTC/OTC face handling, and execution-scoped cache/fallback. Remaining proposed follow-up issues:
 
-- ASS/SSA font alias analysis and richer missing-font reporting.
-- True glyph subsetting with fontTools, including CJK, shaping, OpenType features, TTC collections, and deterministic full-font fallback.
+- Optional HarfBuzz repacking and FFmpeg/libass golden-frame parity fixtures for more scripts and font formats.
+- Versioned persistent subset caching after FontTools/HarfBuzz compatibility keys are defined.
+- Windows App SDK notifications with installer-provided application identity, activation, and action buttons.
 - Source audio preview and explicit commentary/language/title filters; unknown tracks must be kept.
 - Multi-directory queue, persisted job history, and safe manual plan editing.
-- Internationalized CLI/GUI resources and optional update checks.
+- Internationalized CLI resources and optional update checks.
 - Optional Plex library scan integration isolated from the mux transaction.

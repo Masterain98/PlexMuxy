@@ -1,3 +1,11 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./logo/svg/plexmuxy-lockup-dark.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="./logo/svg/plexmuxy-lockup-light.svg" />
+    <img src="./logo/svg/plexmuxy-lockup-light.svg" width="640" alt="PlexMuxy" />
+  </picture>
+</p>
+
 # PlexMuxy
 
 PlexMuxy safely batches video, external audio, ASS/SSA subtitles, and font attachments into Matroska files for Plex. The CLI and desktop GUI use the same planning and execution service.
@@ -56,7 +64,7 @@ plexmuxy mux D:\Media --cleanup delete --yes
 plexmuxy diagnostics --output diagnostics.zip
 ```
 
-Useful job overrides include `--output-dir`, `--output-suffix`, `--name-strategy`, `--name-template`, `--extra-dir`, `--overwrite`, and `--cleanup`.
+Useful job overrides include `--output-dir`, `--output-suffix`, `--name-strategy`, `--name-template`, `--extra-dir`, `--font-mode`, `--overwrite`, and `--cleanup`. For example, `--font-mode subset` enables font subsetting for that plan.
 
 ## Configuration
 
@@ -89,6 +97,10 @@ Important defaults:
 
 Parallel mux jobs are intentionally limited to 1–4 and default to 1. The old `thread_count` key is accepted only for migration. Archive limits apply before ZIP/7z extraction; uninspectable RAR archives require explicit permission.
 
+The desktop “Environment configuration” view is persistent and separate from job options. It shows environment-variable and `PATH` discovery first, then offers a native file picker for `mkvmerge`, `ffmpeg`, or `unrar` when automatic discovery fails. Windows builds opt into Per-Monitor V2 awareness before creating native windows so the WebView and file dialogs follow system scaling on high-DPI and mixed-monitor setups.
+
+Windows job notifications can be enabled on that page. The current native Windows Shell backend covers completed, failed, and cancelled jobs, and notification failures never change a mux result. Action buttons, application activation, and durable notification-center identity require a future installer/application-identity integration with the Windows App SDK.
+
 ## Matching
 
 Each subtitle or external audio file is assigned once using this priority: exact stem (1.0), normalized title (0.85), normalized episode identity (0.70), and optional controlled single-video movie fallback. Episode parsing supports `[1]`, `[100]`, `S01E01`, `S01EP01`, `E01`, `EP01`, `.01.`, `SP01`, `Special`, and `OVA`.
@@ -97,7 +109,11 @@ Equal best candidates become `ambiguous_match` and are skipped. Low-confidence c
 
 ## Fonts and source tracks
 
-`font.mode=all` preserves the compatibility-first behavior. `referenced` parses ASS/SSA style font names and `\fn` overrides, matches font metadata, and follows `missing_font_action`. `subset` currently falls back to referenced full fonts and reports that decision; it never emits a knowingly incomplete subset.
+`font.mode=all` preserves the compatibility-first behavior. `referenced` uses the structural ASS/SSA parser and internal font names to select complete fonts. `subset` performs real glyph subsetting: it follows dynamic `Format` fields plus Style and override state (`\fn`, `\r`, `\b`, `\i`, `\p`, and `\t(...)`), enumerates every TTF/OTF/TTC/OTC face, and deterministically matches internal family, weight, italic, and cmap metadata. Temporary subtitles rewrite only validated families to `PMX_<hash>` aliases; source subtitles and fonts are never modified.
+
+Every plan in a batch is prepared and revalidated in an execution-scoped workspace before any `mkvmerge` process starts. Identical subset work is cached for that execution and the workspace is removed after success, failure, or cancellation. If FontTools cannot safely subset a matched family, the default policy attaches that family’s complete source faces without rewriting its name. Missing or ambiguous fonts, missing glyphs, structurally unsafe ASS, and ambiguous BOM-less GB18030/CP932 input are never silently treated as safe subsets. Configure `missing_font_action` and `subset_failure_action` for the permitted skip, fail-job, or full-font behavior.
+
+Output verification checks the expected attachment file names and MIME types as well as track properties and counts.
 
 Source container tracks are read with `mkvmerge -J` and shown in plans. The 0.2 product decision is to preserve all source tracks. Filter configuration is reserved for explicit future use; unknown languages and untitled tracks must remain included.
 

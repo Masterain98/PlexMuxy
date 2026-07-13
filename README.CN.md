@@ -1,3 +1,11 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./logo/svg/plexmuxy-lockup-dark.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="./logo/svg/plexmuxy-lockup-light.svg" />
+    <img src="./logo/svg/plexmuxy-lockup-light.svg" width="640" alt="PlexMuxy" />
+  </picture>
+</p>
+
 # Plex 视频批量封装工具（PlexMuxy）
 
 PlexMuxy 用于将视频、外挂音频、ASS/SSA 字幕和字体安全地批量封装为 Matroska 文件。CLI 与桌面 GUI 共用同一套计划和执行服务。
@@ -53,7 +61,7 @@ plexmuxy mux D:\Media --cleanup delete --yes
 plexmuxy diagnostics --output diagnostics.zip
 ```
 
-可用覆盖参数包括 `--output-dir`、`--output-suffix`、`--name-strategy`、`--name-template`、`--extra-dir`、`--overwrite` 和 `--cleanup`。
+可用覆盖参数包括 `--output-dir`、`--output-suffix`、`--name-strategy`、`--name-template`、`--extra-dir`、`--font-mode`、`--overwrite` 和 `--cleanup`。例如 `--font-mode subset` 会为本次计划启用字体子集化。
 
 ## 配置与兼容性
 
@@ -63,6 +71,10 @@ plexmuxy diagnostics --output diagnostics.zip
 
 默认匹配策略保守：`movie_fallback=false`、最低置信度 0.7、歧义项跳过。并发配置为 `max_parallel_mux_jobs`，范围 1–4，默认 1；旧 `thread_count` 仅用于迁移。
 
+桌面端的“环境配置”是独立于任务工作流的持久化页面。它优先显示环境变量与 `PATH` 的自动探测结果；自动探测失败时，可通过系统文件选择器指定 `mkvmerge`、`ffmpeg` 或 `unrar`。Windows 构建在创建原生窗口前启用 Per-Monitor V2 DPI 感知，因此文件选择器和 WebView 在高分辨率、多显示器环境中使用系统缩放。
+
+Windows 可在该页面启用任务结束通知。当前实现使用 Windows Shell 的原生通知区域后端，覆盖任务完成、失败和取消；通知不可用不会影响封装结果。需要应用激活、操作按钮和通知中心身份的 Windows App SDK 通知属于后续安装器/应用身份工作。
+
 ## 文件匹配
 
 优先级为：完全同名（1.0）→ 标准化标题（0.85）→ 标准化集数身份（0.70）→ 可选的单视频电影回退。支持 `[1]`、`[100]`、`S01E01`、`S01EP01`、`E01`、`EP01`、`.01.`、`SP01`、`Special`、`OVA`。
@@ -71,11 +83,13 @@ plexmuxy diagnostics --output diagnostics.zip
 
 ## 字体、压缩包和源轨道
 
-`font.mode=all` 默认附加全部字体；`referenced` 会读取 ASS/SSA 样式字体与 `\fn` 覆盖标签；找不到字体时按 `missing_font_action` 处理。`subset` 当前安全回退为“引用到的完整字体”，不会生成已知缺字的子集。
+`font.mode=all` 默认附加全部字体；`referenced` 使用 ASS/SSA 结构解析与字体内部名称选择完整字体；`subset` 会真正生成只含所需字符的字体附件。子集模式按动态 `Format`、Style 和 override 状态解析 `\fn`、`\r`、`\b`、`\i`、`\p` 与 `\t(...)`，枚举 TTF/OTF/TTC/OTC 的全部 face，并按内部 family、weight、italic 和 cmap 做确定性匹配。临时字幕只把已验证 family 改为 `PMX_<hash>` alias，源字幕和源字体不会被修改。
+
+所有视频的子集字体和临时字幕必须先在执行专用工作区完成并重新验证，之后才会启动任何 `mkvmerge` 进程。同一执行中的相同子集会复用缓存；工作区在成功、失败或取消后统一删除。FontTools 无法安全处理某个已匹配 family 时，默认只为该 family 附加完整原字体并保留原字体名；字体缺失、匹配歧义、缺字、无法安全解析的 ASS 或无法区分的无 BOM GB18030/CP932 编码不会静默继续。可通过 `missing_font_action` 和 `subset_failure_action` 选择跳过视频、终止任务或允许的完整字体回退。
 
 ZIP/7z 在写入前检查压缩包大小、文件数、展开总大小、单文件大小和目录深度，并阻止路径穿越；RAR 无法可靠预检时必须显式允许。同名同内容字体去重，同名不同内容字体自动改名并报告冲突。
 
-计划阶段会读取源容器轨道并展示。0.2 的产品决策是默认保留全部源轨道；未知语言、无标题轨道不得自动删除。
+输出验证会同时核对字体附件名称和 MIME type。计划阶段也会读取源容器轨道并展示；默认保留全部源轨道，未知语言和无标题轨道不得自动删除。
 
 ## 开发与验证
 
