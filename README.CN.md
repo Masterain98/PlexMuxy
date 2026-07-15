@@ -6,9 +6,9 @@
   </picture>
 </p>
 
-# Plex 视频批量封装工具（PlexMuxy）
+# Plex 媒体封装与元信息整理工具（PlexMuxy）
 
-PlexMuxy 用于将视频、外挂音频、ASS/SSA 字幕和字体安全地批量封装为 Matroska 文件。CLI 与桌面 GUI 共用同一套计划和执行服务。
+PlexMuxy 按照 Plex Media Server 的扫描、播放和元信息识别习惯规划并生成 Matroska 文件。它会匹配外挂音轨与 ASS/SSA 字幕、附加字幕所需字体，并写入轨道语言、名称、标记等元信息，让 Plex 能正确发现、加载和呈现这些额外内容。例如，字幕轨道不仅会显示语言，还可以保留从文件名识别出的字幕组信息，而不是成为没有名称的普通轨道。CLI 与桌面 GUI 共用同一套计划和执行服务。
 
 ## 数据安全保证
 

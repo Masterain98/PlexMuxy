@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "plexmuxy"
 dynamic = ["version"]
-description = "Batch mux media files with external audio, subtitles, and fonts for Plex."
+description = "Prepare Plex-compatible Matroska media with correctly identified tracks, subtitles, fonts, and metadata."
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
@@ -61,7 +61,7 @@ version = {attr = "plexmuxy.__version__"}
 include = ["plexmuxy", "plexmuxy.*", "plexmuxy_gui", "plexmuxy_gui.*"]
 
 [tool.setuptools.package-data]
-plexmuxy = ["locales/*.json"]
+plexmuxy = ["VERSION", "locales/*.json"]
 plexmuxy_gui = [
   "static/*.html",
   "static/*.css",

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark light" />
-  <meta name="description" content="Plan, review, and run Plex-ready media mux jobs from a focused desktop workspace." data-i18n-content="meta.description" />
+  <meta name="description" content="Prepare Matroska media with correctly identified tracks, subtitles, and font attachments for Plex." data-i18n-content="meta.description" />
   <title>PlexMuxy · Mux workspace</title>
   <link rel="icon" type="image/svg+xml" href="./assets/plexmuxy-app-icon.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="./assets/plexmuxy-app-icon-32.png" />
@@ -130,6 +130,10 @@
           </div>
           <div id="sidebar-config-path" class="mini-path" data-i18n="sidebar.loadingConfig">Loading configuration…</div>
         </div>
+        <a class="step utility-step sidebar-about" href="#/about" data-route="about" title="About PlexMuxy" data-i18n-title="sidebar.about.tooltip">
+          <img class="nav-project-icon" src="assets/plexmuxy-app-icon.svg" width="20" height="20" alt="" aria-hidden="true" />
+          <span class="step-copy"><strong data-i18n="sidebar.about.title">About</strong><small data-i18n="sidebar.about.subtitle">Project and credits</small></span>
+        </a>
       </aside>
 
       <div class="main-column">
@@ -222,7 +226,6 @@
                   <h2 data-i18n="page.title">Prepare a mux job</h2>
                   <p data-i18n="page.description">Choose a media folder, tune this session, then inspect the exact track plan before any files change.</p>
                 </div>
-                <span class="local-only-note"><span class="local-only-dot" aria-hidden="true"></span><span data-i18n="page.localOnly">Runs locally</span></span>
               </div>
             </header>
 
@@ -426,7 +429,6 @@
             </section>
 
             <footer class="workspace-footer">
-              <span data-i18n="footer.local">PlexMuxy processes media on this device.</span>
               <span data-i18n="footer.review">Review destructive options before every run.</span>
             </footer>
             </div>
@@ -581,6 +583,60 @@
               </section>
 
               <footer class="workspace-footer"><span data-i18n="environment.footer">Environment changes are validated before they are saved.</span></footer>
+            </div>
+
+            <div id="about-view" class="view hidden" data-view="about">
+              <header class="about-hero">
+                <img class="about-app-icon" src="assets/plexmuxy-app-icon.svg" width="104" height="104" alt="PlexMuxy app icon" data-i18n-alt="about.iconAlt" />
+                <div class="about-identity">
+                  <p class="breadcrumb" data-i18n="about.breadcrumb">Application information</p>
+                  <h2>PlexMuxy</h2>
+                  <p data-i18n="about.description">Prepares Matroska media around Plex Media Server's scanning, playback, and metadata expectations.</p>
+                  <div class="about-meta" aria-label="Application details" data-i18n-aria-label="about.detailsLabel">
+                    <span id="about-version" data-i18n="about.versionUnavailable">Version unavailable</span>
+                    <span data-i18n="about.licenseValue">MIT License</span>
+                  </div>
+                </div>
+              </header>
+
+              <section class="panel about-section" aria-labelledby="about-purpose-title">
+                <div class="about-section-heading">
+                  <p class="eyebrow" data-i18n="about.purpose.eyebrow">Purpose</p>
+                  <h3 id="about-purpose-title" data-i18n="about.purpose.title">Make added content work correctly in Plex</h3>
+                </div>
+                <p data-i18n="about.purpose.description">PlexMuxy matches external audio and subtitles, attaches subtitle fonts, and writes track languages, names, flags, and release-group details so Plex can load and present the added content correctly.</p>
+                <p class="about-note" data-i18n="about.disclaimer">PlexMuxy is an independent open-source project and is not affiliated with, endorsed by, or sponsored by Plex.</p>
+              </section>
+
+              <section class="panel about-section" aria-labelledby="about-credits-title">
+                <div class="about-section-heading">
+                  <p class="eyebrow" data-i18n="about.credits.eyebrow">Credits</p>
+                  <h3 id="about-credits-title" data-i18n="about.credits.title">Open-source foundations</h3>
+                </div>
+                <div class="credit-list">
+                  <button class="credit-item credit-link" type="button" data-project-link="pywebview">
+                    <strong>pywebview</strong>
+                    <span data-i18n="about.credits.pywebview">Native webview window for the desktop interface</span>
+                    <svg class="icon" aria-hidden="true"><use href="#icon-external"></use></svg>
+                  </button>
+                  <button class="credit-item credit-link" type="button" data-project-link="ffmpeg">
+                    <strong>FFmpeg</strong>
+                    <span data-i18n="about.credits.ffmpeg">Optional media verification and audio previews</span>
+                    <svg class="icon" aria-hidden="true"><use href="#icon-external"></use></svg>
+                  </button>
+                  <button class="credit-item credit-link" type="button" data-project-link="mkvtoolnix">
+                    <strong>MKVToolNix</strong>
+                    <span data-i18n="about.credits.mkvtoolnix">Matroska media muxing tools</span>
+                    <svg class="icon" aria-hidden="true"><use href="#icon-external"></use></svg>
+                  </button>
+                </div>
+                <div class="button-row about-actions">
+                  <button class="primary" type="button" data-project-link="repository"><svg class="icon" aria-hidden="true"><use href="#icon-external"></use></svg><span data-i18n="about.repository">View source code</span></button>
+                  <button class="ghost" type="button" data-project-link="license"><svg class="icon" aria-hidden="true"><use href="#icon-external"></use></svg><span data-i18n="about.license">Read license</span></button>
+                </div>
+              </section>
+
+              <footer class="workspace-footer"><span data-i18n="about.footer">Thanks to the open-source projects that make PlexMuxy possible.</span></footer>
             </div>
           </div>
         </main>

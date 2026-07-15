@@ -88,6 +88,9 @@ function bindEvents() {
   document.querySelectorAll(".dependency-auto-detect").forEach((button) => {
     if (!button.dataset.boundClick) { button.addEventListener("click", autoDetectDependency); button.dataset.boundClick = "true"; }
   });
+  document.querySelectorAll("[data-project-link]").forEach((button) => {
+    if (!button.dataset.boundClick) { button.addEventListener("click", openProjectLink); button.dataset.boundClick = "true"; }
+  });
   const installUnrarButton = $("install-unrar-btn");
   if (installUnrarButton && !installUnrarButton.dataset.boundClick) { installUnrarButton.addEventListener("click", installUnrarFromRarlab); installUnrarButton.dataset.boundClick = "true"; }
   if (document.body && !document.body.dataset.boundResponsiveUi) {
@@ -395,6 +398,7 @@ function parseRoute(hash = window.location.hash) {
   const parts = normalized.split("/").filter(Boolean);
   if (parts[0] === "environment") return { view: "environment", section: null };
   if (parts[0] === "jobs") return { view: "jobs", section: null };
+  if (parts[0] === "about") return { view: "about", section: null };
   if (parts[0] === "workspace") return { view: "workspace", section: parts[1] || "directory-section" };
   if (normalized && $(normalized)) return { view: "workspace", section: normalized };
   return { view: "workspace", section: "directory-section" };
@@ -403,14 +407,16 @@ function parseRoute(hash = window.location.hash) {
 function handleRoute(smooth = false) {
   const route = parseRoute();
   state.currentView = route.view;
-  const workspace = $("workspace-view"); const environment = $("environment-view"); const jobs = $("jobs-view");
+  const workspace = $("workspace-view"); const environment = $("environment-view"); const jobs = $("jobs-view"); const about = $("about-view");
   const showWorkspace = route.view === "workspace";
   workspace?.classList.toggle("hidden", !showWorkspace);
   environment?.classList.toggle("hidden", route.view !== "environment");
   jobs?.classList.toggle("hidden", route.view !== "jobs");
+  about?.classList.toggle("hidden", route.view !== "about");
   if (workspace) workspace.inert = !showWorkspace;
   if (environment) environment.inert = route.view !== "environment";
   if (jobs) jobs.inert = route.view !== "jobs";
+  if (about) about.inert = route.view !== "about";
   updateRouteLabels();
   if (showWorkspace) {
     const section = $(route.section) ? route.section : "directory-section";
@@ -421,8 +427,11 @@ function handleRoute(smooth = false) {
     state.navigationScrollCleanup?.();
     state.navigationTarget = null;
     setActiveNavigation("#/environment");
-  } else {
+  } else if (route.view === "jobs") {
     state.navigationScrollCleanup?.(); state.navigationTarget = null; setActiveNavigation("#/jobs"); loadJobs();
+    $("main-content")?.scrollTo({ top: 0, behavior: "auto" });
+  } else {
+    state.navigationScrollCleanup?.(); state.navigationTarget = null; setActiveNavigation("#/about");
     $("main-content")?.scrollTo({ top: 0, behavior: "auto" });
   }
 }
@@ -430,9 +439,10 @@ function handleRoute(smooth = false) {
 function updateRouteLabels() {
   const environment = state.currentView === "environment";
   const jobs = state.currentView === "jobs";
-  setText("topbar-context", environment ? t("topbar.system") : jobs ? t("sidebar.jobs.title") : t("topbar.workspace"));
-  setText("topbar-page", environment ? t("sidebar.environment.title") : jobs ? t("jobs.title") : t("topbar.newJob"));
-  document.title = environment ? t("document.environmentTitle") : jobs ? t("jobs.title") : t("document.workspaceTitle");
+  const about = state.currentView === "about";
+  setText("topbar-context", environment ? t("topbar.system") : jobs ? t("sidebar.jobs.title") : about ? t("topbar.application") : t("topbar.workspace"));
+  setText("topbar-page", environment ? t("sidebar.environment.title") : jobs ? t("jobs.title") : about ? t("sidebar.about.title") : t("topbar.newJob"));
+  document.title = environment ? t("document.environmentTitle") : jobs ? t("jobs.title") : about ? t("document.aboutTitle") : t("document.workspaceTitle");
 }
 
 function scrollToSection(targetSelector, smooth) {
@@ -468,10 +478,10 @@ function scrollToSection(targetSelector, smooth) {
 }
 
 function setActiveNavigation(target) {
-  document.querySelectorAll(".steps .step[href^='#']").forEach((link) => {
+  document.querySelectorAll(".sidebar .step[href^='#']").forEach((link) => {
     const selected = link.getAttribute("href") === target;
     link.classList.toggle("active", selected);
-    if (selected) link.setAttribute("aria-current", link.dataset.route === "environment" ? "page" : "step");
+    if (selected) link.setAttribute("aria-current", link.dataset.section ? "step" : "page");
     else link.removeAttribute("aria-current");
   });
 }
@@ -798,7 +808,17 @@ async function callApi(method, payload) {
 
 function renderAppInfo() {
   if (!state.appInfo) return;
-  setText("app-version", t("version", { version: state.appInfo.version })); setText("sidebar-config-path", state.appInfo.config_path || "");
+  setText("app-version", t("version", { version: state.appInfo.version }));
+  setText("about-version", t("version", { version: state.appInfo.version }));
+  setText("sidebar-config-path", state.appInfo.config_path || "");
+}
+
+async function openProjectLink(event) {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try { await callApi("open_project_link", button.dataset.projectLink); }
+  catch (error) { showToast(error.message, "error", t("toast.linkError.title")); }
+  finally { button.disabled = false; }
 }
 
 function renderConfigSummary() {

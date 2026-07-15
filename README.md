@@ -8,7 +8,7 @@
 
 # PlexMuxy
 
-PlexMuxy safely batches video, external audio, ASS/SSA subtitles, and font attachments into Matroska files for Plex. The CLI and desktop GUI use the same planning and execution service.
+PlexMuxy plans and builds Matroska files around Plex Media Server's scanning, playback, and metadata expectations. It matches external audio and ASS/SSA subtitles, attaches the fonts those subtitles need, and writes track languages, names, flags, and other metadata so Plex can discover and present the added content correctly. Subtitle tracks can expose both language and release-group information instead of appearing as unnamed tracks. The CLI and desktop GUI use the same planning and execution service.
 
 ## Safety model
 

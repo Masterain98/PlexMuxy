@@ -1,5 +1,5 @@
 {
-  "cli.description": "为 Plex 安全地生成计划并批量封装媒体。",
+  "cli.description": "按照 Plex 的识别偏好封装 Matroska 媒体，并正确整理轨道、附件及其元信息。",
   "cli.config": "config.json 的路径",
   "cli.language": "人类可读文本语言（system、en 或 zh-CN）",
   "cli.outputFormat": "输出人类可读文本或结构稳定的 JSON",

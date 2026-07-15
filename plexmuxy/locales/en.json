@@ -1,5 +1,5 @@
 {
-  "cli.description": "Safely plan and batch mux media for Plex.",
+  "cli.description": "Prepare Matroska media with correctly identified tracks and attachments for Plex.",
   "cli.config": "Path to config.json",
   "cli.language": "Human-readable language (system, en, or zh-CN)",
   "cli.outputFormat": "Output human-readable text or stable JSON",

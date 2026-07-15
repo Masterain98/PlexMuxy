@@ -108,6 +108,27 @@ def test_get_app_info_returns_ok(monkeypatch, tmp_path):
     assert response["data"]["name"] == "PlexMuxy"
 
 
+def test_open_project_link_uses_allowlist(monkeypatch):
+    opened = []
+    monkeypatch.setattr("plexmuxy_gui.api.webbrowser.open", lambda url: opened.append(url) or True)
+    api = PlexMuxyApi()
+
+    response = api.open_project_link("repository")
+
+    assert response["ok"] is True
+    assert opened == ["https://github.com/Masterain98/PlexMuxy"]
+    assert api.open_project_link("pywebview")["ok"] is True
+    assert api.open_project_link("ffmpeg")["ok"] is True
+    assert api.open_project_link("mkvtoolnix")["ok"] is True
+    assert api.open_project_link("https://example.test")["ok"] is False
+    assert opened == [
+        "https://github.com/Masterain98/PlexMuxy",
+        "https://github.com/r0x0r/pywebview",
+        "https://www.ffmpeg.org/",
+        "https://codeberg.org/mbunkus/mkvtoolnix",
+    ]
+
+
 def test_load_config_returns_default_summary_when_config_is_missing(monkeypatch, tmp_path):
     monkeypatch.setattr("plexmuxy_gui.api.resolve_config_path", lambda path=None: tmp_path / "missing.json")
     api = PlexMuxyApi()

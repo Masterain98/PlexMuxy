@@ -90,6 +90,38 @@ def test_gui_implements_product_themes_and_desktop_navigation():
     assert "grid-template-columns: 260px minmax(0, 1fr)" in css
     assert "@media (max-width: 1199px)" in css
     assert "IntersectionObserver" in javascript
+
+
+def test_gui_includes_localized_about_page_and_safe_project_links():
+    static_dir = ROOT / "plexmuxy_gui" / "static"
+    html = (static_dir / "index.html").read_text(encoding="utf-8")
+    javascript = (static_dir / "app.js").read_text(encoding="utf-8")
+    english = json.loads((static_dir / "locales" / "en.json").read_text(encoding="utf-8"))
+    chinese = json.loads((static_dir / "locales" / "zh-CN.json").read_text(encoding="utf-8"))
+
+    assert 'href="#/about"' in html
+    assert 'id="about-view"' in html
+    assert html.index('</nav>') < html.index('href="#/about"')
+    assert html.index('class="sidebar-footer"') < html.index('href="#/about"')
+    assert 'src="assets/plexmuxy-app-icon.svg"' in html
+    assert 'class="nav-project-icon"' in html
+    assert 'id="about-version"' in html
+    assert 'data-project-link="repository"' in html
+    assert 'data-project-link="contributors"' not in html
+    assert 'data-project-link="pywebview"' in html
+    assert 'data-project-link="ffmpeg"' in html
+    assert 'data-project-link="mkvtoolnix"' in html
+    assert "Creator and maintainer" not in html
+    assert "View contributors" not in html
+    assert 'callApi("open_project_link", button.dataset.projectLink)' in javascript
+    assert 'if (parts[0] === "about")' in javascript
+    assert ".sidebar .step[href^='#']" in javascript
+    assert "about.credits.creatorBody" not in english
+    assert "about.credits.creatorBody" not in chinese
+    assert english["about.credits.pywebview"]
+    assert chinese["about.credits.pywebview"]
+    assert "local-first" not in english["about.description"].casefold()
+    assert "本地优先" not in chinese["about.description"]
     assert "scrollToSection" in javascript
 
 

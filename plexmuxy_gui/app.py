@@ -67,6 +67,7 @@ EXPOSED_API_METHODS = (
     "open_diagnostics_location",
     "open_font_cache_location",
     "open_job_output",
+    "open_project_link",
     "pause_queue",
     "plan_job",
     "reset_dependency_path",

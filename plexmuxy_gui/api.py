@@ -7,6 +7,7 @@ import subprocess
 import sys
 import threading
 import time
+import webbrowser
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -60,6 +61,13 @@ DEPENDENCY_EXECUTABLES = {
     "mkvmerge": {"mkvmerge", "mkvmerge.exe"},
     "ffmpeg": {"ffmpeg", "ffmpeg.exe"},
     "unrar": {"unrar", "unrar.exe"},
+}
+PROJECT_LINKS = {
+    "repository": "https://github.com/Masterain98/PlexMuxy",
+    "license": "https://github.com/Masterain98/PlexMuxy/blob/master/LICENSE",
+    "pywebview": "https://github.com/r0x0r/pywebview",
+    "ffmpeg": "https://www.ffmpeg.org/",
+    "mkvtoolnix": "https://codeberg.org/mbunkus/mkvtoolnix",
 }
 
 
@@ -205,6 +213,17 @@ class PlexMuxyApi:
                     **dependency_inspection_to_dict(selected),
                 }
             )
+
+        return self.guarded(run)
+
+    def open_project_link(self, link: str) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            url = PROJECT_LINKS.get(str(link))
+            if url is None:
+                return self.fail("Unknown project link")
+            if not webbrowser.open(url):
+                return self.fail("Could not open the default browser")
+            return self.ok({"url": url})
 
         return self.guarded(run)
 

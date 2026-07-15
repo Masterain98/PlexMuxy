@@ -20,7 +20,7 @@ def test_job_commands_accept_font_mode_override():
 def test_cli_help_is_localized_and_json_contract_is_language_independent(capsys):
     with pytest.raises(SystemExit):
         build_parser("zh-CN").parse_args(["--help"])
-    assert "安全地生成计划" in capsys.readouterr().out
+    assert "按照 Plex 的识别偏好封装" in capsys.readouterr().out
 
     en = parse_args(["--language", "en", "--output-format", "json", "show-config"])
     zh = parse_args(["--language", "zh-CN", "--output-format", "json", "show-config"])

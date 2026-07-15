@@ -1,6 +1,6 @@
 # Release and rollback process
 
-The single version source is `plexmuxy.__version__`; setuptools reads it dynamically. Release tags must be `v<version>` and the workflow refuses mismatches.
+The single version source is the plain-text file `plexmuxy/VERSION`. Update that easy-to-find file when preparing a release; `plexmuxy.__version__`, setuptools, the CLI, diagnostics, and the GUI all read it. It is also the intended path trigger for future version-driven CI builds. Release tags must be `v<version>` and the workflow refuses mismatches.
 
 ## Candidate release
 
