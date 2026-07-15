@@ -6,6 +6,7 @@ const state = {
   loadingMessageKey: "loading.initializing", lastJobStatus: null, currentView: "workspace",
   lastNonSubsetFontMode: "all",
   planEdits: new Map(), jobs: [], queuePaused: false, activePreviewId: null,
+  dependencyDrafts: { mkvmerge: null, ffmpeg: null, unrar: null }, dependencyBusy: {},
 };
 
 const THEME_STORAGE_KEY = "plexmuxy-theme";
@@ -84,9 +85,11 @@ function bindEvents() {
   document.querySelectorAll(".dependency-browse").forEach((button) => {
     if (!button.dataset.boundClick) { button.addEventListener("click", chooseDependency); button.dataset.boundClick = "true"; }
   });
-  document.querySelectorAll(".dependency-reset").forEach((button) => {
-    if (!button.dataset.boundClick) { button.addEventListener("click", restoreAutomaticDependency); button.dataset.boundClick = "true"; }
+  document.querySelectorAll(".dependency-auto-detect").forEach((button) => {
+    if (!button.dataset.boundClick) { button.addEventListener("click", autoDetectDependency); button.dataset.boundClick = "true"; }
   });
+  const installUnrarButton = $("install-unrar-btn");
+  if (installUnrarButton && !installUnrarButton.dataset.boundClick) { installUnrarButton.addEventListener("click", installUnrarFromRarlab); installUnrarButton.dataset.boundClick = "true"; }
   if (document.body && !document.body.dataset.boundResponsiveUi) {
     window.addEventListener("resize", syncSidebarAccessibility);
     window.addEventListener("plexmuxy:localechange", handleLocaleChange);
@@ -588,9 +591,9 @@ async function saveEnvironmentSettings() {
   clearError();
   try {
     state.config = await callApi("save_environment_settings", {
-      mkvmerge_path: $("mkvmerge-path").value.trim(),
-      ffmpeg_path: $("ffmpeg-path").value.trim(),
-      unrar_path: $("unrar-path").value.trim(),
+      mkvmerge_path: dependencyPathForSave("mkvmerge"),
+      ffmpeg_path: dependencyPathForSave("ffmpeg"),
+      unrar_path: dependencyPathForSave("unrar"),
       notifications_enabled: $("notifications-enabled").checked,
       font_cache_enabled: $("font-cache-enabled").checked,
       font_cache_max_size_mb: Number($("font-cache-max-size").value),
@@ -602,6 +605,7 @@ async function saveEnvironmentSettings() {
       plex_token_env: $("plex-token-env").value.trim(),
       plex_path_mappings: parsePathMappings($("plex-path-mappings").value),
     });
+    state.dependencyDrafts = { mkvmerge: null, ffmpeg: null, unrar: null };
     state.environmentDirty = false;
     renderConfigSummary(); renderEnvironmentSettings(); renderRuntimeStatus(); updateRunButton();
     showToast(t("toast.environmentSaved.body"), "success", t("toast.environmentSaved.title"));
@@ -613,17 +617,39 @@ async function chooseDependency(event) {
   try {
     const result = await callApi("choose_dependency", dependency);
     if (result.cancelled || !result.path) return;
-    $(`${dependency}-path`).value = result.path;
-    $(`${dependency}-detail`).textContent = t("environment.pendingSave");
+    state.dependencyDrafts[dependency] = mapResultToDraft(result, "manual");
     handleEnvironmentChange();
+    renderDependency(dependency);
   } catch (error) { showToast(error.message, "error", t("toast.environmentError.title")); }
 }
 
-function restoreAutomaticDependency(event) {
+async function autoDetectDependency(event) {
   const dependency = event.currentTarget.dataset.dependency;
-  $(`${dependency}-path`).value = "";
-  $(`${dependency}-detail`).textContent = t("environment.autoPending");
-  handleEnvironmentChange();
+  setDependencyBusy(dependency, "checking");
+  try {
+    const result = await callApi("detect_dependency", dependency);
+    state.dependencyDrafts[dependency] = mapResultToDraft(result, "auto-detect");
+    handleEnvironmentChange();
+  } catch (error) {
+    showToast(error.message, "error", t("toast.environmentError.title"));
+  } finally {
+    setDependencyBusy(dependency, null);
+    renderDependency(dependency);
+  }
+}
+
+async function installUnrarFromRarlab() {
+  setDependencyBusy("unrar", "downloading");
+  try {
+    const result = await callApi("install_unrar_from_rarlab");
+    state.dependencyDrafts.unrar = mapResultToDraft(result, "download");
+    handleEnvironmentChange();
+  } catch (error) {
+    showToast(error.message, "error", t("toast.environmentError.title"));
+  } finally {
+    setDependencyBusy("unrar", null);
+    renderDependency("unrar");
+  }
 }
 
 async function testNotification() {
@@ -791,16 +817,8 @@ function renderConfigSummary() {
 
 function renderEnvironmentSettings(resetDirty = true) {
   if (!state.config) return;
-  ["mkvmerge", "ffmpeg", "unrar"].forEach((name) => {
-    const dependency = state.config[name];
-    const input = $(`${name}-path`); const badgeNode = $(`${name}-status`); const detail = $(`${name}-detail`);
-    if (resetDirty) input.value = dependency.configured_path || "";
-    const missingRequired = dependency.required && !dependency.available;
-    badgeNode.textContent = dependency.available ? t("summary.available") : (missingRequired ? t("summary.requiredMissing") : t("summary.optionalMissing"));
-    badgeNode.className = `dependency-badge ${dependency.available ? "ok" : missingRequired ? "danger" : "muted"}`;
-    const source = dependencySourceLabel(dependency.source);
-    detail.textContent = dependency.resolved_path ? t("environment.resolvedDetail", { path: dependency.resolved_path, source }) : t("environment.unresolvedDetail", { source });
-  });
+  if (resetDirty) state.dependencyDrafts = { mkvmerge: null, ffmpeg: null, unrar: null };
+  ["mkvmerge", "ffmpeg", "unrar"].forEach(renderDependency);
 
   const notifications = state.config.notifications || {};
   const toggle = $("notifications-enabled"); const testButton = $("test-notification-btn"); const capability = $("notification-capability");
@@ -830,8 +848,54 @@ function renderEnvironmentSettings(resetDirty = true) {
   updateRunButton();
 }
 
+function dependencyViewModel(name) {
+  return state.dependencyDrafts[name] || state.config?.[name] || {};
+}
+
+function dependencyPathForSave(name) {
+  const draft = state.dependencyDrafts[name];
+  return String(draft ? draft.path : (state.config?.[name]?.configured_path || "")).trim();
+}
+
+function mapResultToDraft(result, origin) {
+  return { ...result, path: result.path || result.resolved_path, resolved_path: result.path || result.resolved_path, origin, dirty: true, available: true, valid: true };
+}
+
+function setDependencyBusy(name, status) {
+  if (status) state.dependencyBusy[name] = status; else delete state.dependencyBusy[name];
+  renderDependency(name);
+}
+
+function renderDependency(name) {
+  if (!state.config || !$(`${name}-status`)) return;
+  const dependency = dependencyViewModel(name);
+  const busy = state.dependencyBusy[name];
+  const required = Boolean(state.config[name]?.required);
+  const ready = Boolean(dependency.available && dependency.valid !== false);
+  const status = busy || (ready ? "ready" : (required ? "required-missing" : "optional-missing"));
+  const statusNode = $(`${name}-status`);
+  const icons = { ready: "#icon-check", checking: "#icon-spinner", downloading: "#icon-download", "required-missing": "#icon-x", "optional-missing": "#icon-question", invalid: "#icon-x" };
+  statusNode.querySelector("use")?.setAttribute("href", icons[status] || "#icon-x");
+  statusNode.className = `dependency-state ${status}`;
+  statusNode.setAttribute("aria-label", t(`environment.status.${status}`, { dependency: name }));
+  const path = dependency.path || dependency.resolved_path || "";
+  $(`${name}-path`).value = path;
+  $(`${name}-source`).textContent = dependencySourceLabel(dependency.source);
+  const draft = state.dependencyDrafts[name];
+  const detailKey = draft ? `environment.pending.${draft.origin}` : (path ? (dependency.configured_path ? "environment.saved" : "environment.autoResolved") : (required ? "environment.requiredMissing" : "environment.optionalMissing"));
+  $(`${name}-detail`).textContent = dependency.validation_error || t(detailKey);
+  const versions = [];
+  if (dependency.version) versions.push(t("environment.version", { version: dependency.version }));
+  if (dependency.file_version) versions.push(t("environment.fileVersion", { version: dependency.file_version }));
+  if (dependency.version_warning) versions.push(t("environment.versionMismatch"));
+  $(`${name}-version`).textContent = versions.join(" · ");
+  document.querySelectorAll(`[data-dependency="${name}"]`).forEach((button) => { button.disabled = Boolean(busy); });
+  if (name === "unrar" && $("install-unrar-btn")) $("install-unrar-btn").disabled = Boolean(busy);
+}
+
 function dependencySourceLabel(source) {
   if (String(source).startsWith("environment:")) return t("environment.source.environment");
+  if (String(source).startsWith("registry:")) return t("environment.source.registry");
   const key = `environment.source.${source}`;
   const translated = t(key);
   return translated === key ? t("environment.source.missing") : translated;

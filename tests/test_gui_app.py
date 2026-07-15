@@ -43,7 +43,9 @@ def test_start_exposes_only_intended_bridge_methods(monkeypatch):
     assert webview.start_kwargs["http_server"] is True
     assert webview.start_kwargs["icon"].endswith("plexmuxy-app.ico")
     assert dpi_calls == [True]
-    assert {function.__name__ for function in webview.window.exposed} == set(app.EXPOSED_API_METHODS)
+    exposed_methods = {function.__name__ for function in webview.window.exposed}
+    assert exposed_methods == set(app.EXPOSED_API_METHODS)
+    assert {"detect_dependency", "install_unrar_from_rarlab"} <= exposed_methods
     api = webview.window.exposed[0].__self__
     assert api._window is webview.window
     assert "window" not in vars(api)

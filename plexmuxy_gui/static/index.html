@@ -58,6 +58,8 @@
     <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 20h16" /></symbol>
     <symbol id="icon-save" viewBox="0 0 24 24"><path d="M5 3.5h12l2 2v15H5zM8 3.5v6h8v-6M8 20.5v-7h8v7" /></symbol>
     <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7" /></symbol>
+    <symbol id="icon-question" viewBox="0 0 24 24"><path d="M8.5 9a3.5 3.5 0 1 1 5.7 2.7c-1.4 1.1-2.2 1.7-2.2 3.3M12 18.5v.1" /></symbol>
+    <symbol id="icon-spinner" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7" /></symbol>
     <symbol id="icon-alert" viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4zM12 9v5M12 17.5v.1" /></symbol>
     <symbol id="icon-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></symbol>
   </svg>
@@ -470,45 +472,39 @@
 
                 <div class="dependency-list">
                   <article class="dependency-card" data-dependency="mkvmerge">
-                    <div class="dependency-heading">
-                      <div><h4>mkvmerge</h4><p data-i18n="environment.mkvmerge.help">Required mux engine. PlexMuxy cannot run a mux job without it.</p></div>
-                      <span id="mkvmerge-status" class="dependency-badge">—</span>
-                    </div>
+                    <div class="dependency-heading"><div><h4>mkvmerge</h4><p data-i18n="environment.mkvmerge.help">Required mux engine. PlexMuxy cannot run a mux job without it.</p></div></div>
                     <label for="mkvmerge-path" data-i18n="environment.executablePath">Executable path</label>
-                    <div class="dependency-path-row">
-                      <input id="mkvmerge-path" type="text" readonly placeholder="Auto-detect from environment and PATH" data-i18n-placeholder="environment.autoPlaceholder" />
-                      <button class="secondary dependency-browse" type="button" data-dependency="mkvmerge" data-i18n="environment.browse">Browse…</button>
-                      <button class="ghost dependency-reset" type="button" data-dependency="mkvmerge" data-i18n="environment.restoreAuto">Use auto</button>
+                    <div class="dependency-selection">
+                      <span id="mkvmerge-status" class="dependency-state" role="status" aria-label="mkvmerge"><svg aria-hidden="true"><use href="#icon-spinner"></use></svg></span>
+                      <span id="mkvmerge-source" class="dependency-source">—</span>
+                      <input id="mkvmerge-path" type="text" readonly placeholder="Not detected" data-i18n-placeholder="environment.autoPlaceholder" />
                     </div>
-                    <p id="mkvmerge-detail" class="field-help dependency-detail"></p>
+                    <div class="dependency-actions"><button class="secondary dependency-browse" type="button" data-dependency="mkvmerge" data-i18n="environment.browse">Browse…</button><button class="ghost dependency-auto-detect" type="button" data-dependency="mkvmerge" data-i18n="environment.autoDetect">Auto-detect</button></div>
+                    <p id="mkvmerge-detail" class="field-help dependency-detail"></p><p id="mkvmerge-version" class="dependency-version"></p>
                   </article>
 
                   <article class="dependency-card" data-dependency="ffmpeg">
-                    <div class="dependency-heading">
-                      <div><h4>ffmpeg <span data-i18n="environment.optional">Optional</span></h4><p data-i18n="environment.ffmpeg.help">Optional verification and media testing tool; not required for normal mux output.</p></div>
-                      <span id="ffmpeg-status" class="dependency-badge">—</span>
-                    </div>
+                    <div class="dependency-heading"><div><h4>ffmpeg <span data-i18n="environment.optional">Optional</span></h4><p data-i18n="environment.ffmpeg.help">Optional verification and media testing tool; not required for normal mux output.</p></div></div>
                     <label for="ffmpeg-path" data-i18n="environment.executablePath">Executable path</label>
-                    <div class="dependency-path-row">
-                      <input id="ffmpeg-path" type="text" readonly placeholder="Auto-detect from environment and PATH" data-i18n-placeholder="environment.autoPlaceholder" />
-                      <button class="secondary dependency-browse" type="button" data-dependency="ffmpeg" data-i18n="environment.browse">Browse…</button>
-                      <button class="ghost dependency-reset" type="button" data-dependency="ffmpeg" data-i18n="environment.restoreAuto">Use auto</button>
+                    <div class="dependency-selection">
+                      <span id="ffmpeg-status" class="dependency-state" role="status" aria-label="ffmpeg"><svg aria-hidden="true"><use href="#icon-spinner"></use></svg></span>
+                      <span id="ffmpeg-source" class="dependency-source">—</span>
+                      <input id="ffmpeg-path" type="text" readonly placeholder="Not detected" data-i18n-placeholder="environment.autoPlaceholder" />
                     </div>
-                    <p id="ffmpeg-detail" class="field-help dependency-detail"></p>
+                    <div class="dependency-actions"><button class="secondary dependency-browse" type="button" data-dependency="ffmpeg" data-i18n="environment.browse">Browse…</button><button class="ghost dependency-auto-detect" type="button" data-dependency="ffmpeg" data-i18n="environment.autoDetect">Auto-detect</button></div>
+                    <p id="ffmpeg-detail" class="field-help dependency-detail"></p><p id="ffmpeg-version" class="dependency-version"></p>
                   </article>
 
                   <article class="dependency-card" data-dependency="unrar">
-                    <div class="dependency-heading">
-                      <div><h4>unrar <span data-i18n="environment.optional">Optional</span></h4><p data-i18n="environment.unrar.help">Optional extractor used only when font archives require the RAR format.</p></div>
-                      <span id="unrar-status" class="dependency-badge">—</span>
-                    </div>
+                    <div class="dependency-heading"><div><h4>unrar <span data-i18n="environment.optional">Optional</span></h4><p data-i18n="environment.unrar.help">Optional extractor used only when font archives require the RAR format.</p></div></div>
                     <label for="unrar-path" data-i18n="environment.executablePath">Executable path</label>
-                    <div class="dependency-path-row">
-                      <input id="unrar-path" type="text" readonly placeholder="Auto-detect from environment and PATH" data-i18n-placeholder="environment.autoPlaceholder" />
-                      <button class="secondary dependency-browse" type="button" data-dependency="unrar" data-i18n="environment.browse">Browse…</button>
-                      <button class="ghost dependency-reset" type="button" data-dependency="unrar" data-i18n="environment.restoreAuto">Use auto</button>
+                    <div class="dependency-selection">
+                      <span id="unrar-status" class="dependency-state" role="status" aria-label="unrar"><svg aria-hidden="true"><use href="#icon-spinner"></use></svg></span>
+                      <span id="unrar-source" class="dependency-source">—</span>
+                      <input id="unrar-path" type="text" readonly placeholder="Not detected" data-i18n-placeholder="environment.autoPlaceholder" />
                     </div>
-                    <p id="unrar-detail" class="field-help dependency-detail"></p>
+                    <div class="dependency-actions"><button class="secondary dependency-browse" type="button" data-dependency="unrar" data-i18n="environment.browse">Browse…</button><button class="ghost dependency-auto-detect" type="button" data-dependency="unrar" data-i18n="environment.autoDetect">Auto-detect</button><button id="install-unrar-btn" class="ghost" type="button"><svg class="icon" aria-hidden="true"><use href="#icon-download"></use></svg><span data-i18n="environment.downloadUnrar">Get UnRAR from RARLAB</span></button></div>
+                    <p id="unrar-detail" class="field-help dependency-detail"></p><p id="unrar-version" class="dependency-version"></p>
                   </article>
                 </div>
               </section>

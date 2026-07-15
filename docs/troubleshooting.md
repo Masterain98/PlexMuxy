@@ -14,7 +14,11 @@ The helper creates `.pytest-tmp/<process-id>/system` for `TEMP`/`TMP` and `.pyte
 
 ## `MKVMERGE_NOT_FOUND`
 
-Install MKVToolNix, add `mkvmerge` to `PATH`, set the executable/directory in `mkvmerge.path`, or use GUI → Environment configuration → mkvmerge → Browse. An invalid explicit path is reported instead of silently falling back to a different binary. Run `plexmuxy diagnostics --output diagnostics.zip` to record the detected version.
+Install MKVToolNix and choose GUI → Environment configuration → mkvmerge → Auto-detect. On Windows, PlexMuxy checks the MKVToolNix uninstall registry information before `PATH`, then validates `mkvmerge --version`. You can also set the executable/directory in `mkvmerge.path` or use Browse. An invalid explicit path is reported instead of silently falling back to a different binary. Run `plexmuxy diagnostics --output diagnostics.zip` to record the detected version.
+
+## UnRAR could not be acquired
+
+The RARLAB action is available only on Windows x64. PlexMuxy downloads the official signed installer, waits for its UI to finish, and then probes the installed `UnRAR.exe`. If the installer is cancelled or UnRAR is not found, finish the official installation and click Auto-detect. Downloaded installers are stored under `%LOCALAPPDATA%\PlexMuxy\tools\downloads`; no path is saved until Save environment is clicked.
 
 ## No plan was generated
 

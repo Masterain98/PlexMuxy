@@ -2208,18 +2208,65 @@ input[aria-disabled="true"] {
   line-height: 19px;
 }
 
-.dependency-path-row {
+.dependency-selection {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto auto;
-  gap: 8px;
+  grid-template-columns: 42px minmax(110px, auto) minmax(180px, 1fr);
   align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-control);
 }
 
-.dependency-path-row input[readonly] {
-  background: var(--color-control);
+.dependency-selection input[readonly] {
+  min-width: 0;
+  border: 0;
+  border-left: 1px solid var(--color-divider);
+  border-radius: 0;
+  background: transparent;
   color: var(--color-text-secondary);
   font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
   font-size: 12px;
+}
+
+.dependency-state {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  color: var(--color-text-tertiary);
+}
+
+.dependency-state svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.dependency-state.ready { color: var(--color-success); }
+.dependency-state.required-missing,
+.dependency-state.invalid { color: var(--color-danger-text); }
+.dependency-state.optional-missing { color: var(--color-warning); }
+.dependency-state.checking svg { animation: dependency-spin 0.9s linear infinite; }
+
+@keyframes dependency-spin { to { transform: rotate(360deg); } }
+
+.dependency-source {
+  padding: 0 12px 0 3px;
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.dependency-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .dependency-detail {
@@ -2228,30 +2275,11 @@ input[aria-disabled="true"] {
   overflow-wrap: anywhere;
 }
 
-.dependency-badge {
-  flex: 0 0 auto;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  padding: 4px 9px;
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.dependency-badge.ok {
-  border-color: color-mix(in srgb, var(--color-success) 48%, transparent);
-  background: color-mix(in srgb, var(--color-success) 10%, transparent);
-  color: var(--color-success);
-}
-
-.dependency-badge.danger {
-  border-color: color-mix(in srgb, var(--color-danger) 48%, transparent);
-  background: var(--color-danger-surface);
-  color: var(--color-danger-text);
-}
-
-.dependency-badge.muted {
+.dependency-version {
+  min-height: 16px;
+  margin: -6px 0 0;
   color: var(--color-text-tertiary);
+  font-size: 11px;
 }
 
 .subset-summary {
@@ -2361,14 +2389,14 @@ input[aria-disabled="true"] {
 }
 
 @media (max-width: 760px) {
-  .dependency-path-row,
+  .dependency-selection,
   .family-progress {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .dependency-path-row button {
-    width: 100%;
-  }
+  .dependency-selection { grid-template-columns: 42px minmax(0, 1fr); }
+  .dependency-selection input[readonly] { grid-column: 1 / -1; border-top: 1px solid var(--color-divider); border-left: 0; }
+  .dependency-actions button { flex: 1 1 150px; }
 
   .toast-region {
     top: 70px;
@@ -2388,7 +2416,7 @@ input[aria-disabled="true"] {
   .step.active,
   .select-listbox [role="option"][aria-selected="true"],
   .toast,
-  .dependency-badge,
+  .dependency-state,
   .toggle-control {
     border: 1px solid CanvasText;
     background: Canvas;

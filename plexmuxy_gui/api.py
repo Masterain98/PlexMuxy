@@ -27,7 +27,10 @@ from plexmuxy.config import (
     save_config as persist_config,
 )
 from plexmuxy.dependencies import (
+    DependencyInspection,
     DependencyResolution,
+    inspect_dependency,
+    inspect_dependency_path,
     resolve_ffmpeg,
     resolve_mkvmerge,
     resolve_unrar,
@@ -43,6 +46,7 @@ from plexmuxy.queue import JobQueue
 from plexmuxy.serialization import job_report_to_dict, snapshot_from_dict
 from plexmuxy.service import execute_plan_snapshot, run_mux_job
 from plexmuxy.snapshot import validate_plan_snapshot
+from plexmuxy.tool_downloads import install_unrar_from_rarlab as acquire_unrar_from_rarlab
 from plexmuxy.update_check import check_for_updates
 
 from .notifications import NativeNotifier
@@ -197,10 +201,37 @@ class PlexMuxyApi:
                 {
                     "cancelled": False,
                     "dependency": name,
-                    "path": selected.resolved_path,
-                    "resolution": dependency_resolution_to_dict(selected),
+                    "path": selected.path,
+                    **dependency_inspection_to_dict(selected),
                 }
             )
+
+        return self.guarded(run)
+
+    def detect_dependency(self, dependency: str) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            name = normalize_dependency_name(dependency)
+            inspection = inspect_dependency(name, ignore_configured=True)
+            if not inspection.valid:
+                return self.fail(inspection.error or f"No valid {name} executable was found")
+            return self.ok({
+                "dependency": name,
+                **dependency_inspection_to_dict(inspection),
+                "pending_save": True,
+            })
+
+        return self.guarded(run)
+
+    def install_unrar_from_rarlab(self) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            acquisition = acquire_unrar_from_rarlab()
+            return self.ok({
+                "dependency": "unrar",
+                **dependency_inspection_to_dict(acquisition.inspection),
+                "source": "download:rarlab",
+                "pending_save": True,
+                "publisher": acquisition.publisher,
+            })
 
         return self.guarded(run)
 
@@ -876,17 +907,17 @@ def load_or_default_config():
 
 
 def config_summary(config, notifier: NativeNotifier | None = None) -> dict[str, Any]:
-    mkvmerge = resolve_mkvmerge(config.mkvmerge.path)
-    ffmpeg = resolve_ffmpeg(config.ffmpeg.path)
-    unrar = resolve_unrar(config.font.unrar_path)
+    mkvmerge = inspect_dependency("mkvmerge", config.mkvmerge.path)
+    ffmpeg = inspect_dependency("ffmpeg", config.ffmpeg.path)
+    unrar = inspect_dependency("unrar", config.font.unrar_path)
     capability = (notifier or NativeNotifier()).capability()
     source_path = config.source_path or resolve_config_path()
     return {
         "config_path": str(source_path),
         "config_exists": Path(source_path).exists(),
-        "mkvmerge": {**dependency_resolution_to_dict(mkvmerge), "required": True},
-        "ffmpeg": {**dependency_resolution_to_dict(ffmpeg), "required": False},
-        "unrar": {**dependency_resolution_to_dict(unrar), "required": False},
+        "mkvmerge": {**dependency_inspection_to_dict(mkvmerge), "required": True},
+        "ffmpeg": {**dependency_inspection_to_dict(ffmpeg), "required": False},
+        "unrar": {**dependency_inspection_to_dict(unrar), "required": False},
         "notifications": {
             "enabled": config.notifications.enabled,
             "available": capability.available,
@@ -969,7 +1000,7 @@ def bool_setting(value: Any, field: str) -> bool:
     return value
 
 
-def validate_dependency_path(dependency: str, value: str) -> DependencyResolution:
+def validate_dependency_path(dependency: str, value: str) -> DependencyInspection:
     name = normalize_dependency_name(dependency)
     configured = str(value or "").strip()
     if not configured:
@@ -981,7 +1012,15 @@ def validate_dependency_path(dependency: str, value: str) -> DependencyResolutio
     if resolved_name not in DEPENDENCY_EXECUTABLES[name]:
         expected = ", ".join(sorted(DEPENDENCY_EXECUTABLES[name]))
         raise ValueError(f"Expected {expected}, got {resolved_name}")
-    return resolution
+    inspection = inspect_dependency_path(
+        name,
+        Path(resolution.resolved_path),
+        source="configured",
+        configured_path=configured,
+    )
+    if not inspection.valid:
+        raise ValueError(inspection.error or f"The selected {name} executable is not valid")
+    return inspection
 
 
 def dependency_resolution_to_dict(resolution: DependencyResolution) -> dict[str, Any]:
@@ -990,6 +1029,23 @@ def dependency_resolution_to_dict(resolution: DependencyResolution) -> dict[str,
         "resolved_path": resolution.resolved_path,
         "available": resolution.available,
         "source": resolution.source,
+    }
+
+
+def dependency_inspection_to_dict(inspection: DependencyInspection) -> dict[str, Any]:
+    return {
+        "configured_path": inspection.configured_path,
+        "resolved_path": inspection.path,
+        "path": inspection.path,
+        "available": inspection.available,
+        "valid": inspection.valid,
+        "source": inspection.source,
+        "version": inspection.version,
+        "file_version": inspection.file_version,
+        "product_name": inspection.product_name,
+        "original_filename": inspection.original_filename,
+        "validation_error": inspection.error,
+        "version_warning": inspection.version_warning,
     }
 
 

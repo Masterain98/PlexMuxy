@@ -71,7 +71,7 @@ plexmuxy diagnostics --output diagnostics.zip
 
 默认匹配策略保守：`movie_fallback=false`、最低置信度 0.7、歧义项跳过。并发配置为 `max_parallel_mux_jobs`，范围 1–4，默认 1；旧 `thread_count` 仅用于迁移。
 
-桌面端的“环境配置”是独立于任务工作流的持久化页面。它优先显示环境变量与 `PATH` 的自动探测结果；自动探测失败时，可通过系统文件选择器指定 `mkvmerge`、`ffmpeg` 或 `unrar`。Windows 构建在创建原生窗口前启用 Per-Monitor V2 DPI 感知，因此文件选择器和 WebView 在高分辨率、多显示器环境中使用系统缩放。
+桌面端的“环境配置”是独立于任务工作流的持久化页面。每个依赖项都会显示已验证的可执行文件、发现来源和版本。“自动检测”会立即重新探测并将结果保留为未保存草稿，绝不会静默替换已保存的显式路径。Windows 还会扫描 HKLM/HKCU 的 32/64 位卸载信息来发现 MKVToolNix。UnRAR 操作只允许通过白名单 HTTPS 下载 RARLAB 的已签名 x64 安装包，由官方安装程序完成安装，并在用户确认保存前把检测结果作为候选项显示。Windows 构建在创建原生窗口前启用 Per-Monitor V2 DPI 感知，因此文件选择器和 WebView 在高分辨率、多显示器环境中使用系统缩放。
 
 Windows 可在该页面启用任务结束通知。当前实现使用 Windows Shell 的原生通知区域后端，覆盖任务完成、失败和取消；通知不可用不会影响封装结果。需要应用激活、操作按钮和通知中心身份的 Windows App SDK 通知属于后续安装器/应用身份工作。
 

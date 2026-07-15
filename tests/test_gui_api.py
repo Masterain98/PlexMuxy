@@ -1,7 +1,9 @@
 from plexmuxy.config import default_config
+from plexmuxy.dependencies import DependencyInspection
 from plexmuxy.models import JobReport, MuxPlan, MuxResult
 from plexmuxy.serialization import snapshot_to_dict
 from plexmuxy.snapshot import create_plan_snapshot
+from plexmuxy.tool_downloads import UnrarAcquisition
 from plexmuxy_gui.api import GuiJob, PlexMuxyApi
 from plexmuxy_gui.notifications import NotificationCapability, NotificationResult
 
@@ -62,6 +64,10 @@ class PickerWindow(FakeDesktopWindow):
     def create_file_dialog(self, dialog_type, **kwargs):
         self.dialog_call = (dialog_type, kwargs)
         return [str(self.selected_path)] if self.selected_path else None
+
+
+def valid_inspection(name, path):
+    return DependencyInspection(name, str(path), "configured", True, True, version="test", configured_path=str(path))
 
 
 def test_window_controls_delegate_to_bound_desktop_window(monkeypatch):
@@ -235,12 +241,13 @@ def test_save_settings_persists_font_subset_mode(monkeypatch, tmp_path):
     assert response["data"]["font"]["mode"] == "subset"
 
 
-def test_choose_dependency_uses_open_picker_and_validates_allowlist(tmp_path):
+def test_choose_dependency_uses_open_picker_and_validates_allowlist(tmp_path, monkeypatch):
     executable = tmp_path / "ffmpeg.exe"
     executable.write_bytes(b"stub")
     window = PickerWindow(executable)
     api = PlexMuxyApi()
     api.bind_window(window)
+    monkeypatch.setattr("plexmuxy_gui.api.inspect_dependency_path", lambda name, path, **_kwargs: valid_inspection(name, path))
 
     response = api.choose_dependency("ffmpeg")
 
@@ -262,6 +269,36 @@ def test_choose_dependency_rejects_wrong_executable_name(tmp_path):
     assert "Expected" in response["error"]
 
 
+def test_detect_dependency_returns_candidate_without_saving(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.json"
+    candidate = tmp_path / "mkvmerge.exe"
+    inspection = valid_inspection("mkvmerge", candidate)
+    monkeypatch.setattr("plexmuxy_gui.api.resolve_config_path", lambda path=None: config_path)
+    monkeypatch.setattr("plexmuxy_gui.api.inspect_dependency", lambda name, **kwargs: inspection)
+
+    response = PlexMuxyApi().detect_dependency("mkvmerge")
+
+    assert response["ok"] is True
+    assert response["data"]["path"] == str(candidate)
+    assert response["data"]["pending_save"] is True
+    assert not config_path.exists()
+
+
+def test_install_unrar_returns_pending_candidate(monkeypatch, tmp_path):
+    candidate = tmp_path / "UnRAR.exe"
+    inspection = valid_inspection("unrar", candidate)
+    monkeypatch.setattr(
+        "plexmuxy_gui.api.acquire_unrar_from_rarlab",
+        lambda: UnrarAcquisition(inspection, str(tmp_path / "unrarw64.exe"), "CN=win.rar GmbH"),
+    )
+
+    response = PlexMuxyApi().install_unrar_from_rarlab()
+
+    assert response["ok"] is True
+    assert response["data"]["source"] == "download:rarlab"
+    assert response["data"]["pending_save"] is True
+
+
 def test_save_environment_settings_persists_paths_and_notifications(monkeypatch, tmp_path):
     config_path = tmp_path / "config.json"
     mkvmerge = tmp_path / "mkvmerge.exe"
@@ -269,6 +306,8 @@ def test_save_environment_settings_persists_paths_and_notifications(monkeypatch,
     mkvmerge.write_bytes(b"stub")
     ffmpeg.write_bytes(b"stub")
     monkeypatch.setattr("plexmuxy_gui.api.resolve_config_path", lambda path=None: config_path)
+    monkeypatch.setattr("plexmuxy_gui.api.inspect_dependency_path", lambda name, path, **_kwargs: valid_inspection(name, path))
+    monkeypatch.setattr("plexmuxy_gui.api.inspect_dependency", lambda name, configured_path="", **_kwargs: valid_inspection(name, configured_path) if configured_path else DependencyInspection(name, None, "missing", False, False))
     api = PlexMuxyApi()
     api._notifier = FakeNotifier()
 
@@ -288,9 +327,23 @@ def test_save_environment_settings_persists_paths_and_notifications(monkeypatch,
     assert response["data"]["notifications"]["available"] is True
 
 
+def test_save_environment_rejects_candidate_that_became_invalid(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.json"
+    executable = tmp_path / "mkvmerge.exe"
+    executable.write_bytes(b"not executable")
+    monkeypatch.setattr("plexmuxy_gui.api.resolve_config_path", lambda path=None: config_path)
+
+    response = PlexMuxyApi().save_environment_settings({"mkvmerge_path": str(executable)})
+
+    assert response["ok"] is False
+    assert not config_path.exists()
+
+
 def test_save_environment_settings_persists_opt_in_integrations_and_cache(monkeypatch, tmp_path):
     config_path = tmp_path / "config.json"
     monkeypatch.setattr("plexmuxy_gui.api.resolve_config_path", lambda path=None: config_path)
+    monkeypatch.setattr("plexmuxy_gui.api.inspect_dependency_path", lambda name, path, **_kwargs: valid_inspection(name, path))
+    monkeypatch.setattr("plexmuxy_gui.api.inspect_dependency", lambda name, configured_path="", **_kwargs: valid_inspection(name, configured_path) if configured_path else DependencyInspection(name, None, "missing", False, False))
     api = PlexMuxyApi()
     api._notifier = FakeNotifier()
     response = api.save_environment_settings({
@@ -358,6 +411,8 @@ def test_reset_dependency_path_restores_automatic_resolution(monkeypatch, tmp_pa
     mkvmerge = tmp_path / "mkvmerge.exe"
     mkvmerge.write_bytes(b"stub")
     monkeypatch.setattr("plexmuxy_gui.api.resolve_config_path", lambda path=None: config_path)
+    monkeypatch.setattr("plexmuxy_gui.api.inspect_dependency_path", lambda name, path, **_kwargs: valid_inspection(name, path))
+    monkeypatch.setattr("plexmuxy_gui.api.inspect_dependency", lambda name, configured_path="", **_kwargs: valid_inspection(name, configured_path) if configured_path else DependencyInspection(name, None, "missing", False, False))
     api = PlexMuxyApi()
     api._notifier = FakeNotifier()
     assert api.save_environment_settings({"mkvmerge_path": str(mkvmerge)})["ok"] is True

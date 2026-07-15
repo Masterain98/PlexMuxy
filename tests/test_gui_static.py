@@ -242,6 +242,21 @@ def test_gui_exposes_persistent_dependency_paths_notifications_and_font_subsetti
         assert f'"progress.phase.{phase}"' in (static_dir / "locales" / "en.json").read_text(encoding="utf-8")
 
 
+def test_environment_dependencies_use_verified_draft_workflow():
+    static_dir = ROOT / "plexmuxy_gui" / "static"
+    html = (static_dir / "index.html").read_text(encoding="utf-8")
+    javascript = (static_dir / "app.js").read_text(encoding="utf-8")
+    chinese = (static_dir / "locales" / "zh-CN.json").read_text(encoding="utf-8")
+
+    assert "恢复自动检测" not in html + javascript + chinese
+    assert html.count('class="dependency-state" role="status"') == 3
+    assert all(icon in html + javascript for icon in ("#icon-check", "#icon-question", "#icon-x"))
+    assert 'id="install-unrar-btn"' in html
+    assert 'callApi("detect_dependency", dependency)' in javascript
+    assert 'callApi("install_unrar_from_rarlab")' in javascript
+    assert "dependencyDrafts" in javascript
+
+
 def test_gui_disables_every_workflow_input_while_busy():
     javascript = (ROOT / "plexmuxy_gui" / "static" / "app.js").read_text(encoding="utf-8")
 
