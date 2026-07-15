@@ -76,7 +76,7 @@ def test_snapshot_rejects_tampered_output_path(tmp_path):
         validate_plan_snapshot(snapshot, config)
 
 
-def test_schema2_tracks_direct_font_and_subtitle_digests(tmp_path):
+def test_schema3_tracks_direct_font_and_subtitle_digests(tmp_path):
     video = tmp_path / "Example.mkv"
     subtitle = tmp_path / "Example.chs.ass"
     font = tmp_path / "Fonts" / "Demo.ttf"
@@ -116,7 +116,7 @@ def test_schema2_tracks_direct_font_and_subtitle_digests(tmp_path):
     snapshot = create_plan_snapshot(tmp_path, [plan], config)
 
     tracked = {item.path: item for item in snapshot.files}
-    assert snapshot.schema_version == 2
+    assert snapshot.schema_version == 3
     assert tracked[subtitle.resolve()].sha256 == sha256(subtitle.read_bytes())
     assert tracked[font.resolve()].sha256 == face.source_digest
     validate_plan_snapshot(snapshot, config)
@@ -129,7 +129,7 @@ def test_schema2_tracks_direct_font_and_subtitle_digests(tmp_path):
         validate_plan_snapshot(snapshot, config)
 
 
-def test_schema2_tracks_archive_not_future_extraction_path(tmp_path):
+def test_schema3_tracks_archive_not_future_extraction_path(tmp_path):
     video = tmp_path / "Example.mkv"
     subtitle = tmp_path / "Example.chs.ass"
     archive = tmp_path / "Fonts.zip"

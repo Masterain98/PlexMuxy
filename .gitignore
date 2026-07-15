@@ -5,6 +5,7 @@ __pycache__
 .ruff_cache/
 .uv-cache/
 .pytest_cache/
+.pytest-tmp/
 *.egg-info/
 dist/
 .idea

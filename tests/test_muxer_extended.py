@@ -2,7 +2,7 @@ import json
 from types import SimpleNamespace
 
 from plexmuxy.config import default_config
-from plexmuxy.models import AttachmentPlan, MuxPlan, VerificationResult
+from plexmuxy.models import AttachmentPlan, AudioTrackPlan, MuxPlan, SourceTrackInfo, VerificationResult
 from plexmuxy.muxer import build_mkvmerge_command, execute_mux_plan, inspect_source_tracks, verify_mux_output
 
 
@@ -44,6 +44,39 @@ def test_mkvmerge_command_uses_planned_attachment_name_and_mime(tmp_path):
         "--attach-file",
         str(font),
     ]
+
+
+def test_mkvmerge_command_scopes_source_audio_filter_before_source_input(tmp_path):
+    source = tmp_path / "source.mkv"
+    plan = MuxPlan(
+        source,
+        tmp_path / "output.mkv",
+        source_tracks=[
+            SourceTrackInfo(0, "video"),
+            SourceTrackInfo(1, "audio", included=True),
+            SourceTrackInfo(2, "audio", included=False),
+        ],
+    )
+
+    command = build_mkvmerge_command(plan, plan.output_path, "mkvmerge")
+
+    assert command[:6] == ["mkvmerge", "--output", str(plan.output_path), "--audio-tracks", "1", str(source)]
+
+
+def test_mkvmerge_command_uses_no_audio_only_for_source_input(tmp_path):
+    source = tmp_path / "source.mkv"
+    external = tmp_path / "external.mka"
+    plan = MuxPlan(
+        source,
+        tmp_path / "output.mkv",
+        source_tracks=[SourceTrackInfo(1, "audio", included=False)],
+    )
+    plan.audio_tracks.append(AudioTrackPlan(external, None, "exact"))
+
+    command = build_mkvmerge_command(plan, plan.output_path, "mkvmerge")
+
+    assert command[:5] == ["mkvmerge", "--output", str(plan.output_path), "--no-audio", str(source)]
+    assert command[-1] == str(external)
 
 
 def test_execute_mux_plan_success_uses_verified_temp_then_replaces(monkeypatch, tmp_path):

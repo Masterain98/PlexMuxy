@@ -1,5 +1,17 @@
 # Troubleshooting
 
+## pytest temporary-directory errors on Windows
+
+Keep Python's system temporary directory separate from pytest's `--basetemp` directory. Pointing both at the same path lets pytest try to remove a directory that the Python process is actively using and causes misleading `PermissionError` or `WinError 32` setup failures.
+
+Use the repository helper:
+
+```powershell
+./scripts/test-local.ps1
+```
+
+The helper creates `.pytest-tmp/<process-id>/system` for `TEMP`/`TMP` and `.pytest-tmp/<process-id>/pytest` for pytest. On Linux and macOS, use `./scripts/test-local.sh` with the same separation. Both paths are ignored by Git.
+
 ## `MKVMERGE_NOT_FOUND`
 
 Install MKVToolNix, add `mkvmerge` to `PATH`, set the executable/directory in `mkvmerge.path`, or use GUI → Environment configuration → mkvmerge → Browse. An invalid explicit path is reported instead of silently falling back to a different binary. Run `plexmuxy diagnostics --output diagnostics.zip` to record the detected version.

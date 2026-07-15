@@ -45,6 +45,7 @@ version = {attr = "plexmuxy.__version__"}
 include = ["plexmuxy", "plexmuxy.*", "plexmuxy_gui", "plexmuxy_gui.*"]
 
 [tool.setuptools.package-data]
+plexmuxy = ["locales/*.json"]
 plexmuxy_gui = [
   "static/*.html",
   "static/*.css",
@@ -70,7 +71,7 @@ omit = [
   "plexmuxy/diagnostics.py",
   "plexmuxy/logging_utils.py",
   "plexmuxy/report.py",
-  "plexmuxy_gui/*",
+  "plexmuxy_gui/app.py",
 ]
 
 [tool.ruff]

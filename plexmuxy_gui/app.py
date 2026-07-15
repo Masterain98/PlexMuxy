@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import json
 import os
 import sys
 import threading
@@ -14,6 +15,7 @@ if sys.platform == "win32":
 
 from plexmuxy.logging_utils import configure_logging
 
+from .activation import parse_activation_args
 from .api import PlexMuxyApi
 
 WEBVIEW2_DOWNLOAD_URL = "https://developer.microsoft.com/en-us/microsoft-edge/webview2/"
@@ -31,15 +33,32 @@ EXPOSED_API_METHODS = (
     "choose_directory",
     "close_window",
     "export_diagnostics",
+    "export_job_diagnostics",
+    "check_updates",
+    "clear_font_cache",
+    "create_audio_preview",
+    "delete_audio_preview",
+    "cancel_audio_preview",
+    "get_font_cache",
     "get_app_info",
     "get_job_report",
     "get_job_status",
+    "list_jobs",
+    "load_job",
     "load_config",
     "minimize_window",
     "open_config_location",
     "open_diagnostics_location",
+    "open_font_cache_location",
+    "open_job_output",
+    "pause_queue",
     "plan_job",
     "reset_dependency_path",
+    "reorder_job",
+    "replan_job",
+    "resume_queue",
+    "retry_job",
+    "retry_plex_refresh",
     "save_environment_settings",
     "save_settings",
     "start_job",
@@ -177,7 +196,11 @@ def start() -> None:
     configure_logging(verbose=os.environ.get("PLEXMUXY_GUI_DEBUG") == "1", json_log=True)
     webview = import_webview()
     debug = os.environ.get("PLEXMUXY_GUI_DEBUG") == "1"
-    api = PlexMuxyApi()
+    activation = parse_activation_args(sys.argv[1:])
+    api = PlexMuxyApi(
+        activation_job_id=activation.job_id if activation else None,
+        activation_action=activation.action if activation else "view",
+    )
 
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
     webview.settings["ALLOW_DOWNLOADS"] = False
@@ -232,11 +255,29 @@ def start() -> None:
 
 
 def main() -> None:
+    if sys.argv[1:] == ["--smoke-test"]:
+        run_frozen_smoke_test()
+        return
     try:
         start()
     except RuntimeError as exc:
         print(f"GUI mode is unavailable in this environment: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
+
+
+def run_frozen_smoke_test() -> None:
+    required = [
+        "index.html", "app.js", "app.css", "i18n.js",
+        "locales/en.json", "locales/zh-CN.json", "assets/plexmuxy-app.ico",
+    ]
+    missing = [name for name in required if not Path(static_path(name)).is_file()]
+    if missing:
+        raise RuntimeError(f"Frozen GUI resources are missing: {', '.join(missing)}")
+    for name in ("locales/en.json", "locales/zh-CN.json"):
+        value = json.loads(Path(static_path(name)).read_text(encoding="utf-8"))
+        if not isinstance(value, dict) or not value:
+            raise RuntimeError(f"Frozen GUI locale is invalid: {name}")
+    import_webview()
 
 
 def import_webview():

@@ -1357,6 +1357,31 @@ p {
   box-shadow: var(--shadow-media);
 }
 
+.plan-card.has-edits { border-color: color-mix(in srgb, var(--color-brand) 55%, var(--color-border)); }
+.plan-enabled { flex-wrap: wrap; justify-content: flex-end; }
+.editable-track, .source-track-row { display: grid; gap: 9px; }
+.track-check { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.track-check > input { margin-top: 3px; accent-color: var(--color-brand); }
+.track-editor { margin-left: 22px; }
+.track-editor summary, .source-track-panel summary { color: var(--color-text-secondary); font-size: 12px; cursor: pointer; }
+.track-editor-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding-top: 10px; }
+.track-editor-fields label { display: grid; gap: 5px; color: var(--color-text-tertiary); font-size: 11px; }
+.track-editor-fields .track-flag { display: flex; align-items: center; gap: 6px; }
+.source-track-panel { border-top: 1px solid var(--color-divider); padding-top: 13px; }
+.source-track-panel > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.source-track-list { display: grid; gap: 0; padding-top: 8px; }
+.source-track-row { grid-template-columns: minmax(0, 1fr) auto; align-items: center; border-top: 1px solid var(--color-divider); padding: 10px 0; }
+.source-track-copy { display: grid; gap: 3px; }
+.decision-reason { color: var(--color-text-tertiary); font-size: 12px; }
+.source-track-controls { display: flex; align-items: center; gap: 8px; }
+.track-order-controls { display: inline-flex; gap: 4px; margin-left: auto; }
+.editable-track { align-items: start; }
+.compact-settings { margin-bottom: 18px; }
+.setting-row textarea { width: min(520px, 100%); resize: vertical; }
+.audio-preview { grid-column: 1 / -1; width: 100%; height: 34px; }
+.compact { min-height: 30px; padding: 5px 9px; font-size: 12px; }
+.job-history-card { display: grid; gap: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 16px; background: var(--color-canvas-soft); }
+
 .plan-card::before,
 .result-card::before {
   position: absolute;
@@ -1869,6 +1894,15 @@ progress::-moz-progress-bar {
   .track-box + .track-box {
     border-top: 1px solid var(--color-divider);
     border-left: 0;
+  }
+
+  .track-editor-fields,
+  .source-track-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .source-track-controls {
+    justify-content: space-between;
   }
 }
 

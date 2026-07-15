@@ -38,6 +38,7 @@ plexmuxy gui
 The Windows GUI uses the Microsoft Edge WebView2 Evergreen Runtime. Windows 11 normally includes it; Windows 10 may require the [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). The standalone releases use the same Evergreen dependency to keep downloads small.
 
 Windows release archives contain independent CLI and GUI builds and do not require a local Python installation. Verify downloads against `SHA256SUMS.txt`.
+Releases also include a per-user Windows installer with a stable application identity, Start-menu entry, uninstaller, and notification activation. The portable ZIP remains supported.
 
 ## Commands
 
@@ -62,6 +63,13 @@ plexmuxy mux D:\Media --cleanup delete --yes
 
 # Export a redacted report with no media content
 plexmuxy diagnostics --output diagnostics.zip
+
+# Human-readable CLI language; JSON keys and error codes remain English/stable
+plexmuxy --language zh-CN show-config
+plexmuxy --output-format json plan D:\Media
+
+# Explicit update check (disabled by default)
+plexmuxy check-updates --force
 ```
 
 Useful job overrides include `--output-dir`, `--output-suffix`, `--name-strategy`, `--name-template`, `--extra-dir`, `--font-mode`, `--overwrite`, and `--cleanup`. For example, `--font-mode subset` enables font subsetting for that plan.
@@ -96,6 +104,8 @@ Important defaults:
 ```
 
 Parallel mux jobs are intentionally limited to 1–4 and default to 1. The old `thread_count` key is accepted only for migration. Archive limits apply before ZIP/7z extraction; uninspectable RAR archives require explicit permission.
+
+Source-audio filtering, update checks, and Plex refreshes are disabled by default. Plex tokens are read from the configured environment-variable name (default `PLEXMUXY_PLEX_TOKEN`), never stored in `config.json`; local-to-server path mappings are required before a refresh request is sent. Persistent font subsets use a validated, quota-limited local cache that can be disabled or cleared from the Environment view.
 
 The desktop “Environment configuration” view is persistent and separate from job options. It shows environment-variable and `PATH` discovery first, then offers a native file picker for `mkvmerge`, `ffmpeg`, or `unrar` when automatic discovery fails. Windows builds opt into Per-Monitor V2 awareness before creating native windows so the WebView and file dialogs follow system scaling on high-DPI and mixed-monitor setups.
 

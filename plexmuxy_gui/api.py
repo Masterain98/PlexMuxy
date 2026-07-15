@@ -7,13 +7,13 @@ import subprocess
 import sys
 import threading
 import time
-import uuid
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 from plexmuxy import __version__
+from plexmuxy.audio_preview import AudioPreviewManager
 from plexmuxy.config import (
     ConfigError,
     config_to_dict,
@@ -33,9 +33,17 @@ from plexmuxy.dependencies import (
     resolve_unrar,
 )
 from plexmuxy.diagnostics import export_diagnostics as write_diagnostics
+from plexmuxy.font_cache import FontSubsetCache
+from plexmuxy.integrations.plex import refresh_paths
+from plexmuxy.job_store import JobStore, platform_state_path
+from plexmuxy.jobs import JobRecord
 from plexmuxy.overrides import apply_job_overrides, overrides_from_payload
+from plexmuxy.plan_edit import plan_edits_from_payload
+from plexmuxy.queue import JobQueue
 from plexmuxy.serialization import job_report_to_dict, snapshot_from_dict
 from plexmuxy.service import execute_plan_snapshot, run_mux_job
+from plexmuxy.snapshot import validate_plan_snapshot
+from plexmuxy.update_check import check_for_updates
 
 from .notifications import NativeNotifier
 
@@ -63,14 +71,25 @@ class GuiJob:
 
 
 class PlexMuxyApi:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        state_path: Path | None = None,
+        preview_root: Path | None = None,
+        activation_job_id: str | None = None,
+        activation_action: str = "view",
+    ) -> None:
         self._window: Any = None
         self._window_maximized = False
         self._allow_window_close = False
-        self._jobs: dict[str, GuiJob] = {}
-        self._jobs_lock = threading.Lock()
+        self._state_path = state_path
+        self._job_store: JobStore | None = None
+        self._job_queue: JobQueue | None = None
+        self._preview = AudioPreviewManager(preview_root)
+        self._active_plan_ids: dict[Path, str] = {}
         self._last_diagnostics_path: Path | None = None
         self._notifier = NativeNotifier()
+        self._activation_job_id = activation_job_id
+        self._activation_action = activation_action
 
     def bind_window(self, window: Any) -> None:
         self._window = window
@@ -128,6 +147,8 @@ class PlexMuxyApi:
                     "platform": platform.platform(),
                     "config_path": str(config_path),
                     "config_exists": config_path.exists(),
+                    "activation_job_id": self._activation_job_id,
+                    "activation_action": self._activation_action,
                 }
             )
 
@@ -212,6 +233,7 @@ class PlexMuxyApi:
                 return self.fail("Window is not ready")
 
             self._allow_window_close = True
+            self._preview.close()
             self._notifier.close()
             # Let pywebview deliver this bridge response before closing its WebView.
             timer = threading.Timer(0.1, self._window.destroy)
@@ -240,7 +262,7 @@ class PlexMuxyApi:
         return self.guarded(run)
 
     def plan_job(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self._run(payload, dry_run=True)
+        return self._plan(payload)
 
     def run_job(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._run(payload, dry_run=False)
@@ -251,21 +273,44 @@ class PlexMuxyApi:
                 return self.fail("A generated plan snapshot is required")
             snapshot = snapshot_from_dict(payload["snapshot"])
             config = parse_config(snapshot.config)
+            validate_plan_snapshot(snapshot, config)
             yes = bool(payload.get("yes", False))
             if (requires_delete_confirmation(config) or config.task.overwrite) and not yes:
                 return self.fail("Delete or overwrite requires confirmation")
-            job = GuiJob(job_id=str(uuid.uuid4()))
-            with self._jobs_lock:
-                self._jobs[job.job_id] = job
-                self._prune_jobs()
-            threading.Thread(
-                target=self._execute_background_job,
-                args=(job, snapshot, config, yes),
-                name=f"plexmuxy-gui-{job.job_id[:8]}",
-                daemon=True,
-            ).start()
-            return self.ok({"job_id": job.job_id})
+            store, queue = self._ensure_jobs()
+            job_id = str(payload.get("job_id") or "")
+            if job_id:
+                job = store.get_job(job_id)
+                if job.state != "awaiting_review" or job.plan_id != snapshot.plan_id:
+                    return self.fail("Job is not awaiting review for this plan snapshot")
+            else:
+                job = store.create_job(snapshot.input_dir)
+                store.transition(job.id, "planning", event_type="plan_started")
+                store.save_plan(job.id, payload["snapshot"], {"snapshot": payload["snapshot"], "plans": []})
+                job = store.transition(job.id, "awaiting_review", event_type="plan_completed")
+            active = self._active_plan_ids.get(snapshot.input_dir.resolve())
+            if active is not None and active != snapshot.plan_id:
+                return self.fail("This plan was superseded by a newer edited snapshot")
+
+            def execute(cancel_event: threading.Event) -> dict[str, Any]:
+                def progress(event) -> None:
+                    store.append_event(job.id, "progress", asdict(event))
+
+                report = execute_plan_snapshot(
+                    snapshot,
+                    config,
+                    yes=yes,
+                    progress_callback=progress,
+                    cancellation_event=cancel_event,
+                )
+                return job_report_to_dict(report)
+
+            queue.submit(job.id, execute)
+            return self.ok({"job_id": job.id})
         return self.guarded(run)
+
+    def update_plan_draft(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._plan(payload, existing_job_id=str(payload.get("job_id") or ""), edited=True)
 
     def save_settings(self, payload: dict[str, Any]) -> dict[str, Any]:
         def run() -> dict[str, Any]:
@@ -281,6 +326,22 @@ class PlexMuxyApi:
                     task[key] = payload[key] or None
             if "font_mode" in payload:
                 data["font"]["mode"] = payload["font_mode"]
+            tracks = data["tracks"]
+            for key in (
+                "audio_filter_enabled",
+                "exclude_audio_title_patterns",
+                "keep_audio_languages",
+                "keep_default_audio",
+                "keep_all_when_unknown",
+                "allow_no_audio",
+            ):
+                if key in payload:
+                    tracks[key] = payload[key]
+            cache = data["font_cache"]
+            for key in ("enabled", "max_size_mb", "max_age_days"):
+                payload_key = f"font_cache_{key}"
+                if payload_key in payload:
+                    cache[key] = payload[payload_key]
             task["cleanup_overridden"] = False
             config = parse_config(data)
             path = persist_config(config, config.source_path or resolve_config_path())
@@ -292,7 +353,12 @@ class PlexMuxyApi:
         def run() -> dict[str, Any]:
             if not isinstance(payload, dict):
                 return self.fail("Environment settings payload must be an object")
-            allowed = {"mkvmerge_path", "ffmpeg_path", "unrar_path", "notifications_enabled"}
+            allowed = {
+                "mkvmerge_path", "ffmpeg_path", "unrar_path", "notifications_enabled",
+                "updates_enabled", "plex_enabled", "plex_server_url", "plex_section_id",
+                "plex_token_env", "plex_path_mappings", "font_cache_enabled",
+                "font_cache_max_size_mb", "font_cache_max_age_days",
+            }
             unknown = sorted(set(payload) - allowed)
             if unknown:
                 return self.fail(f"Unknown environment setting(s): {', '.join(unknown)}")
@@ -320,6 +386,30 @@ class PlexMuxyApi:
                 if not isinstance(enabled, bool):
                     return self.fail("notifications_enabled must be a boolean")
                 data["notifications"]["enabled"] = enabled
+            if "updates_enabled" in payload:
+                data["updates"]["enabled"] = bool_setting(payload["updates_enabled"], "updates_enabled")
+            if "font_cache_enabled" in payload:
+                data["font_cache"]["enabled"] = bool_setting(payload["font_cache_enabled"], "font_cache_enabled")
+            for key in ("max_size_mb", "max_age_days"):
+                payload_key = f"font_cache_{key}"
+                if payload_key in payload:
+                    data["font_cache"][key] = payload[payload_key]
+            if "plex_enabled" in payload:
+                data["plex"]["enabled"] = bool_setting(payload["plex_enabled"], "plex_enabled")
+            for payload_key, config_key in (
+                ("plex_server_url", "server_url"),
+                ("plex_section_id", "section_id"),
+                ("plex_token_env", "token_env"),
+            ):
+                if payload_key in payload:
+                    if not isinstance(payload[payload_key], str):
+                        return self.fail(f"{payload_key} must be a string")
+                    data["plex"][config_key] = payload[payload_key].strip()
+            if "plex_path_mappings" in payload:
+                mappings = payload["plex_path_mappings"]
+                if not isinstance(mappings, list):
+                    return self.fail("plex_path_mappings must be a list")
+                data["plex"]["path_mappings"] = mappings
 
             config = parse_config(data)
             path = persist_config(config, config.source_path or resolve_config_path())
@@ -375,36 +465,252 @@ class PlexMuxyApi:
 
     def get_job_status(self, job_id: str) -> dict[str, Any]:
         def run() -> dict[str, Any]:
-            job = self._find_job(job_id)
+            store, _queue = self._ensure_jobs()
+            job = store.get_job(str(job_id))
+            progress = store.latest_event(job.id, "progress")
             return self.ok({
-                "job_id": job.job_id, "status": job.status, "progress": dict(job.progress),
-                "error": job.error, "elapsed_seconds": round(time.monotonic() - job.created_at, 1),
+                "job_id": job.id,
+                "status": job.state,
+                "progress": progress.data if progress is not None else {},
+                "error": job.error_message,
+                "error_code": job.error_code,
             })
+        return self.guarded(run)
+
+    def create_audio_preview(self, payload: dict[str, Any]) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            if not isinstance(payload, dict) or not isinstance(payload.get("snapshot"), dict):
+                return self.fail("An active plan snapshot is required for audio preview")
+            source = payload.get("source_video")
+            track_id = payload.get("track_id")
+            if not isinstance(source, str) or not source or isinstance(track_id, bool) or not isinstance(track_id, int):
+                return self.fail("Audio preview requires source_video and an integer track_id")
+            snapshot = snapshot_from_dict(payload["snapshot"])
+            config = parse_config(snapshot.config)
+            validate_plan_snapshot(snapshot, config)
+            preview = self._preview.create(
+                snapshot,
+                config,
+                Path(source),
+                track_id,
+                float(payload.get("start_seconds", 60)),
+                float(payload.get("duration_seconds", 15)),
+            )
+            return self.ok({
+                "preview_id": preview.preview_id,
+                "uri": preview.uri,
+                "source_video": str(preview.source_video),
+                "track_id": preview.track_id,
+                "start_seconds": preview.start_seconds,
+                "duration_seconds": preview.duration_seconds,
+            })
+        return self.guarded(run)
+
+    def cancel_audio_preview(self) -> dict[str, Any]:
+        return self.guarded(lambda: self.ok({"cancelled": self._preview.cancel()}))
+
+    def delete_audio_preview(self, preview_id: str) -> dict[str, Any]:
+        return self.guarded(lambda: self.ok({"deleted": self._preview.delete(str(preview_id))}))
+
+    def get_font_cache(self) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            config = load_or_default_config()
+            cache = FontSubsetCache(config.font_cache)
+            return self.ok({**asdict(cache.stats()), "enabled": config.font_cache.enabled})
+        return self.guarded(run)
+
+    def clear_font_cache(self) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            config = load_or_default_config()
+            return self.ok(asdict(FontSubsetCache(config.font_cache).clear()))
+        return self.guarded(run)
+
+    def open_font_cache_location(self) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            config = load_or_default_config()
+            path = FontSubsetCache(config.font_cache).root
+            open_path(path)
+            return self.ok({"path": str(path)})
         return self.guarded(run)
 
     def get_job_report(self, job_id: str) -> dict[str, Any]:
         def run() -> dict[str, Any]:
-            job = self._find_job(job_id)
-            if job.status not in {"completed", "failed", "cancelled"}:
+            store, _queue = self._ensure_jobs()
+            job = store.get_job(str(job_id))
+            if job.state not in {"completed", "failed", "cancelled", "interrupted"}:
                 return self.fail("Job is not finished")
-            if job.report is None:
-                return self.fail(job.error or "Job did not produce a report")
-            return self.ok(job.report)
+            report = store.load_report(job.id)
+            if report is None:
+                return self.fail(job.error_message or "Job did not produce a report")
+            return self.ok(report)
         return self.guarded(run)
 
     def cancel_job(self, job_id: str) -> dict[str, Any]:
         def run() -> dict[str, Any]:
-            job = self._find_job(job_id)
-            job.cancel_event.set()
-            return self.ok({"job_id": job.job_id, "cancellation_requested": True})
+            _store, queue = self._ensure_jobs()
+            requested = queue.cancel(str(job_id))
+            return self.ok({"job_id": str(job_id), "cancellation_requested": requested})
         return self.guarded(run)
 
-    def _find_job(self, job_id: str) -> GuiJob:
-        with self._jobs_lock:
-            job = self._jobs.get(str(job_id))
-        if job is None:
-            raise ValueError("Unknown job_id")
-        return job
+    def load_job(self, job_id: str) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            store, _queue = self._ensure_jobs()
+            job = store.get_job(str(job_id))
+            report = store.load_report(job.id)
+            if report is None:
+                return self.fail("Job does not have a saved plan or report")
+            return self.ok({"job": asdict(job), "report": report})
+        return self.guarded(run)
+
+    def open_job_output(self, job_id: str) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            store, _queue = self._ensure_jobs()
+            report = store.load_report(str(job_id))
+            if report is None:
+                return self.fail("Job does not have a saved report")
+            candidates = [
+                item.get("output_path") for item in report.get("results", [])
+                if isinstance(item, dict) and item.get("output_path")
+            ] or [
+                item.get("output_path") for item in report.get("plans", [])
+                if isinstance(item, dict) and item.get("output_path")
+            ]
+            if not candidates:
+                return self.fail("Job has no output location")
+            directory = Path(str(candidates[0])).expanduser().resolve().parent
+            open_path(directory)
+            return self.ok({"path": str(directory)})
+        return self.guarded(run)
+
+    def export_job_diagnostics(self, job_id: str) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            store, _queue = self._ensure_jobs()
+            job = store.get_job(str(job_id))
+            context = {
+                "job": asdict(job),
+                "events": [asdict(event) for event in store.list_events(job.id)],
+                "report": store.load_report(job.id),
+            }
+            stamp = time.strftime("%Y%m%d-%H%M%S")
+            destination = resolve_config_path().parent / f"plexmuxy-job-{job.id[:8]}-{stamp}.zip"
+            path = write_diagnostics(load_or_default_config(), destination, job_context=context)
+            self._last_diagnostics_path = path
+            return self.ok({"path": str(path), "directory": str(path.parent)})
+        return self.guarded(run)
+
+    def retry_plex_refresh(self, job_id: str) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            store, _queue = self._ensure_jobs()
+            report = store.load_report(str(job_id))
+            snapshot = store.load_snapshot(str(job_id))
+            if report is None or snapshot is None:
+                return self.fail("Job has no saved execution report and configuration")
+            config = parse_config(snapshot["config"])
+            if not config.plex.enabled:
+                return self.fail("Plex refresh is disabled for this job")
+            output_dirs = [
+                Path(str(item["output_path"])).parent
+                for item in report.get("results", [])
+                if isinstance(item, dict) and item.get("success") and item.get("verified") and item.get("output_path")
+            ]
+            if not output_dirs:
+                return self.fail("Job has no verified output location to refresh")
+            results = refresh_paths(config.plex, output_dirs)
+            payload = [{"type": "plex_refresh", **result.__dict__} for result in results]
+            report.setdefault("post_actions", []).extend(payload)
+            store.save_report(str(job_id), report)
+            return self.ok({"results": payload})
+        return self.guarded(run)
+
+    def check_updates(self, force: bool = False) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            config = load_or_default_config()
+            return self.ok(asdict(check_for_updates(__version__, config.updates, force=bool(force))))
+        return self.guarded(run)
+
+    def list_jobs(self, limit: int = 100) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            store, queue = self._ensure_jobs()
+            return self.ok({
+                "paused": queue.paused,
+                "jobs": [asdict(job) for job in store.list_jobs(limit=int(limit))],
+            })
+        return self.guarded(run)
+
+    def pause_queue(self) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            _store, queue = self._ensure_jobs()
+            queue.pause()
+            return self.ok({"paused": True})
+        return self.guarded(run)
+
+    def resume_queue(self) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            _store, queue = self._ensure_jobs()
+            queue.resume()
+            return self.ok({"paused": False})
+        return self.guarded(run)
+
+    def reorder_job(self, job_id: str | dict[str, Any], position: int = 0) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            if isinstance(job_id, dict):
+                identifier = str(job_id.get("job_id") or "")
+                target = int(job_id.get("position", 0))
+            else:
+                identifier = str(job_id)
+                target = int(position)
+            _store, queue = self._ensure_jobs()
+            queue.reorder(identifier, target)
+            return self.ok({"job_id": identifier, "position": target})
+        return self.guarded(run)
+
+    def retry_job(self, job_id: str) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            store, _queue = self._ensure_jobs()
+            original = store.get_job(str(job_id))
+            if original.state not in {"failed", "cancelled", "interrupted"}:
+                return self.fail("Only failed, cancelled, or interrupted jobs can be retried")
+            return self.ok(self._replan_history_job(store, original, retry_of=original.id))
+        return self.guarded(run)
+
+    def replan_job(self, job_id: str) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            store, _queue = self._ensure_jobs()
+            original = store.get_job(str(job_id))
+            return self.ok(self._replan_history_job(store, original, retry_of=original.id))
+        return self.guarded(run)
+
+    def _replan_history_job(
+        self,
+        store: JobStore,
+        original: JobRecord,
+        *,
+        retry_of: str,
+    ) -> dict[str, Any]:
+        saved_snapshot = store.load_snapshot(original.id)
+        config = (
+            parse_config(saved_snapshot["config"])
+            if saved_snapshot is not None and isinstance(saved_snapshot.get("config"), dict)
+            else load_or_default_config()
+        )
+        job = store.create_job(Path(original.input_dir), retry_of=retry_of)
+        store.transition(job.id, "planning", event_type="plan_started")
+        report = run_mux_job(Path(original.input_dir), config, dry_run=True, yes=False)
+        data = job_report_to_dict(report)
+        data["job_id"] = job.id
+        if report.snapshot is None or report.error is not None:
+            store.save_report(job.id, data)
+            store.transition(
+                job.id,
+                "failed",
+                error_code=report.error_code or "PLAN_NOT_EXECUTABLE",
+                error_message=report.error or "Plan did not produce an executable snapshot",
+            )
+        else:
+            store.save_plan(job.id, data["snapshot"], data)
+            store.transition(job.id, "awaiting_review", event_type="plan_completed")
+            self._active_plan_ids[Path(original.input_dir).resolve()] = report.snapshot.plan_id
+        return data
 
     def _execute_background_job(self, job: GuiJob, snapshot, config, yes: bool) -> None:
         job.status = "running"
@@ -432,28 +738,24 @@ class PlexMuxyApi:
         finally:
             self._notify_job_terminal(job)
 
-    def _notify_job_terminal(self, job: GuiJob) -> None:
+    def _notify_job_terminal(self, job: GuiJob | JobRecord) -> None:
         try:
             if not load_or_default_config().notifications.enabled:
                 return
+            status = getattr(job, "status", getattr(job, "state", "failed"))
+            error = getattr(job, "error", getattr(job, "error_message", None))
             messages = {
                 "completed": ("PlexMuxy job completed", "Your mux job finished successfully.", "success"),
                 "cancelled": ("PlexMuxy job cancelled", "The mux job was cancelled.", "warning"),
-                "failed": ("PlexMuxy job failed", job.error or "The mux job did not complete.", "error"),
+                "interrupted": ("PlexMuxy job interrupted", "The application exited before completion.", "warning"),
+                "failed": ("PlexMuxy job failed", error or "The mux job did not complete.", "error"),
             }
-            title, message, tone = messages.get(job.status, messages["failed"])
-            result = self._notifier.send(title, message, tone=tone)
+            title, message, tone = messages.get(status, messages["failed"])
+            result = self._notifier.send(title, message, tone=tone, job_id=getattr(job, "id", getattr(job, "job_id", None)))
             if not result.sent and result.error:
                 logging.info("Native job notification was not sent: %s", result.error)
         except Exception:  # noqa: BLE001 - notifications must never change a completed job result.
             logging.exception("Native job notification failed")
-
-    def _prune_jobs(self) -> None:
-        if len(self._jobs) <= 20:
-            return
-        finished = [key for key, job in self._jobs.items() if job.status in {"completed", "failed", "cancelled"}]
-        for key in finished[: len(self._jobs) - 20]:
-            self._jobs.pop(key, None)
 
     def open_config_location(self) -> dict[str, Any]:
         def run() -> dict[str, Any]:
@@ -464,29 +766,97 @@ class PlexMuxyApi:
 
         return self.guarded(run)
 
+    def _ensure_jobs(self) -> tuple[JobStore, JobQueue]:
+        if self._job_store is None:
+            self._job_store = JobStore(self._state_path or platform_state_path())
+        if self._job_queue is None:
+            self._job_queue = JobQueue(self._job_store, terminal_callback=self._notify_job_terminal)
+        return self._job_store, self._job_queue
+
+    def _request_context(self, payload: dict[str, Any]):
+        if not isinstance(payload, dict):
+            raise ValueError("Payload must be an object")
+        input_dir_raw = payload.get("input_dir")
+        if input_dir_raw is None or str(input_dir_raw).strip() == "":
+            raise ValueError("Input directory is required")
+        input_dir = Path(str(input_dir_raw).strip()).expanduser().resolve()
+        if not input_dir.exists():
+            raise ValueError(f"Input directory does not exist: {input_dir}")
+        if not input_dir.is_dir():
+            raise ValueError(f"Input path is not a directory: {input_dir}")
+        config = load_or_default_config()
+        overrides_raw = payload.get("overrides", {})
+        if overrides_raw is None:
+            overrides_raw = {}
+        if not isinstance(overrides_raw, dict):
+            raise ValueError("overrides must be an object")
+        config = apply_job_overrides(config, overrides_from_payload(overrides_raw))
+        return input_dir, config, bool(payload.get("yes", False))
+
+    def _plan(
+        self,
+        payload: dict[str, Any],
+        *,
+        existing_job_id: str = "",
+        edited: bool = False,
+    ) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            input_dir, config, _yes = self._request_context(payload)
+            edits = plan_edits_from_payload(payload.get("plan_edits"))
+            store, _queue = self._ensure_jobs()
+            if existing_job_id:
+                job = store.get_job(existing_job_id)
+                if job.state != "awaiting_review" or Path(job.input_dir).resolve() != input_dir:
+                    return self.fail("Only the current awaiting-review job can be edited")
+                base_plan_id = str(payload.get("base_plan_id") or "")
+                if base_plan_id and job.plan_id != base_plan_id:
+                    return self.fail("The plan draft was superseded; reload it before editing")
+                store.transition(job.id, "planning", event_type="plan_edit_started")
+            else:
+                job = store.create_job(input_dir)
+                store.transition(job.id, "planning", event_type="plan_started")
+            self._preview.clear()
+            try:
+                arguments: dict[str, Any] = {"dry_run": True, "yes": False}
+                if edits:
+                    arguments["plan_edits"] = edits
+                report = run_mux_job(input_dir, config, **arguments)
+                data = job_report_to_dict(report)
+                data["job_id"] = job.id
+                if report.error is not None or report.snapshot is None:
+                    store.save_report(job.id, data)
+                    store.transition(
+                        job.id,
+                        "failed",
+                        error_code=report.error_code or "PLAN_NOT_EXECUTABLE",
+                        error_message=report.error or "Plan did not produce an executable snapshot",
+                    )
+                else:
+                    store.save_plan(job.id, data["snapshot"], data)
+                    store.transition(
+                        job.id,
+                        "awaiting_review",
+                        event_type="plan_edited" if edited else "plan_completed",
+                        event_data={"plan_id": report.snapshot.plan_id},
+                    )
+                    self._active_plan_ids[input_dir] = report.snapshot.plan_id
+                return self.ok(data)
+            except Exception as exc:
+                current = store.get_job(job.id)
+                if current.state == "planning":
+                    store.transition(
+                        job.id,
+                        "failed",
+                        error_code="PLAN_FAILED",
+                        error_message=str(exc),
+                    )
+                raise
+
+        return self.guarded(run)
+
     def _run(self, payload: dict[str, Any], dry_run: bool) -> dict[str, Any]:
         def run() -> dict[str, Any]:
-            if not isinstance(payload, dict):
-                return self.fail("Payload must be an object")
-
-            input_dir_raw = payload.get("input_dir")
-            if input_dir_raw is None or str(input_dir_raw).strip() == "":
-                return self.fail("Input directory is required")
-            input_dir = Path(str(input_dir_raw).strip()).expanduser().resolve()
-            if not input_dir.exists():
-                return self.fail(f"Input directory does not exist: {input_dir}")
-            if not input_dir.is_dir():
-                return self.fail(f"Input path is not a directory: {input_dir}")
-
-            config = load_or_default_config()
-            overrides_raw = payload.get("overrides", {})
-            if overrides_raw is None:
-                overrides_raw = {}
-            if not isinstance(overrides_raw, dict):
-                return self.fail("overrides must be an object")
-            overrides = overrides_from_payload(overrides_raw)
-            config = apply_job_overrides(config, overrides)
-            yes = bool(payload.get("yes", False))
+            input_dir, config, yes = self._request_context(payload)
             if not dry_run and requires_delete_confirmation(config) and not yes:
                 return self.fail("Delete cleanup requires confirmation")
 
@@ -549,6 +919,35 @@ def config_summary(config, notifier: NativeNotifier | None = None) -> dict[str, 
             "mode": config.font.mode,
             "subset_failure_action": config.font.subset_failure_action,
         },
+        "updates": {
+            "enabled": config.updates.enabled,
+            "interval_hours": config.updates.interval_hours,
+            "timeout_seconds": config.updates.timeout_seconds,
+        },
+        "plex": {
+            "enabled": config.plex.enabled,
+            "server_url": config.plex.server_url,
+            "section_id": config.plex.section_id,
+            "token_env": config.plex.token_env,
+            "path_mappings": [
+                {"local_root": str(mapping.local_root), "server_root": mapping.server_root}
+                for mapping in config.plex.path_mappings
+            ],
+            "token_available": bool(os.environ.get(config.plex.token_env, "")),
+        },
+        "font_cache": {
+            "enabled": config.font_cache.enabled,
+            "max_size_mb": config.font_cache.max_size_mb,
+            "max_age_days": config.font_cache.max_age_days,
+        },
+        "tracks": {
+            "audio_filter_enabled": config.tracks.audio_filter_enabled,
+            "exclude_audio_title_patterns": [*config.tracks.exclude_audio_title_patterns],
+            "keep_audio_languages": [*config.tracks.keep_audio_languages],
+            "keep_default_audio": config.tracks.keep_default_audio,
+            "keep_all_when_unknown": config.tracks.keep_all_when_unknown,
+            "allow_no_audio": config.tracks.allow_no_audio,
+        },
         "matching": {
             "movie_fallback": config.matching.movie_fallback,
             "minimum_confidence": config.matching.minimum_confidence,
@@ -562,6 +961,12 @@ def normalize_dependency_name(value: str) -> str:
     if name not in DEPENDENCY_RESOLVERS:
         raise ValueError(f"Unsupported dependency: {value}")
     return name
+
+
+def bool_setting(value: Any, field: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"{field} must be a boolean")
+    return value
 
 
 def validate_dependency_path(dependency: str, value: str) -> DependencyResolution:

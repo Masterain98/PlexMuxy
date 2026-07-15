@@ -12,6 +12,13 @@ All notable changes follow Keep a Changelog categories.
 - Crowdin-compatible JSON localization with an English source catalog and Simplified Chinese translations.
 - Real-media integration suite, multi-platform/Python CI, coverage, static checks, wheel verification, PyInstaller release builds, and SHA-256 generation.
 - ASS/SSA referenced-font discovery, archive resource limits, conflict handling, and source-track plan metadata.
+- Conservative source-audio filtering with manual track overrides and exact output verification.
+- Safe plan editing, external track reassignment/order, subtitle metadata editing, and ffmpeg audio previews.
+- Persistent SQLite task queue/history, crash interruption state, retries, replanning, and per-task diagnostics.
+- Validated persistent font-subset cache and ffmpeg/libass render integration tests.
+- Opt-in update checks and post-verification Plex library refresh with environment-only token handling.
+- English/Simplified Chinese CLI messages with stable JSON output and error contracts.
+- Fixed-identity Windows installer, restricted notification activation, SBOM, release manifest, optional signing, and PyPI Trusted Publishing workflow.
 
 ### Changed
 
@@ -19,7 +26,7 @@ All notable changes follow Keep a Changelog categories.
 - Redesigned the desktop GUI around the five-stage workflow, persistent themes, responsive navigation, and clearer task states.
 - Matching now performs global confidence assignment and skips ambiguity by default.
 - Muxing uses cancellable subprocesses, temporary outputs, structural verification, and bounded concurrency.
-- Source tracks are preserved by default; filtering remains opt-in future work.
+- Source tracks remain preserved by default; filtering is explicit and fails closed when inspection is unavailable.
 
 ### Fixed
 

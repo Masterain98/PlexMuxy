@@ -1,5 +1,7 @@
 from plexmuxy.config import default_config
 from plexmuxy.models import JobReport, MuxPlan, MuxResult
+from plexmuxy.serialization import snapshot_to_dict
+from plexmuxy.snapshot import create_plan_snapshot
 from plexmuxy_gui.api import GuiJob, PlexMuxyApi
 from plexmuxy_gui.notifications import NotificationCapability, NotificationResult
 
@@ -43,7 +45,7 @@ class FakeNotifier:
     def capability(self):
         return NotificationCapability(self.available, "test", None if self.available else "unsupported")
 
-    def send(self, title, message, tone="info", timeout_ms=6000):
+    def send(self, title, message, tone="info", timeout_ms=6000, job_id=None):
         self.messages.append((title, message, tone, timeout_ms))
         return NotificationResult(self.available, "test", None if self.available else "unsupported")
 
@@ -284,6 +286,71 @@ def test_save_environment_settings_persists_paths_and_notifications(monkeypatch,
     assert response["data"]["ffmpeg"]["available"] is True
     assert response["data"]["notifications"]["enabled"] is True
     assert response["data"]["notifications"]["available"] is True
+
+
+def test_save_environment_settings_persists_opt_in_integrations_and_cache(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.json"
+    monkeypatch.setattr("plexmuxy_gui.api.resolve_config_path", lambda path=None: config_path)
+    api = PlexMuxyApi()
+    api._notifier = FakeNotifier()
+    response = api.save_environment_settings({
+        "updates_enabled": True,
+        "font_cache_enabled": False,
+        "font_cache_max_size_mb": 512,
+        "font_cache_max_age_days": 30,
+        "plex_enabled": True,
+        "plex_server_url": "https://plex.example.test",
+        "plex_section_id": "2",
+        "plex_token_env": "MY_PLEX_TOKEN",
+        "plex_path_mappings": [{"local_root": str(tmp_path.resolve()), "server_root": "/media"}],
+    })
+    assert response["ok"] is True
+    assert response["data"]["updates"]["enabled"] is True
+    assert response["data"]["font_cache"]["enabled"] is False
+    assert response["data"]["plex"]["token_env"] == "MY_PLEX_TOKEN"
+
+
+def test_persistent_job_can_be_loaded_and_output_opened(monkeypatch, tmp_path):
+    source = tmp_path / "source.mkv"
+    output = tmp_path / "out" / "source.mkv"
+    source.write_bytes(b"source")
+    plan = MuxPlan(source, output)
+    config = default_config()
+    snapshot = create_plan_snapshot(tmp_path, [plan], config)
+    api = PlexMuxyApi(state_path=tmp_path / "state.db")
+    store, _queue = api._ensure_jobs()
+    job = store.create_job(tmp_path)
+    store.transition(job.id, "planning")
+    report = {"job_id": job.id, "plans": [{"output_path": str(output)}], "results": []}
+    store.save_plan(job.id, snapshot_to_dict(snapshot), report)
+    store.transition(job.id, "awaiting_review")
+    opened = []
+    monkeypatch.setattr("plexmuxy_gui.api.open_path", lambda path: opened.append(path))
+
+    assert api.load_job(job.id)["data"]["report"]["job_id"] == job.id
+    assert api.open_job_output(job.id)["ok"] is True
+    assert opened == [output.parent.resolve()]
+    _queue.close()
+    store.close()
+
+
+def test_plex_refresh_retry_rejects_jobs_that_did_not_opt_in(tmp_path):
+    source = tmp_path / "source.mkv"
+    output = tmp_path / "out" / "source.mkv"
+    source.write_bytes(b"source")
+    snapshot = create_plan_snapshot(tmp_path, [MuxPlan(source, output)], default_config())
+    api = PlexMuxyApi(state_path=tmp_path / "state.db")
+    store, queue = api._ensure_jobs()
+    job = store.create_job(tmp_path)
+    store.save_plan(job.id, snapshot_to_dict(snapshot), {"plans": []})
+    store.save_report(job.id, {"results": [{"success": True, "verified": True, "output_path": str(output)}]})
+
+    response = api.retry_plex_refresh(job.id)
+
+    assert response["ok"] is False
+    assert response["error"] == "Plex refresh is disabled for this job"
+    queue.close()
+    store.close()
 
 
 def test_reset_dependency_path_restores_automatic_resolution(monkeypatch, tmp_path):

@@ -17,21 +17,25 @@ from .models import (
     ArchiveLimits,
     ConcurrencyConfig,
     FfmpegConfig,
+    FontCacheConfig,
     FontConfig,
     LanguageProfile,
     MatchingConfig,
     MediaConfig,
     MkvMergeConfig,
     NotificationConfig,
+    PlexConfig,
+    PlexPathMapping,
     SubtitleConfig,
     TaskConfig,
     TrackFilterConfig,
+    UpdateConfig,
 )
 
-CURRENT_CONFIG_VERSION = 3
+CURRENT_CONFIG_VERSION = 4
 ROOT_FIELDS = {
     "config_version", "media", "task", "matching", "subtitle", "font",
-    "mkvmerge", "ffmpeg", "notifications", "concurrency", "tracks",
+    "font_cache", "mkvmerge", "ffmpeg", "notifications", "updates", "plex", "concurrency", "tracks",
 }
 
 LANGUAGE_PROFILES = [
@@ -184,10 +188,13 @@ def parse_v2_config(data: dict[str, Any]) -> AppConfig:
     matching_data = require_mapping(data, "matching", default={})
     subtitle_data = require_mapping(data, "subtitle", default={})
     font_data = require_mapping(data, "font", default={})
+    font_cache_data = require_mapping(data, "font_cache", default={})
     limit_data = require_mapping(font_data, "archive_limits", default={})
     mkvmerge_data = require_mapping(data, "mkvmerge", default={})
     ffmpeg_data = require_mapping(data, "ffmpeg", default={})
     notifications_data = require_mapping(data, "notifications", default={})
+    updates_data = require_mapping(data, "updates", default={})
+    plex_data = require_mapping(data, "plex", default={})
     concurrency_data = require_mapping(data, "concurrency", default={})
     tracks_data = require_mapping(data, "tracks", default={})
     reject_unknown(media_data, {
@@ -207,6 +214,7 @@ def parse_v2_config(data: dict[str, Any]) -> AppConfig:
         "delete_fonts_after_mux", "unrar_path", "mode", "missing_font_action",
         "subset_failure_action", "archive_limits",
     }, "font")
+    reject_unknown(font_cache_data, {"enabled", "max_size_mb", "max_age_days"}, "font_cache")
     reject_unknown(limit_data, {
         "max_archive_size", "max_files", "max_total_size", "max_file_size", "max_depth",
         "allow_uninspected_archives",
@@ -214,9 +222,12 @@ def parse_v2_config(data: dict[str, Any]) -> AppConfig:
     reject_unknown(mkvmerge_data, {"path"}, "mkvmerge")
     reject_unknown(ffmpeg_data, {"path"}, "ffmpeg")
     reject_unknown(notifications_data, {"enabled"}, "notifications")
+    reject_unknown(updates_data, {"enabled", "interval_hours", "timeout_seconds"}, "updates")
+    reject_unknown(plex_data, {"enabled", "server_url", "section_id", "token_env", "path_mappings"}, "plex")
     reject_unknown(concurrency_data, {"max_parallel_mux_jobs", "thread_count"}, "concurrency")
     reject_unknown(tracks_data, {
-        "exclude_audio_title_patterns", "keep_audio_languages", "keep_all_when_unknown",
+        "audio_filter_enabled", "exclude_audio_title_patterns", "keep_audio_languages",
+        "keep_default_audio", "keep_all_when_unknown", "allow_no_audio",
     }, "tracks")
 
     media = MediaConfig(
@@ -282,6 +293,11 @@ def parse_v2_config(data: dict[str, Any]) -> AppConfig:
         ),
         archive_limits=limits,
     )
+    font_cache = FontCacheConfig(
+        enabled=bool_value(font_cache_data.get("enabled", True), "font_cache.enabled"),
+        max_size_mb=positive_int(font_cache_data.get("max_size_mb", 2048), "font_cache.max_size_mb"),
+        max_age_days=positive_int(font_cache_data.get("max_age_days", 90), "font_cache.max_age_days"),
+    )
     using_legacy_thread_count = "max_parallel_mux_jobs" not in concurrency_data and "thread_count" in concurrency_data
     raw_parallel = concurrency_data.get("max_parallel_mux_jobs", concurrency_data.get("thread_count", 1))
     if raw_parallel == "auto":
@@ -289,16 +305,52 @@ def parse_v2_config(data: dict[str, Any]) -> AppConfig:
     concurrency_field = "concurrency.thread_count" if using_legacy_thread_count else "concurrency.max_parallel_mux_jobs"
     concurrency = ConcurrencyConfig(max_parallel_mux_jobs=int_range(raw_parallel, concurrency_field, 1, 4))
     tracks = TrackFilterConfig(
+        audio_filter_enabled=bool_value(
+            tracks_data.get("audio_filter_enabled", False), "tracks.audio_filter_enabled"
+        ),
         exclude_audio_title_patterns=string_list(tracks_data.get("exclude_audio_title_patterns", []), "tracks.exclude_audio_title_patterns"),
         keep_audio_languages=string_list(tracks_data.get("keep_audio_languages", []), "tracks.keep_audio_languages"),
+        keep_default_audio=bool_value(
+            tracks_data.get("keep_default_audio", True), "tracks.keep_default_audio"
+        ),
         keep_all_when_unknown=bool_value(tracks_data.get("keep_all_when_unknown", True), "tracks.keep_all_when_unknown"),
+        allow_no_audio=bool_value(tracks_data.get("allow_no_audio", False), "tracks.allow_no_audio"),
     )
+    raw_path_mappings = plex_data.get("path_mappings", [])
+    if not isinstance(raw_path_mappings, list):
+        raise ConfigError("plex.path_mappings must be a list")
+    path_mappings: list[PlexPathMapping] = []
+    for index, item in enumerate(raw_path_mappings):
+        field = f"plex.path_mappings[{index}]"
+        if not isinstance(item, dict):
+            raise ConfigError(f"{field} must be an object")
+        reject_unknown(item, {"local_root", "server_root"}, field)
+        local_root = optional_path(item.get("local_root"))
+        server_root = str(item.get("server_root", "")).strip()
+        if local_root is None or not local_root.is_absolute():
+            raise ConfigError(f"{field}.local_root must be an absolute path")
+        if not server_root:
+            raise ConfigError(f"{field}.server_root cannot be empty")
+        path_mappings.append(PlexPathMapping(local_root=local_root, server_root=server_root))
     return AppConfig(
         config_version=CURRENT_CONFIG_VERSION, media=media, task=task, matching=matching,
-        subtitle=subtitle, font=font, mkvmerge=MkvMergeConfig(path=str(mkvmerge_data.get("path", ""))),
+        subtitle=subtitle, font=font, font_cache=font_cache,
+        mkvmerge=MkvMergeConfig(path=str(mkvmerge_data.get("path", ""))),
         ffmpeg=FfmpegConfig(path=str(ffmpeg_data.get("path", ""))),
         notifications=NotificationConfig(
             enabled=bool_value(notifications_data.get("enabled", False), "notifications.enabled")
+        ),
+        updates=UpdateConfig(
+            enabled=bool_value(updates_data.get("enabled", False), "updates.enabled"),
+            interval_hours=int_range(updates_data.get("interval_hours", 24), "updates.interval_hours", 1, 24 * 30),
+            timeout_seconds=float_range(updates_data.get("timeout_seconds", 3.0), "updates.timeout_seconds", 0.5, 15.0),
+        ),
+        plex=PlexConfig(
+            enabled=bool_value(plex_data.get("enabled", False), "plex.enabled"),
+            server_url=str(plex_data.get("server_url", "")).strip(),
+            section_id=str(plex_data.get("section_id", "")).strip(),
+            token_env=str(plex_data.get("token_env", "PLEXMUXY_PLEX_TOKEN")).strip() or "PLEXMUXY_PLEX_TOKEN",
+            path_mappings=path_mappings,
         ),
         concurrency=concurrency, tracks=tracks,
     )

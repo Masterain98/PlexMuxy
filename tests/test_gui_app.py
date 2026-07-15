@@ -49,3 +49,8 @@ def test_start_exposes_only_intended_bridge_methods(monkeypatch):
     assert "window" not in vars(api)
     assert "jobs" not in vars(api)
     assert "jobs_lock" not in vars(api)
+
+
+def test_frozen_smoke_test_validates_resources_and_webview(monkeypatch):
+    monkeypatch.setattr(app, "import_webview", lambda: object())
+    app.run_frozen_smoke_test()

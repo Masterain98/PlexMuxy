@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .ass_rewrite import AssRewriteError, rewrite_ass_file
 from .font import extract_rar, safe_destination, seven_zip_members, validate_archive_file, validate_members
+from .font_cache import FontSubsetCache
 from .font_catalog import normalize_font_name
 from .font_matching import match_font_usages
 from .font_subset import (
@@ -57,7 +58,12 @@ class _IntentGroup:
 class SubsetWorkspace:
     """Execution-scoped storage that is removed on every exit path."""
 
-    def __init__(self, plan_id: str, root: Path | None = None) -> None:
+    def __init__(
+        self,
+        plan_id: str,
+        root: Path | None = None,
+        persistent_cache: FontSubsetCache | None = None,
+    ) -> None:
         self.plan_id = plan_id
         self.root = Path(root) if root else None
         self.path: Path | None = None
@@ -67,6 +73,7 @@ class SubsetWorkspace:
         self.manifests: Path | None = None
         self._temporary: tempfile.TemporaryDirectory[str] | None = None
         self.subset_cache: dict[str, AttachmentPlan] = {}
+        self.persistent_cache = persistent_cache
 
     def __enter__(self) -> SubsetWorkspace:
         safe_plan_id = "".join(character for character in self.plan_id if character.isalnum())[:12] or "plan"
@@ -355,13 +362,30 @@ def _cached_subset_attachment(
 
     extension = output_extension(face)
     output = workspace.require_path("fonts") / f"{cache_key}{extension}"
-    result = subset_font_face(face, source, codepoints, alias_family, output)
+    if workspace.persistent_cache is not None:
+        entry = workspace.persistent_cache.get_or_create(
+            face,
+            codepoints,
+            alias_family,
+            lambda destination: subset_font_face(face, source, codepoints, alias_family, destination),
+        )
+        temporary = output.with_name(f".{output.name}.{os.getpid()}.cache-copy")
+        shutil.copy2(entry.path, temporary)
+        os.replace(temporary, output)
+        mime_type = (
+            "application/x-truetype-font"
+            if extension == ".ttf"
+            else "application/vnd.ms-opentype"
+        )
+    else:
+        result = subset_font_face(face, source, codepoints, alias_family, output)
+        mime_type = result.mime_type
     style = style_name(face).replace(" ", "")
     expected_name = f"{alias_family}-{style}-{face.source_digest[:8]}{extension}"
     attachment = AttachmentPlan(
-        result.path,
+        output,
         expected_name=expected_name,
-        expected_mime_type=result.mime_type,
+        expected_mime_type=mime_type,
     )
     workspace.subset_cache[cache_key] = attachment
     return attachment

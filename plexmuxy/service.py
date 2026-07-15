@@ -2,20 +2,26 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Callable
+import time
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import replace
 from pathlib import Path
 
 from .cleanup import cleanup_successful_results
 from .errors import StalePlanError
 from .font import prepare_fonts
+from .font_cache import FontSubsetCache
 from .font_catalog import build_font_catalog
 from .font_prepare import FontPreparationError, SubsetWorkspace, prepare_subset_plan
-from .models import AppConfig, JobReport, MuxPlanSnapshot, MuxResult, PreparedMuxPlan, ProgressEvent
+from .integrations.plex import PlexIntegrationError, refresh_paths
+from .models import AppConfig, JobReport, MuxPlanSnapshot, MuxResult, PlanEdit, PreparedMuxPlan, ProgressEvent
 from .muxer import execute_mux_plan, execute_prepared_mux_plan, inspect_source_tracks, resolve_mkvmerge_path
+from .plan_edit import PlanEditError, apply_plan_edits, source_track_overrides_from_edits
 from .planner import build_mux_plans
 from .scanner import scan_media_dir
 from .snapshot import create_plan_snapshot, validate_plan_snapshot
+from .track_policy import TrackPolicyError, decide_source_tracks
 
 ProgressCallback = Callable[[ProgressEvent], None]
 
@@ -24,7 +30,10 @@ def build_job_plan(
     input_dir: Path,
     config: AppConfig,
     progress_callback: ProgressCallback | None = None,
+    source_track_overrides: Mapping[Path, Mapping[int, bool]] | None = None,
+    plan_edits: Mapping[Path, PlanEdit] | None = None,
 ) -> JobReport:
+    started = time.perf_counter()
     input_dir = input_dir.expanduser().resolve()
     logging.info("Planning input directory: %s", input_dir)
     exclusions: list[Path] = []
@@ -53,11 +62,6 @@ def build_job_plan(
         catalog,
         lambda phase: emit(progress_callback, ProgressEvent(phase)),
     )
-    mkvmerge = resolve_mkvmerge_path(config)
-    if mkvmerge:
-        for plan in plan_result.plans:
-            plan.source_tracks = inspect_source_tracks(plan.source_video, mkvmerge)
-    snapshot = create_plan_snapshot(input_dir, plan_result.plans, config, extra_inputs=scan.font_archives)
     warnings = [
         *scan.warnings,
         *fonts.warnings,
@@ -66,15 +70,97 @@ def build_job_plan(
         *catalog.warnings,
         *catalog.errors,
     ]
+    try:
+        plan_result.plans, edit_skips = apply_plan_edits(
+            plan_result.plans,
+            plan_edits or {},
+            scan,
+            config,
+            fonts,
+            catalog,
+        )
+        plan_result.skipped_files.extend(edit_skips)
+        edit_track_overrides = source_track_overrides_from_edits(plan_edits or {})
+    except PlanEditError as exc:
+        return JobReport(
+            input_dir=input_dir,
+            plans=plan_result.plans,
+            skipped_files=plan_result.skipped_files,
+            warnings=warnings,
+            error_code=exc.code,
+            error=str(exc),
+        )
+    mkvmerge = resolve_mkvmerge_path(config)
+    if config.tracks.audio_filter_enabled and not mkvmerge:
+        return JobReport(
+            input_dir=input_dir,
+            plans=plan_result.plans,
+            skipped_files=plan_result.skipped_files,
+            warnings=warnings,
+            error_code="MKVMERGE_REQUIRED_FOR_TRACK_FILTER",
+            error="mkvmerge is required to inspect source tracks when audio filtering is enabled",
+        )
+    if mkvmerge:
+        normalized_overrides = {
+            path.expanduser().resolve(): dict(values)
+            for path, values in (source_track_overrides or {}).items()
+        }
+        for path, values in edit_track_overrides.items():
+            normalized_overrides.setdefault(path, {}).update(values)
+        try:
+            for plan in plan_result.plans:
+                inspected = inspect_source_tracks(plan.source_video, mkvmerge)
+                if config.tracks.audio_filter_enabled and not inspected:
+                    return JobReport(
+                        input_dir=input_dir,
+                        plans=plan_result.plans,
+                        skipped_files=plan_result.skipped_files,
+                        warnings=warnings,
+                        error_code="SOURCE_TRACK_INSPECTION_FAILED",
+                        error=f"Could not inspect source tracks: {plan.source_video}",
+                    )
+                plan.source_tracks = decide_source_tracks(
+                    inspected,
+                    config.tracks,
+                    normalized_overrides.get(plan.source_video.resolve()),
+                )
+                plan.audio_tracks = [
+                    replace(
+                        track,
+                        expected_track_count=sum(
+                            item.type == "audio" for item in inspect_source_tracks(track.path, mkvmerge)
+                        ) or 1,
+                    )
+                    for track in plan.audio_tracks
+                ]
+        except TrackPolicyError as exc:
+            return JobReport(
+                input_dir=input_dir,
+                plans=plan_result.plans,
+                skipped_files=plan_result.skipped_files,
+                warnings=warnings,
+                error_code=exc.code,
+                error=str(exc),
+            )
+    snapshot = create_plan_snapshot(input_dir, plan_result.plans, config, extra_inputs=scan.font_archives)
     report = JobReport(
         input_dir=input_dir, plans=plan_result.plans, skipped_files=plan_result.skipped_files,
         snapshot=snapshot, warnings=warnings,
+        available_subtitles=list(scan.subtitles), available_audio=list(scan.audios),
     )
     if config.font.missing_font_action == "fail-job" and any(
         item.stage == "font" for item in plan_result.skipped_files
     ):
         report.error_code = "MISSING_REFERENCED_FONT"
         report.error = "A referenced font is missing and font.missing_font_action is fail-job"
+    logging.info(
+        "Planning completed",
+        extra={
+            "plan_id": snapshot.plan_id,
+            "phase": "planning",
+            "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+        },
+    )
     return report
 
 
@@ -85,6 +171,7 @@ def execute_plan_snapshot(
     progress_callback: ProgressCallback | None = None,
     cancellation_event: threading.Event | None = None,
 ) -> JobReport:
+    started = time.perf_counter()
     cancel = cancellation_event or threading.Event()
     report = JobReport(input_dir=snapshot.input_dir, plans=snapshot.plans, snapshot=snapshot)
     if config.task.overwrite and not yes:
@@ -98,6 +185,7 @@ def execute_plan_snapshot(
     emit(progress_callback, ProgressEvent("validating_snapshot", total=len(snapshot.plans)))
     try:
         validate_plan_snapshot(snapshot, config)
+        validate_source_track_layout(snapshot, config)
     except StalePlanError as exc:
         report.error_code = exc.code
         report.error = str(exc)
@@ -123,7 +211,8 @@ def execute_plan_snapshot(
         return report
 
     total = len(snapshot.plans)
-    with SubsetWorkspace(snapshot.plan_id) as workspace:
+    persistent_font_cache = FontSubsetCache(config.font_cache) if config.font_cache.enabled else None
+    with SubsetWorkspace(snapshot.plan_id, persistent_cache=persistent_font_cache) as workspace:
         prepared_plans: list[PreparedMuxPlan] = []
         for index, plan in enumerate(snapshot.plans):
             if cancel.is_set():
@@ -200,10 +289,35 @@ def execute_plan_snapshot(
         "cleaning", total, len(report.results), report.success_count, report.failure_count
     ))
     report.cleanup_results = cleanup_successful_results(report.results, config, yes=yes)
+    successful_directories = [
+        result.output_path.parent for result in report.results if result.success and result.verified
+    ]
+    if config.plex.enabled and not report.cancelled and successful_directories:
+        try:
+            plex_results = refresh_paths(config.plex, successful_directories)
+            report.post_actions.extend(
+                {"type": "plex_refresh", **result.__dict__} for result in plex_results
+            )
+            report.warnings.extend(
+                f"Plex refresh failed for {result.local_path}: {result.error or result.status_code}"
+                for result in plex_results if not result.success
+            )
+        except PlexIntegrationError as exc:
+            report.post_actions.append({"type": "plex_refresh", "success": False, "error": str(exc)})
+            report.warnings.append(f"Plex refresh was not completed: {exc}")
     emit(progress_callback, ProgressEvent(
         "cancelled" if report.cancelled else "completed",
         total, len(report.results), report.success_count, report.failure_count,
     ))
+    logging.info(
+        "Plan execution completed",
+        extra={
+            "plan_id": snapshot.plan_id,
+            "phase": "cancelled" if report.cancelled else "completed",
+            "error_code": report.error_code,
+            "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+        },
+    )
     return report
 
 
@@ -279,9 +393,17 @@ def run_mux_job(
     yes: bool = False,
     progress_callback: ProgressCallback | None = None,
     cancellation_event: threading.Event | None = None,
+    source_track_overrides: Mapping[Path, Mapping[int, bool]] | None = None,
+    plan_edits: Mapping[Path, PlanEdit] | None = None,
 ) -> JobReport:
     emit(progress_callback, ProgressEvent("planning"))
-    report = build_job_plan(input_dir, config, progress_callback=progress_callback)
+    report = build_job_plan(
+        input_dir,
+        config,
+        progress_callback=progress_callback,
+        source_track_overrides=source_track_overrides,
+        plan_edits=plan_edits,
+    )
     if dry_run or report.snapshot is None or report.error is not None:
         return report
     executed = execute_plan_snapshot(
@@ -308,4 +430,34 @@ def requires_delete_confirmation(config: AppConfig) -> bool:
         or config.task.delete_original_audio
         or config.task.delete_subtitle
         or config.font.delete_fonts_after_mux
+    )
+
+
+def validate_source_track_layout(snapshot: MuxPlanSnapshot, config: AppConfig) -> None:
+    """Reject a plan when the source container track layout changed after review."""
+
+    plans = [plan for plan in snapshot.plans if plan.source_tracks]
+    if not plans:
+        return
+    mkvmerge = resolve_mkvmerge_path(config)
+    if mkvmerge is None:
+        raise StalePlanError("mkvmerge is unavailable for source track revalidation")
+    for plan in plans:
+        current = inspect_source_tracks(plan.source_video, mkvmerge)
+        expected_fingerprints = [source_track_layout_fingerprint(track) for track in plan.source_tracks]
+        current_fingerprints = [source_track_layout_fingerprint(track) for track in current]
+        if expected_fingerprints != current_fingerprints:
+            raise StalePlanError(f"Source track layout changed: {plan.source_video}")
+
+
+def source_track_layout_fingerprint(track) -> tuple:
+    return (
+        track.id,
+        track.type,
+        track.codec,
+        track.language,
+        track.title,
+        track.default_track,
+        track.forced_track,
+        track.channels,
     )

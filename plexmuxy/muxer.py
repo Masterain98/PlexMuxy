@@ -128,17 +128,37 @@ def _execute_runtime_plan(
 
 
 def build_mkvmerge_command(plan: MuxPlan, output_path: Path, mkvmerge_path: str) -> list[str]:
-    command = [mkvmerge_path, "--output", str(output_path), str(plan.source_video)]
-    for track in plan.subtitle_tracks:
-        command.extend([
-            "--track-name", f"0:{track.track_name}",
-            "--language", f"0:{track.mkv_language}",
-            "--language-ietf", f"0:{track.ietf_language}",
-            "--default-track-flag", f"0:{'yes' if track.default_track else 'no'}",
-            "--forced-display-flag", f"0:{'yes' if track.forced_track else 'no'}",
-            str(track.path),
-        ])
-    command.extend(str(track.path) for track in plan.audio_tracks)
+    command = [mkvmerge_path, "--output", str(output_path)]
+    source_audio = [track for track in plan.source_tracks if track.type == "audio"]
+    included_audio_ids = [track.id for track in source_audio if track.included]
+    if source_audio and not included_audio_ids:
+        command.append("--no-audio")
+    elif source_audio and len(included_audio_ids) != len(source_audio):
+        command.extend(["--audio-tracks", ",".join(str(track_id) for track_id in included_audio_ids)])
+    command.append(str(plan.source_video))
+    subtitle_by_path = {str(track.path): track for track in plan.subtitle_tracks}
+    audio_by_path = {str(track.path): track for track in plan.audio_tracks}
+    order = plan.external_track_order or [
+        *[f"subtitle:{track.path}" for track in plan.subtitle_tracks],
+        *[f"audio:{track.path}" for track in plan.audio_tracks],
+    ]
+    expected = {*[f"subtitle:{path}" for path in subtitle_by_path], *[f"audio:{path}" for path in audio_by_path]}
+    if len(order) != len(expected) or set(order) != expected:
+        raise ValueError("Invalid external track order in mux plan")
+    for item in order:
+        kind, path = item.split(":", 1)
+        if kind == "subtitle":
+            track = subtitle_by_path[path]
+            command.extend([
+                "--track-name", f"0:{track.track_name}",
+                "--language", f"0:{track.mkv_language}",
+                "--language-ietf", f"0:{track.ietf_language}",
+                "--default-track-flag", f"0:{'yes' if track.default_track else 'no'}",
+                "--forced-display-flag", f"0:{'yes' if track.forced_track else 'no'}",
+                str(track.path),
+            ])
+        else:
+            command.append(str(audio_by_path[path].path))
     for attachment in plan.attachments:
         command.extend([
             "--attachment-name", attachment.name,
@@ -170,6 +190,7 @@ def verify_mux_output(plan: MuxPlan, output_path: Path, mkvmerge_path: str) -> V
     attachments = data.get("attachments", []) if isinstance(data, dict) else []
     video_tracks = [item for item in tracks if item.get("type") == "video"]
     subtitle_tracks = [item for item in tracks if item.get("type") == "subtitles"]
+    audio_tracks = [item for item in tracks if item.get("type") == "audio"]
     if not video_tracks:
         return VerificationResult(False, "TRACK_COUNT_MISMATCH", "Output contains no video track", data)
     if len(subtitle_tracks) < len(plan.subtitle_tracks):
@@ -181,6 +202,29 @@ def verify_mux_output(plan: MuxPlan, output_path: Path, mkvmerge_path: str) -> V
             return VerificationResult(
                 False, "TRACK_PROPERTY_MISMATCH",
                 f"Subtitle track properties were not preserved: {expected.track_name}", data,
+            )
+    expected_source_audio = [
+        track for track in plan.source_tracks if track.type == "audio" and track.included
+    ]
+    if plan.source_tracks:
+        expected_audio_count = len(expected_source_audio) + sum(
+            track.expected_track_count for track in plan.audio_tracks
+        )
+        if len(audio_tracks) != expected_audio_count:
+            return VerificationResult(
+                False,
+                "TRACK_COUNT_MISMATCH",
+                f"Output has {len(audio_tracks)} audio tracks; planned {expected_audio_count}",
+                data,
+            )
+        expected_audio_properties = Counter(source_audio_fingerprint(track) for track in expected_source_audio)
+        actual_audio_properties = Counter(output_audio_fingerprint(track) for track in audio_tracks)
+        if any(actual_audio_properties[value] < count for value, count in expected_audio_properties.items()):
+            return VerificationResult(
+                False,
+                "TRACK_PROPERTY_MISMATCH",
+                "A retained source audio track is missing or has unexpected properties",
+                data,
             )
     expected_names = Counter(item.name.casefold() for item in plan.attachments)
     actual_names = Counter(str(item.get("file_name", "")).casefold() for item in attachments)
@@ -205,7 +249,8 @@ def verify_mux_output(plan: MuxPlan, output_path: Path, mkvmerge_path: str) -> V
             data,
         )
     return VerificationResult(True, details={
-        "video_tracks": len(video_tracks), "subtitle_tracks": len(subtitle_tracks),
+        "video_tracks": len(video_tracks), "audio_tracks": len(audio_tracks),
+        "subtitle_tracks": len(subtitle_tracks),
         "attachments": len(attachments), "container": data.get("container", {}),
     })
 
@@ -219,6 +264,29 @@ def subtitle_matches(expected: Any, actual: dict[str, Any]) -> bool:
         and str(props.get("track_name", "")) == expected.track_name
         and bool(props.get("default_track", False)) is expected.default_track
         and bool(props.get("forced_track", False)) is expected.forced_track
+    )
+
+
+def source_audio_fingerprint(track: SourceTrackInfo) -> tuple[Any, ...]:
+    return (
+        track.codec or "",
+        (track.language or "").casefold(),
+        track.title or "",
+        track.default_track,
+        track.forced_track,
+        track.channels,
+    )
+
+
+def output_audio_fingerprint(track: dict[str, Any]) -> tuple[Any, ...]:
+    props = track.get("properties", {})
+    return (
+        str(track.get("codec") or ""),
+        str(props.get("language_ietf") or props.get("language") or "").casefold(),
+        str(props.get("track_name") or ""),
+        bool(props.get("default_track", False)),
+        bool(props.get("forced_track", False)),
+        props.get("audio_channels"),
     )
 
 

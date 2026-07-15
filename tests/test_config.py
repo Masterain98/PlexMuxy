@@ -97,15 +97,44 @@ def test_extension_list_normalizes_extensions():
     assert extension_list(["MKV", ".mka", "Mp3"], "media.extensions") == [".mkv", ".mka", ".mp3"]
 
 
-def test_default_config_v3_contains_environment_and_subset_contracts():
+def test_default_config_v4_contains_environment_subset_and_track_contracts():
     config = default_config()
 
-    assert config.config_version == 3
+    assert config.config_version == 4
     assert config.media.font_extensions == [".ttf", ".otf", ".ttc", ".otc"]
     assert config.font.subset_failure_action == "fallback-full"
+    assert config.font_cache.enabled is True
+    assert config.font_cache.max_size_mb == 2048
+    assert config.font_cache.max_age_days == 90
     assert config.ffmpeg.path == ""
     assert config.notifications.enabled is False
-    assert set(config_to_dict(config)) >= {"ffmpeg", "notifications"}
+    assert config.tracks.audio_filter_enabled is False
+    assert config.tracks.keep_default_audio is True
+    assert config.tracks.allow_no_audio is False
+    assert config.updates.enabled is False
+    assert config.plex.enabled is False
+    assert set(config_to_dict(config)) >= {"ffmpeg", "notifications", "font_cache", "updates", "plex"}
+
+
+def test_update_and_plex_config_are_strict_and_safe_by_default():
+    config = parse_config({
+        "updates": {"enabled": True, "interval_hours": 12, "timeout_seconds": 2.5},
+        "plex": {
+            "enabled": True,
+            "server_url": "https://plex.example.test",
+            "section_id": "2",
+            "token_env": "MY_PLEX_TOKEN",
+            "path_mappings": [{"local_root": "C:/media", "server_root": "/media"}],
+        },
+    })
+    assert config.updates.interval_hours == 12
+    assert config.plex.token_env == "MY_PLEX_TOKEN"
+    assert config.plex.path_mappings[0].server_root == "/media"
+
+    with pytest.raises(ConfigError, match=r"plex\.path_mappings"):
+        parse_config({"plex": {"path_mappings": "C:/media"}})
+    with pytest.raises(ConfigError, match=r"updates\.timeout_seconds"):
+        parse_config({"updates": {"timeout_seconds": 30}})
 
 
 def test_v2_config_without_v3_sections_migrates_in_memory():
@@ -115,7 +144,7 @@ def test_v2_config_without_v3_sections_migrates_in_memory():
         "font": {"mode": "subset"},
     })
 
-    assert config.config_version == 3
+    assert config.config_version == 4
     assert config.mkvmerge.path == "C:/tools/mkvmerge.exe"
     assert config.ffmpeg.path == ""
     assert config.notifications.enabled is False
@@ -137,3 +166,38 @@ def test_v3_environment_and_subset_fields_are_validated_strictly():
         parse_config({"notifications": {"surprise": True}})
     with pytest.raises(ConfigError, match=r"font\.subset_failure_action"):
         parse_config({"font": {"subset_failure_action": "continue-anyway"}})
+
+
+def test_v3_tracks_migrate_to_safe_v4_defaults_without_enabling_filtering():
+    config = parse_config({
+        "config_version": 3,
+        "tracks": {
+            "exclude_audio_title_patterns": ["commentary"],
+            "keep_audio_languages": ["jpn"],
+            "keep_all_when_unknown": True,
+        },
+    })
+
+    assert config.config_version == 4
+    assert config.tracks.audio_filter_enabled is False
+    assert config.tracks.exclude_audio_title_patterns == ["commentary"]
+    assert config.tracks.keep_audio_languages == ["jpn"]
+    assert config.tracks.keep_default_audio is True
+    assert config.tracks.allow_no_audio is False
+
+
+def test_v4_track_filter_fields_are_strictly_validated():
+    config = parse_config({
+        "config_version": 4,
+        "tracks": {
+            "audio_filter_enabled": True,
+            "keep_default_audio": False,
+            "allow_no_audio": True,
+        },
+    })
+    assert config.tracks.audio_filter_enabled is True
+    assert config.tracks.keep_default_audio is False
+    assert config.tracks.allow_no_audio is True
+
+    with pytest.raises(ConfigError, match=r"tracks\.audio_filter_enabled"):
+        parse_config({"config_version": 4, "tracks": {"audio_filter_enabled": "yes"}})

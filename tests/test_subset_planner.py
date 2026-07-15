@@ -67,7 +67,7 @@ def test_subset_job_snapshot_tracks_subtitle_and_font_digests(tmp_path: Path) ->
     report = build_job_plan(tmp_path, config)
 
     assert report.error is None
-    assert report.snapshot is not None and report.snapshot.schema_version == 2
+    assert report.snapshot is not None and report.snapshot.schema_version == 3
     assert report.plans[0].font_subset_intent is not None
     snapshots = {item.path: item for item in report.snapshot.files}
     assert snapshots[subtitle.resolve()].sha256

@@ -7,7 +7,14 @@ from pathlib import Path
 
 from .config import config_to_dict, parse_config
 from .errors import StalePlanError
-from .models import PLAN_SCHEMA_VERSION, AppConfig, FileSnapshot, MuxPlan, MuxPlanSnapshot
+from .models import (
+    PLAN_DIGEST_SCHEMA_VERSION,
+    PLAN_SCHEMA_VERSION,
+    AppConfig,
+    FileSnapshot,
+    MuxPlan,
+    MuxPlanSnapshot,
+)
 
 
 def calculate_config_hash(config_data: dict) -> str:
@@ -75,12 +82,18 @@ def create_plan_snapshot(
 
 
 def validate_plan_snapshot(snapshot: MuxPlanSnapshot, config: AppConfig) -> None:
-    if snapshot.schema_version not in {1, PLAN_SCHEMA_VERSION}:
+    if snapshot.schema_version not in {1, PLAN_DIGEST_SCHEMA_VERSION, PLAN_SCHEMA_VERSION}:
         raise StalePlanError(f"Unsupported plan schema_version: {snapshot.schema_version}")
     font_data = snapshot.config.get("font", {})
     font_mode = font_data.get("mode", "all") if isinstance(font_data, dict) else "all"
     if snapshot.schema_version == 1 and font_mode == "subset":
         raise StalePlanError("Plan schema_version 1 cannot execute font.mode=subset; regenerate the plan")
+    tracks_data = snapshot.config.get("tracks", {})
+    audio_filter_enabled = (
+        tracks_data.get("audio_filter_enabled", False) if isinstance(tracks_data, dict) else False
+    )
+    if snapshot.schema_version < PLAN_SCHEMA_VERSION and audio_filter_enabled:
+        raise StalePlanError("Plan schema_version 3 is required for source audio filtering; regenerate the plan")
     if calculate_config_hash(snapshot.config) != snapshot.config_hash:
         raise StalePlanError("Saved plan configuration hash is invalid")
     try:
@@ -100,7 +113,7 @@ def validate_plan_snapshot(snapshot: MuxPlanSnapshot, config: AppConfig) -> None
         if not file_snapshot.path.is_file():
             raise StalePlanError(f"Planned input no longer exists: {file_snapshot.path}")
         if (
-            snapshot.schema_version >= PLAN_SCHEMA_VERSION
+            snapshot.schema_version >= PLAN_DIGEST_SCHEMA_VERSION
             and file_snapshot.path.suffix.casefold() in digest_extensions
             and file_snapshot.sha256 is None
         ):
@@ -129,6 +142,15 @@ def validate_plan_snapshot(snapshot: MuxPlanSnapshot, config: AppConfig) -> None
         }
         if not required_inputs.issubset(tracked):
             raise StalePlanError("Plan contains an input or cleanup path not captured by the snapshot")
+        expected_external_order = {
+            *[f"subtitle:{item.path}" for item in plan.subtitle_tracks],
+            *[f"audio:{item.path}" for item in plan.audio_tracks],
+        }
+        if plan.external_track_order and (
+            len(plan.external_track_order) != len(expected_external_order)
+            or set(plan.external_track_order) != expected_external_order
+        ):
+            raise StalePlanError("Plan external track order is inconsistent with its selected tracks")
         expected_output = build_output_path(plan.source_video, snapshot.input_dir, config).resolve()
         if output != expected_output:
             raise StalePlanError(f"Plan output does not match the saved configuration: {output}")

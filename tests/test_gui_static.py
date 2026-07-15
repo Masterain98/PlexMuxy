@@ -51,7 +51,8 @@ def test_gui_ships_and_references_approved_brand_assets():
 
     assert 'href="./assets/plexmuxy-app-icon.svg"' in html
     assert 'href="./assets/plexmuxy-app-icon-32.png"' in html
-    assert html.count('src="./assets/plexmuxy-app-icon-64.png"') == 2
+    assert 'href="./assets/plexmuxy-app-icon-64.png"' in html
+    assert 'src="./assets/plexmuxy-app-icon-64.png"' in html
     assert "data:image/svg+xml" not in html
     assert '"static/assets/*.svg"' in package_config
     assert '"static/assets/*.png"' in package_config
@@ -68,6 +69,8 @@ def test_windows_binaries_and_readmes_use_approved_brand_assets():
 
     assert 'icon="logo/plexmuxy-app.ico"' in gui_spec
     assert 'icon="logo/plexmuxy-app.ico"' in cli_spec
+    assert 'pathex=["."]' in gui_spec
+    assert 'pathex=["."]' in cli_spec
     for readme in readmes:
         assert "./logo/svg/plexmuxy-lockup-dark.svg" in readme
         assert "./logo/svg/plexmuxy-lockup-light.svg" in readme
@@ -246,6 +249,13 @@ def test_gui_disables_every_workflow_input_while_busy():
     assert '"name-strategy", "name-template", "font-subset", "overwrite"' in javascript
     assert "control.disabled = busy" in javascript
     assert 'control.setAttribute("aria-disabled", String(busy))' in javascript
+
+
+def test_gui_exposes_independent_plex_refresh_retry():
+    javascript = (ROOT / "plexmuxy_gui" / "static" / "app.js").read_text(encoding="utf-8")
+
+    assert 'callApi("retry_plex_refresh", job.id)' in javascript
+    assert 'state.config?.plex?.enabled' in javascript
 
 
 def test_gui_has_high_contrast_disabled_and_per_monitor_v2_support():

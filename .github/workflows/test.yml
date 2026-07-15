@@ -24,7 +24,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -m pip install -e ".[dev]"
-      - run: python -m pytest -m "not integration"
+      - run: python -m pytest -m "not integration" --basetemp .pytest-tmp/unit -o cache_dir=.pytest-tmp/cache
 
   quality:
     runs-on: ubuntu-latest
@@ -38,7 +38,7 @@ jobs:
       - run: python -m pip install -e ".[dev]"
       - run: python -m ruff check plexmuxy plexmuxy_gui tests
       - run: python -m mypy plexmuxy plexmuxy_gui
-      - run: python -m pytest -m "not integration" --cov --cov-report=term --cov-fail-under=75
+      - run: python -m pytest -m "not integration" --basetemp .pytest-tmp/coverage -o cache_dir=.pytest-tmp/cache --cov --cov-report=term --cov-fail-under=75
 
   package:
     runs-on: ubuntu-latest

@@ -13,7 +13,9 @@ FontMode = Literal["all", "referenced", "subset"]
 MissingFontAction = Literal["warn", "skip-video", "fail-job", "fallback-all"]
 SubsetFailureAction = Literal["fallback-full", "skip-video", "fail-job"]
 FontOutlineType = Literal["truetype", "cff", "cff2", "unknown"]
-PLAN_SCHEMA_VERSION = 2
+TrackDecisionSource = Literal["default", "rule", "manual"]
+PLAN_SCHEMA_VERSION = 3
+PLAN_DIGEST_SCHEMA_VERSION = 2
 
 
 def _is_sha256(value: object) -> bool:
@@ -98,6 +100,13 @@ class FontConfig:
 
 
 @dataclass
+class FontCacheConfig:
+    enabled: bool = True
+    max_size_mb: int = 2048
+    max_age_days: int = 90
+
+
+@dataclass
 class MkvMergeConfig:
     path: str = ""
 
@@ -113,6 +122,28 @@ class NotificationConfig:
 
 
 @dataclass
+class UpdateConfig:
+    enabled: bool = False
+    interval_hours: int = 24
+    timeout_seconds: float = 3.0
+
+
+@dataclass(frozen=True)
+class PlexPathMapping:
+    local_root: Path
+    server_root: str
+
+
+@dataclass
+class PlexConfig:
+    enabled: bool = False
+    server_url: str = ""
+    section_id: str = ""
+    token_env: str = "PLEXMUXY_PLEX_TOKEN"
+    path_mappings: list[PlexPathMapping] = field(default_factory=list)
+
+
+@dataclass
 class ConcurrencyConfig:
     max_parallel_mux_jobs: int = 1
 
@@ -124,22 +155,28 @@ class ConcurrencyConfig:
 
 @dataclass
 class TrackFilterConfig:
+    audio_filter_enabled: bool = False
     exclude_audio_title_patterns: list[str] = field(default_factory=list)
     keep_audio_languages: list[str] = field(default_factory=list)
+    keep_default_audio: bool = True
     keep_all_when_unknown: bool = True
+    allow_no_audio: bool = False
 
 
 @dataclass
 class AppConfig:
-    config_version: int = 3
+    config_version: int = 4
     media: MediaConfig = field(default_factory=MediaConfig)
     task: TaskConfig = field(default_factory=TaskConfig)
     matching: MatchingConfig = field(default_factory=MatchingConfig)
     subtitle: SubtitleConfig = field(default_factory=SubtitleConfig)
     font: FontConfig = field(default_factory=FontConfig)
+    font_cache: FontCacheConfig = field(default_factory=FontCacheConfig)
     mkvmerge: MkvMergeConfig = field(default_factory=MkvMergeConfig)
     ffmpeg: FfmpegConfig = field(default_factory=FfmpegConfig)
     notifications: NotificationConfig = field(default_factory=NotificationConfig)
+    updates: UpdateConfig = field(default_factory=UpdateConfig)
+    plex: PlexConfig = field(default_factory=PlexConfig)
     concurrency: ConcurrencyConfig = field(default_factory=ConcurrencyConfig)
     tracks: TrackFilterConfig = field(default_factory=TrackFilterConfig)
     source_path: Path | None = None
@@ -178,6 +215,35 @@ class AudioTrackPlan:
     path: Path
     language: str | None
     match_reason: str
+    expected_track_count: int = 1
+
+
+@dataclass(frozen=True)
+class TrackOverride:
+    track_id: int
+    included: bool
+
+
+@dataclass(frozen=True)
+class SubtitleOverride:
+    path: Path
+    track_name: str | None = None
+    mkv_language: str | None = None
+    ietf_language: str | None = None
+    default_track: bool | None = None
+    forced_track: bool | None = None
+
+
+@dataclass(frozen=True)
+class PlanEdit:
+    source_video: Path
+    revision: int = 1
+    enabled: bool = True
+    included_subtitles: tuple[Path, ...] | None = None
+    included_external_audio: tuple[Path, ...] | None = None
+    source_track_overrides: tuple[TrackOverride, ...] = ()
+    subtitle_metadata_overrides: tuple[SubtitleOverride, ...] = ()
+    external_track_order: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -325,6 +391,8 @@ class SourceTrackInfo:
     channels: int | None = None
     included: bool = True
     decision_reason: str = "preserve_by_default"
+    decision_source: TrackDecisionSource = "default"
+    matched_rule: str | None = None
 
 
 @dataclass(frozen=True)
@@ -375,6 +443,8 @@ class MuxPlan:
     skipped_files: list[SkippedFile] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     font_subset_intent: FontSubsetIntent | None = None
+    edit_revision: int = 0
+    external_track_order: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -479,6 +549,9 @@ class JobReport:
     cancelled: bool = False
     error_code: str | None = None
     error: str | None = None
+    available_subtitles: list[Path] = field(default_factory=list)
+    available_audio: list[Path] = field(default_factory=list)
+    post_actions: list[dict[str, object]] = field(default_factory=list)
 
     @property
     def success_count(self) -> int:

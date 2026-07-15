@@ -6,9 +6,9 @@ block_cipher = None
 
 a = Analysis(
     ["packaging/cli_entry.py"],
-    pathex=[],
+    pathex=["."],
     binaries=[],
-    datas=[],
+    datas=[("plexmuxy/locales", "plexmuxy/locales")],
     hiddenimports=(
         collect_submodules("fontTools")
         + collect_submodules("patoolib")

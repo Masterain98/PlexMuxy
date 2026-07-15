@@ -8,6 +8,7 @@
   <title>PlexMuxy · Mux workspace</title>
   <link rel="icon" type="image/svg+xml" href="./assets/plexmuxy-app-icon.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="./assets/plexmuxy-app-icon-32.png" />
+  <link rel="icon" type="image/png" sizes="64x64" href="./assets/plexmuxy-app-icon-64.png" />
   <script>
     (() => {
       let mode = "system";
@@ -110,6 +111,10 @@
           </a>
 
           <p class="nav-label nav-label-tools" data-i18n="sidebar.tools">Tools</p>
+          <a class="step utility-step" href="#/jobs" data-route="jobs" title="Queued and historical jobs" data-i18n-title="sidebar.jobs.tooltip">
+            <svg class="icon" aria-hidden="true"><use href="#icon-plan"></use></svg>
+            <span class="step-copy"><strong data-i18n="sidebar.jobs.title">Jobs</strong><small data-i18n="sidebar.jobs.subtitle">Queue and history</small></span>
+          </a>
           <a class="step utility-step" href="#/environment" data-route="environment" title="Persistent dependency and notification settings" data-i18n-title="sidebar.environment.tooltip">
             <svg class="icon" aria-hidden="true"><use href="#icon-activity"></use></svg>
             <span class="step-copy"><strong data-i18n="sidebar.environment.title">Environment configuration</strong><small data-i18n="sidebar.environment.subtitle">Persistent system setup</small></span>
@@ -326,6 +331,34 @@
                     <span class="toggle-label" data-i18n="options.fontSubset.enable">Enable font subsetting</span>
                   </span>
                 </label>
+                <label class="setting-row setting-row-toggle" for="audio-filter-enabled">
+                  <span class="setting-copy"><strong data-i18n="options.audioFilter.label">Filter source audio tracks</strong><span data-i18n="options.audioFilter.help">Opt in to conservative source-audio rules. Unknown language remains preserved.</span></span>
+                  <span class="toggle-row">
+                    <input id="audio-filter-enabled" class="visually-hidden" type="checkbox" />
+                    <span class="toggle-control" aria-hidden="true"></span>
+                    <span class="toggle-label" data-i18n="options.audioFilter.enable">Enable audio filtering</span>
+                  </span>
+                </label>
+                <div class="setting-row audio-filter-option">
+                  <label class="setting-copy" for="audio-exclude-patterns"><strong data-i18n="options.audioPatterns.label">Excluded title patterns</strong><span data-i18n="options.audioPatterns.help">Comma-separated case-insensitive text or glob patterns, such as commentary or *descriptive*.</span></label>
+                  <input id="audio-exclude-patterns" type="text" placeholder="commentary, *descriptive*" autocomplete="off" />
+                </div>
+                <div class="setting-row audio-filter-option">
+                  <label class="setting-copy" for="audio-keep-languages"><strong data-i18n="options.audioLanguages.label">Kept languages</strong><span data-i18n="options.audioLanguages.help">Comma-separated MKV or IETF language codes. Leave empty to avoid language filtering.</span></label>
+                  <input id="audio-keep-languages" type="text" placeholder="jpn, eng" autocomplete="off" />
+                </div>
+                <label class="setting-row setting-row-toggle audio-filter-option" for="keep-default-audio">
+                  <span class="setting-copy"><strong data-i18n="options.keepDefaultAudio.label">Always keep default audio</strong><span data-i18n="options.keepDefaultAudio.help">Default source tracks take precedence over exclusion rules.</span></span>
+                  <span class="toggle-row"><input id="keep-default-audio" class="visually-hidden" type="checkbox" /><span class="toggle-control" aria-hidden="true"></span><span class="toggle-label" data-i18n="options.keepDefaultAudio.enable">Keep defaults</span></span>
+                </label>
+                <label class="setting-row setting-row-toggle audio-filter-option" for="keep-unknown-audio">
+                  <span class="setting-copy"><strong data-i18n="options.keepUnknownAudio.label">Keep unknown language</strong><span data-i18n="options.keepUnknownAudio.help">Prevents missing or unknown language metadata from causing deletion.</span></span>
+                  <span class="toggle-row"><input id="keep-unknown-audio" class="visually-hidden" type="checkbox" /><span class="toggle-control" aria-hidden="true"></span><span class="toggle-label" data-i18n="options.keepUnknownAudio.enable">Keep unknown</span></span>
+                </label>
+                <label class="setting-row setting-row-toggle audio-filter-option" for="allow-no-audio">
+                  <span class="setting-copy"><strong data-i18n="options.allowNoAudio.label">Allow output with no audio</strong><span data-i18n="options.allowNoAudio.help">Dangerous: permits manual rules to remove every source audio track.</span></span>
+                  <span class="toggle-row"><input id="allow-no-audio" class="visually-hidden" type="checkbox" /><span class="toggle-control" aria-hidden="true"></span><span class="toggle-label" data-i18n="options.allowNoAudio.enable">Allow silent output</span></span>
+                </label>
                 <label class="setting-row setting-row-toggle" for="overwrite">
                   <span class="setting-copy"><strong data-i18n="options.overwrite.label">Overwrite existing outputs</strong><span data-i18n="options.overwrite.help">Requires confirmation before the job starts and can replace existing files.</span></span>
                   <span class="toggle-row">
@@ -347,10 +380,13 @@
                     <p class="section-description" data-i18n="plan.description">Nothing is written until you review the matched tracks and start the job.</p>
                   </div>
                 </div>
-                <button id="plan-btn" class="primary" type="button">
-                  <svg class="icon" aria-hidden="true"><use href="#icon-plan"></use></svg>
-                  <span data-i18n="plan.generate">Generate plan</span>
-                </button>
+                <div class="button-row">
+                  <button id="apply-plan-edits-btn" class="secondary hidden" type="button" data-i18n="plan.applyEdits">Apply edits</button>
+                  <button id="plan-btn" class="primary" type="button">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-plan"></use></svg>
+                    <span data-i18n="plan.generate">Generate plan</span>
+                  </button>
+                </div>
               </div>
               <div id="plan-summary" class="count-row" aria-label="Plan summary" data-i18n-aria-label="plan.summary"></div>
               <div id="plans" class="stack empty-state">
@@ -391,6 +427,17 @@
               <span data-i18n="footer.local">PlexMuxy processes media on this device.</span>
               <span data-i18n="footer.review">Review destructive options before every run.</span>
             </footer>
+            </div>
+
+            <div id="jobs-view" class="view hidden" data-view="jobs">
+              <div class="page-heading">
+                <div><p class="breadcrumb" data-i18n="jobs.breadcrumb">Task history</p><h2 data-i18n="jobs.title">Queue and history</h2><p data-i18n="jobs.description">Directory tasks run one at a time and remain visible after restart.</p></div>
+                <div class="button-row"><button id="queue-toggle-btn" class="secondary" type="button" data-i18n="jobs.pause">Pause queue</button><button id="refresh-jobs-btn" class="ghost" type="button" data-i18n="jobs.refresh">Refresh</button></div>
+              </div>
+              <section class="panel" aria-labelledby="jobs-list-title">
+                <div class="panel-header"><div><h3 id="jobs-list-title" data-i18n="jobs.listTitle">Tasks</h3><p class="section-description" data-i18n="jobs.listDescription">Review status, retry interrupted work, or reopen the output location.</p></div></div>
+                <div id="jobs-list" class="stack empty-state"><h4 data-i18n="jobs.empty.title">No task history</h4><p data-i18n="jobs.empty.detail">Generate a plan to create the first persistent task.</p></div>
+              </section>
             </div>
 
             <div id="environment-view" class="view hidden" data-view="environment">
@@ -512,6 +559,28 @@
                     <div class="group-heading"><h4 id="mkvmerge-summary-title" data-i18n="environment.engineTitle">Dependency overview</h4><span>Runtime</span></div>
                     <div id="mkvmerge-summary" class="summary-list"></div>
                   </article>
+                </div>
+              </section>
+
+              <section class="panel" aria-labelledby="font-cache-title">
+                <div class="panel-header"><div class="section-heading"><span class="section-number" aria-hidden="true">04</span><div><p class="eyebrow" data-i18n="environment.cache.eyebrow">Performance</p><h3 id="font-cache-title" data-i18n="environment.cache.title">Persistent font subset cache</h3><p class="section-description" data-i18n="environment.cache.description">Validated subsets can be reused across tasks and are isolated by tool and schema versions.</p></div></div><div class="button-row"><button id="open-font-cache-btn" class="ghost" type="button" data-i18n="environment.cache.open">Open cache</button><button id="clear-font-cache-btn" class="secondary" type="button" data-i18n="environment.cache.clear">Clear cache</button></div></div>
+                <div class="settings-list compact-settings">
+                  <label class="setting-row setting-row-toggle" for="font-cache-enabled"><span class="setting-copy"><strong data-i18n="environment.cache.enable">Enable persistent cache</strong><span data-i18n="environment.cache.enableHelp">Disable to generate subsets only in the active task workspace.</span></span><span class="toggle-row"><input id="font-cache-enabled" class="visually-hidden" type="checkbox" /><span class="toggle-control" aria-hidden="true"></span></span></label>
+                  <div class="setting-row"><label class="setting-copy" for="font-cache-max-size"><strong data-i18n="environment.cache.maxSize">Maximum size (MiB)</strong></label><input id="font-cache-max-size" type="number" min="1" max="1048576" /></div>
+                  <div class="setting-row"><label class="setting-copy" for="font-cache-max-age"><strong data-i18n="environment.cache.maxAge">Maximum age (days)</strong></label><input id="font-cache-max-age" type="number" min="1" max="3650" /></div>
+                </div>
+                <div id="font-cache-summary" class="summary-list"></div>
+              </section>
+
+              <section class="panel" aria-labelledby="integrations-title">
+                <div class="panel-header"><div class="section-heading"><span class="section-number" aria-hidden="true">05</span><div><p class="eyebrow" data-i18n="environment.integrations.eyebrow">Optional network features</p><h3 id="integrations-title" data-i18n="environment.integrations.title">Updates and Plex</h3><p class="section-description" data-i18n="environment.integrations.description">Both features are opt-in. Plex tokens are read from an environment variable and never saved here.</p></div></div><button id="check-updates-btn" class="secondary" type="button" data-i18n="environment.updates.check">Check now</button></div>
+                <div class="settings-list compact-settings">
+                  <label class="setting-row setting-row-toggle" for="updates-enabled"><span class="setting-copy"><strong data-i18n="environment.updates.enable">Enable cached update checks</strong><span id="update-check-status" data-i18n="environment.updates.disabled">Disabled; PlexMuxy will stay offline.</span></span><span class="toggle-row"><input id="updates-enabled" class="visually-hidden" type="checkbox" /><span class="toggle-control" aria-hidden="true"></span></span></label>
+                  <label class="setting-row setting-row-toggle" for="plex-enabled"><span class="setting-copy"><strong data-i18n="environment.plex.enable">Refresh Plex after verified jobs</strong><span id="plex-token-status" data-i18n="environment.plex.tokenMissing">Token environment variable not detected.</span></span><span class="toggle-row"><input id="plex-enabled" class="visually-hidden" type="checkbox" /><span class="toggle-control" aria-hidden="true"></span></span></label>
+                  <div class="setting-row"><label class="setting-copy" for="plex-server-url"><strong data-i18n="environment.plex.server">Plex server URL</strong></label><input id="plex-server-url" type="url" placeholder="https://plex.example:32400" /></div>
+                  <div class="setting-row"><label class="setting-copy" for="plex-section-id"><strong data-i18n="environment.plex.section">Library section ID</strong></label><input id="plex-section-id" inputmode="numeric" /></div>
+                  <div class="setting-row"><label class="setting-copy" for="plex-token-env"><strong data-i18n="environment.plex.tokenEnv">Token environment variable</strong></label><input id="plex-token-env" type="text" placeholder="PLEXMUXY_PLEX_TOKEN" /></div>
+                  <div class="setting-row"><label class="setting-copy" for="plex-path-mappings"><strong data-i18n="environment.plex.mappings">Path mappings</strong><span data-i18n="environment.plex.mappingsHelp">One per line: local absolute path = server-visible path</span></label><textarea id="plex-path-mappings" rows="3" placeholder="D:\Media = /media"></textarea></div>
                 </div>
               </section>
 

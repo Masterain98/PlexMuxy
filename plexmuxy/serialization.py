@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from .models import (
+    PLAN_DIGEST_SCHEMA_VERSION,
     PLAN_SCHEMA_VERSION,
     AttachmentPlan,
     AudioTrackPlan,
@@ -291,7 +292,13 @@ def subtitle_track_to_dict(track: SubtitleTrackPlan) -> dict[str, Any]:
 
 
 def audio_track_to_dict(track: AudioTrackPlan) -> dict[str, Any]:
-    return {"path": str(track.path), "name": track.path.name, "language": track.language, "match_reason": track.match_reason}
+    return {
+        "path": str(track.path),
+        "name": track.path.name,
+        "language": track.language,
+        "match_reason": track.match_reason,
+        "expected_track_count": track.expected_track_count,
+    }
 
 
 def attachment_to_dict(attachment: AttachmentPlan) -> dict[str, Any]:
@@ -308,6 +315,7 @@ def source_track_to_dict(track: SourceTrackInfo) -> dict[str, Any]:
         "id": track.id, "type": track.type, "codec": track.codec, "language": track.language,
         "title": track.title, "default_track": track.default_track, "forced_track": track.forced_track,
         "channels": track.channels, "included": track.included, "decision_reason": track.decision_reason,
+        "decision_source": track.decision_source, "matched_rule": track.matched_rule,
     }
 
 
@@ -330,6 +338,8 @@ def mux_plan_to_dict(plan: MuxPlan) -> dict[str, Any]:
             font_subset_intent_to_dict(plan.font_subset_intent)
             if plan.font_subset_intent is not None else None
         ),
+        "edit_revision": plan.edit_revision,
+        "external_track_order": list(plan.external_track_order),
     }
 
 
@@ -345,7 +355,8 @@ def mux_plan_from_dict(data: dict[str, Any]) -> MuxPlan:
             match_reason=str(item["match_reason"]),
         ) for item in list_value(data.get("subtitle_tracks", []), "subtitle_tracks")],
         audio_tracks=[AudioTrackPlan(
-            absolute_path(item["path"], "audio path"), item.get("language"), str(item["match_reason"])
+            absolute_path(item["path"], "audio path"), item.get("language"), str(item["match_reason"]),
+            integer_value(item.get("expected_track_count", 1), "audio expected_track_count", minimum=1),
         ) for item in list_value(data.get("audio_tracks", []), "audio_tracks")],
         attachments=[AttachmentPlan(
             absolute_path(item["path"], "attachment path"),
@@ -362,18 +373,22 @@ def mux_plan_from_dict(data: dict[str, Any]) -> MuxPlan:
             font_subset_intent_from_dict(object_value(data["font_subset_intent"], "font_subset_intent"))
             if data.get("font_subset_intent") is not None else None
         ),
+        edit_revision=integer_value(data.get("edit_revision", 0), "plan edit_revision", minimum=0),
+        external_track_order=[
+            str(item) for item in list_value(data.get("external_track_order", []), "external_track_order")
+        ],
     )
 
 
 def snapshot_to_dict(snapshot: MuxPlanSnapshot) -> dict[str, Any]:
-    if snapshot.schema_version not in {1, PLAN_SCHEMA_VERSION}:
+    if snapshot.schema_version not in {1, PLAN_DIGEST_SCHEMA_VERSION, PLAN_SCHEMA_VERSION}:
         raise ValueError(f"Unsupported plan schema_version: {snapshot.schema_version}")
     file_items = []
     for item in snapshot.files:
         payload = {
             "path": str(item.path), "size": item.size, "modified_time_ns": item.modified_time_ns,
         }
-        if snapshot.schema_version >= PLAN_SCHEMA_VERSION:
+        if snapshot.schema_version >= PLAN_DIGEST_SCHEMA_VERSION:
             payload["sha256"] = item.sha256
         file_items.append(payload)
     return {
@@ -391,7 +406,11 @@ def snapshot_to_dict(snapshot: MuxPlanSnapshot) -> dict[str, Any]:
 
 def snapshot_from_dict(data: dict[str, Any]) -> MuxPlanSnapshot:
     schema_version = data.get("schema_version")
-    if isinstance(schema_version, bool) or schema_version not in {1, PLAN_SCHEMA_VERSION}:
+    if isinstance(schema_version, bool) or schema_version not in {
+        1,
+        PLAN_DIGEST_SCHEMA_VERSION,
+        PLAN_SCHEMA_VERSION,
+    }:
         raise ValueError("Unsupported plan schema_version")
     require_keys(data, {"plan_id", "config_hash", "created_at", "input_dir", "config", "plans", "files"}, "plan snapshot")
     if not isinstance(data["config"], dict):
@@ -400,17 +419,23 @@ def snapshot_from_dict(data: dict[str, Any]) -> MuxPlanSnapshot:
     font_mode = font_data.get("mode", "all") if isinstance(font_data, dict) else "all"
     if schema_version == 1 and font_mode == "subset":
         raise ValueError("Plan schema_version 1 cannot execute font.mode=subset; regenerate the plan")
+    tracks_data = data["config"].get("tracks", {})
+    audio_filter_enabled = (
+        tracks_data.get("audio_filter_enabled", False) if isinstance(tracks_data, dict) else False
+    )
+    if schema_version < PLAN_SCHEMA_VERSION and audio_filter_enabled:
+        raise ValueError("Plan schema_version 3 is required for source audio filtering; regenerate the plan")
     plans = [mux_plan_from_dict(item) for item in list_value(data["plans"], "plans")]
-    if schema_version == PLAN_SCHEMA_VERSION and font_mode == "subset" and any(
+    if schema_version >= PLAN_DIGEST_SCHEMA_VERSION and font_mode == "subset" and any(
         plan.font_subset_intent is None for plan in plans
     ):
-        raise ValueError("Plan schema_version 2 subset plans require font_subset_intent")
+        raise ValueError("Plan schema_version 2+ subset plans require font_subset_intent")
     files: list[FileSnapshot] = []
     for index, item in enumerate(list_value(data["files"], "files")):
         file_data = object_value(item, f"files[{index}]")
         require_keys(file_data, {"path", "size", "modified_time_ns"}, f"files[{index}]")
         digest = None
-        if schema_version == PLAN_SCHEMA_VERSION:
+        if schema_version >= PLAN_DIGEST_SCHEMA_VERSION:
             if "sha256" not in file_data:
                 raise ValueError(f"files[{index}] missing fields: sha256")
             digest = optional_sha256(file_data["sha256"], f"files[{index}].sha256")
@@ -461,6 +486,11 @@ def job_report_to_dict(report: JobReport) -> dict[str, Any]:
         "snapshot": snapshot_to_dict(report.snapshot) if report.snapshot else None,
         "warnings": list(report.warnings), "cancelled": report.cancelled,
         "error_code": report.error_code, "error": report.error,
+        "available_subtitles": [
+            {"path": str(path), "name": path.name} for path in report.available_subtitles
+        ],
+        "available_audio": [{"path": str(path), "name": path.name} for path in report.available_audio],
+        "post_actions": list(report.post_actions),
     }
 
 

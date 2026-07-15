@@ -5,6 +5,7 @@ const state = {
   navigationTarget: null, navigationScrollCleanup: null, localeMode: "system",
   loadingMessageKey: "loading.initializing", lastJobStatus: null, currentView: "workspace",
   lastNonSubsetFontMode: "all",
+  planEdits: new Map(), jobs: [], queuePaused: false, activePreviewId: null,
 };
 
 const THEME_STORAGE_KEY = "plexmuxy-theme";
@@ -43,12 +44,25 @@ function bindEvents() {
     ["diagnostics-btn", "click", exportDiagnostics], ["save-settings-btn", "click", saveSettings],
     ["save-environment-btn", "click", saveEnvironmentSettings], ["test-notification-btn", "click", testNotification],
     ["plan-btn", "click", generatePlan], ["run-btn", "click", runMux], ["cancel-btn", "click", cancelJob],
+    ["apply-plan-edits-btn", "click", applyPlanEdits], ["refresh-jobs-btn", "click", loadJobs],
+    ["queue-toggle-btn", "click", toggleQueue], ["clear-font-cache-btn", "click", clearFontCache],
+    ["open-font-cache-btn", "click", () => callApi("open_font_cache_location")],
+    ["check-updates-btn", "click", checkUpdates],
     ["input-dir", "input", (event) => { state.inputDir = event.target.value; clearReports(); }],
     ["cleanup", "change", handleOverrideChange], ["extra-dir", "input", handleOverrideChange],
     ["output-suffix", "input", handleOverrideChange], ["output-dir", "input", handleOverrideChange],
     ["name-strategy", "change", handleOverrideChange], ["name-template", "input", handleOverrideChange],
     ["overwrite", "change", handleOverrideChange], ["font-subset", "change", handleFontSubsetChange],
+    ["audio-filter-enabled", "change", handleOverrideChange],
+    ["audio-exclude-patterns", "input", handleOverrideChange], ["audio-keep-languages", "input", handleOverrideChange],
+    ["keep-default-audio", "change", handleOverrideChange], ["keep-unknown-audio", "change", handleOverrideChange],
+    ["allow-no-audio", "change", handleOverrideChange],
     ["notifications-enabled", "change", handleEnvironmentChange],
+    ["font-cache-enabled", "change", handleEnvironmentChange], ["font-cache-max-size", "input", handleEnvironmentChange],
+    ["font-cache-max-age", "input", handleEnvironmentChange], ["updates-enabled", "change", handleEnvironmentChange],
+    ["plex-enabled", "change", handleEnvironmentChange], ["plex-server-url", "input", handleEnvironmentChange],
+    ["plex-section-id", "input", handleEnvironmentChange], ["plex-token-env", "input", handleEnvironmentChange],
+    ["plex-path-mappings", "input", handleEnvironmentChange],
   ];
   bindings.forEach(([id, eventName, handler]) => {
     const element = $(id); const key = `bound${eventName}`;
@@ -135,6 +149,7 @@ function handleLocaleChange() {
   else if (!window.pywebview) renderOfflineShell();
   renderPlans(state.planReport);
   renderResults(state.runReport);
+  renderJobs(); renderFontCache();
   if (state.lastJobStatus) renderProgress(state.lastJobStatus);
   if (state.loading) setText("loading-text", t(state.loadingMessageKey));
   if (state.activeJobId) setRuntimeStatus(t("status.jobRunning"));
@@ -376,6 +391,7 @@ function parseRoute(hash = window.location.hash) {
   const normalized = String(hash || "").replace(/^#\/?/, "");
   const parts = normalized.split("/").filter(Boolean);
   if (parts[0] === "environment") return { view: "environment", section: null };
+  if (parts[0] === "jobs") return { view: "jobs", section: null };
   if (parts[0] === "workspace") return { view: "workspace", section: parts[1] || "directory-section" };
   if (normalized && $(normalized)) return { view: "workspace", section: normalized };
   return { view: "workspace", section: "directory-section" };
@@ -384,31 +400,36 @@ function parseRoute(hash = window.location.hash) {
 function handleRoute(smooth = false) {
   const route = parseRoute();
   state.currentView = route.view;
-  const workspace = $("workspace-view"); const environment = $("environment-view");
+  const workspace = $("workspace-view"); const environment = $("environment-view"); const jobs = $("jobs-view");
   const showWorkspace = route.view === "workspace";
   workspace?.classList.toggle("hidden", !showWorkspace);
-  environment?.classList.toggle("hidden", showWorkspace);
+  environment?.classList.toggle("hidden", route.view !== "environment");
+  jobs?.classList.toggle("hidden", route.view !== "jobs");
   if (workspace) workspace.inert = !showWorkspace;
-  if (environment) environment.inert = showWorkspace;
+  if (environment) environment.inert = route.view !== "environment";
+  if (jobs) jobs.inert = route.view !== "jobs";
   updateRouteLabels();
   if (showWorkspace) {
     const section = $(route.section) ? route.section : "directory-section";
     const target = `#\/workspace/${section}`;
     setActiveNavigation(target);
     window.setTimeout(() => scrollToSection(`#${section}`, smooth), 0);
-  } else {
+  } else if (route.view === "environment") {
     state.navigationScrollCleanup?.();
     state.navigationTarget = null;
     setActiveNavigation("#/environment");
+  } else {
+    state.navigationScrollCleanup?.(); state.navigationTarget = null; setActiveNavigation("#/jobs"); loadJobs();
     $("main-content")?.scrollTo({ top: 0, behavior: "auto" });
   }
 }
 
 function updateRouteLabels() {
   const environment = state.currentView === "environment";
-  setText("topbar-context", environment ? t("topbar.system") : t("topbar.workspace"));
-  setText("topbar-page", environment ? t("sidebar.environment.title") : t("topbar.newJob"));
-  document.title = environment ? t("document.environmentTitle") : t("document.workspaceTitle");
+  const jobs = state.currentView === "jobs";
+  setText("topbar-context", environment ? t("topbar.system") : jobs ? t("sidebar.jobs.title") : t("topbar.workspace"));
+  setText("topbar-page", environment ? t("sidebar.environment.title") : jobs ? t("jobs.title") : t("topbar.newJob"));
+  document.title = environment ? t("document.environmentTitle") : jobs ? t("jobs.title") : t("document.workspaceTitle");
 }
 
 function scrollToSection(targetSelector, smooth) {
@@ -524,6 +545,13 @@ async function initialize() {
   try {
     state.appInfo = await callApi("get_app_info"); state.config = await callApi("load_config");
     renderAppInfo(); renderConfigSummary(); renderRuntimeStatus(); applyConfigDefaults(); renderEnvironmentSettings();
+    await Promise.all([loadJobs(), renderFontCache()]);
+    if (state.appInfo.activation_job_id) {
+      await openSavedJob(state.appInfo.activation_job_id);
+      if (state.appInfo.activation_action === "output") {
+        try { await callApi("open_job_output", state.appInfo.activation_job_id); } catch (error) { showError(error.message); }
+      }
+    }
   } catch (error) { showError(error.message); } finally { setLoading(false); }
 }
 
@@ -564,6 +592,15 @@ async function saveEnvironmentSettings() {
       ffmpeg_path: $("ffmpeg-path").value.trim(),
       unrar_path: $("unrar-path").value.trim(),
       notifications_enabled: $("notifications-enabled").checked,
+      font_cache_enabled: $("font-cache-enabled").checked,
+      font_cache_max_size_mb: Number($("font-cache-max-size").value),
+      font_cache_max_age_days: Number($("font-cache-max-age").value),
+      updates_enabled: $("updates-enabled").checked,
+      plex_enabled: $("plex-enabled").checked,
+      plex_server_url: $("plex-server-url").value.trim(),
+      plex_section_id: $("plex-section-id").value.trim(),
+      plex_token_env: $("plex-token-env").value.trim(),
+      plex_path_mappings: parsePathMappings($("plex-path-mappings").value),
     });
     state.environmentDirty = false;
     renderConfigSummary(); renderEnvironmentSettings(); renderRuntimeStatus(); updateRunButton();
@@ -617,8 +654,23 @@ async function generatePlan() {
   if (!payload.input_dir) { showError(t("error.chooseInput")); return; }
   setLoading(true, "loading.generatingPlan");
   try {
-    state.planReport = await callApi("plan_job", payload); state.runReport = null;
+    state.planReport = await callApi("plan_job", payload); state.runReport = null; state.planEdits.clear();
     renderPlans(state.planReport); renderResults(null);
+    if (state.planReport.error) showError(`${state.planReport.error_code || "PLAN_ERROR"}: ${state.planReport.error}`);
+  } catch (error) { showError(error.message); } finally { setLoading(false); }
+}
+
+async function applyPlanEdits() {
+  if (!state.planReport?.snapshot || !state.planReport?.job_id) return;
+  clearError(); setLoading(true, "loading.generatingPlan");
+  try {
+    const payload = buildPayload();
+    payload.job_id = state.planReport.job_id;
+    payload.base_plan_id = state.planReport.snapshot.plan_id;
+    payload.plan_edits = Array.from(state.planEdits.values());
+    payload.plan_edits = payload.plan_edits.filter((edit) => !edit.pristine).map(({ pristine, ...edit }) => edit);
+    state.planReport = await callApi("update_plan_draft", payload);
+    state.planEdits.clear(); renderPlans(state.planReport); updateRunButton();
     if (state.planReport.error) showError(`${state.planReport.error_code || "PLAN_ERROR"}: ${state.planReport.error}`);
   } catch (error) { showError(error.message); } finally { setLoading(false); }
 }
@@ -632,7 +684,7 @@ async function runMux() {
   if (warnings.length && !await confirmAction(warnings.join(" "))) return;
   if (warnings.length) payload.yes = true;
   try {
-    const started = await callApi("start_job", {snapshot: state.planReport.snapshot, yes: payload.yes});
+    const started = await callApi("start_job", {job_id: state.planReport.job_id, snapshot: state.planReport.snapshot, yes: payload.yes});
     state.activeJobId = started.job_id; setJobRunning(true); await pollJob(started.job_id);
   } catch (error) { showError(error.message); setJobRunning(false); }
 }
@@ -640,7 +692,7 @@ async function runMux() {
 async function pollJob(jobId) {
   while (state.activeJobId === jobId) {
     const status = await callApi("get_job_status", jobId); state.lastJobStatus = status; renderProgress(status);
-    if (["completed", "failed", "cancelled"].includes(status.status)) {
+    if (["completed", "failed", "cancelled", "interrupted"].includes(status.status)) {
       try { state.runReport = await callApi("get_job_report", jobId); renderResults(state.runReport); }
       catch (error) { showError(status.error || error.message); }
       const tone = status.status === "completed" ? "success" : status.status === "cancelled" ? "warning" : "error";
@@ -664,7 +716,36 @@ function buildPayload() {
     name_strategy: getCustomSelectValue("name-strategy"), name_template: $("name-template").value.trim(),
     overwrite: $("overwrite").checked,
     font_mode: $("font-subset").checked ? "subset" : state.lastNonSubsetFontMode,
+    audio_filter_enabled: $("audio-filter-enabled").checked,
+    exclude_audio_title_patterns: commaValues($("audio-exclude-patterns").value),
+    keep_audio_languages: commaValues($("audio-keep-languages").value),
+    keep_default_audio: $("keep-default-audio").checked,
+    keep_all_when_unknown: $("keep-unknown-audio").checked,
+    allow_no_audio: $("allow-no-audio").checked,
   }};
+}
+
+function commaValues(value) { return String(value || "").split(",").map((item) => item.trim()).filter(Boolean); }
+
+function parsePathMappings(value) {
+  return String(value || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+    const separator = line.indexOf("=");
+    if (separator < 1) throw new Error(t("environment.plex.invalidMapping", { line }));
+    return { local_root: line.slice(0, separator).trim(), server_root: line.slice(separator + 1).trim() };
+  });
+}
+
+async function checkUpdates() {
+  try {
+    const result = await callApi("check_updates", true);
+    const message = result.error
+      ? t("environment.updates.failed", { error: result.error })
+      : result.update_available
+        ? t("environment.updates.available", { version: result.latest_version, url: result.release_url || "" })
+        : t("environment.updates.current", { version: result.current_version });
+    setText("update-check-status", message);
+    showToast(message, result.error ? "warning" : "success", t("environment.updates.title"));
+  } catch (error) { showToast(error.message, "warning", t("environment.updates.title")); }
 }
 
 function requiresDeleteConfirmation(payload) {
@@ -731,6 +812,20 @@ function renderEnvironmentSettings(resetDirty = true) {
   if (notifications.reason) capability.dataset.tooltip = notifications.reason;
   else delete capability.dataset.tooltip;
   capability.removeAttribute("title");
+  const cache = state.config.font_cache || {};
+  if (resetDirty) {
+    $("font-cache-enabled").checked = cache.enabled !== false;
+    $("font-cache-max-size").value = cache.max_size_mb || 2048;
+    $("font-cache-max-age").value = cache.max_age_days || 90;
+    $("updates-enabled").checked = Boolean(state.config.updates?.enabled);
+    $("plex-enabled").checked = Boolean(state.config.plex?.enabled);
+    $("plex-server-url").value = state.config.plex?.server_url || "";
+    $("plex-section-id").value = state.config.plex?.section_id || "";
+    $("plex-token-env").value = state.config.plex?.token_env || "PLEXMUXY_PLEX_TOKEN";
+    $("plex-path-mappings").value = (state.config.plex?.path_mappings || []).map((item) => `${item.local_root} = ${item.server_root}`).join("\n");
+  }
+  setText("update-check-status", state.config.updates?.enabled ? t("environment.updates.enabled") : t("environment.updates.disabled"));
+  setText("plex-token-status", state.config.plex?.token_available ? t("environment.plex.tokenAvailable") : t("environment.plex.tokenMissing"));
   if (resetDirty) state.environmentDirty = false;
   updateRunButton();
 }
@@ -763,6 +858,13 @@ function applyConfigDefaults() {
   const fontMode = state.config?.font?.mode || "all";
   if (fontMode !== "subset") state.lastNonSubsetFontMode = fontMode;
   $("font-subset").checked = fontMode === "subset";
+  const tracks = state.config?.tracks || {};
+  $("audio-filter-enabled").checked = Boolean(tracks.audio_filter_enabled);
+  $("audio-exclude-patterns").value = (tracks.exclude_audio_title_patterns || []).join(", ");
+  $("audio-keep-languages").value = (tracks.keep_audio_languages || []).join(", ");
+  $("keep-default-audio").checked = tracks.keep_default_audio !== false;
+  $("keep-unknown-audio").checked = tracks.keep_all_when_unknown !== false;
+  $("allow-no-audio").checked = Boolean(tracks.allow_no_audio);
   state.settingsDirty = false; updateOptionAvailability(); updateRunButton();
 }
 
@@ -772,10 +874,124 @@ function updateOptionAvailability() {
     $("name-template").disabled = !templateEnabled;
     $("name-template").setAttribute("aria-disabled", String(!templateEnabled));
   }
+  const filterEnabled = Boolean($("audio-filter-enabled")?.checked);
+  document.querySelectorAll(".audio-filter-option input").forEach((control) => {
+    control.disabled = !filterEnabled;
+    control.setAttribute("aria-disabled", String(!filterEnabled));
+  });
+}
+
+async function loadJobs() {
+  if (!window.pywebview?.api?.list_jobs) return;
+  try {
+    const result = await callApi("list_jobs", 100);
+    state.jobs = result.jobs || []; state.queuePaused = Boolean(result.paused); renderJobs();
+  } catch (error) { if (state.currentView === "jobs") showError(error.message); }
+}
+
+function renderJobs() {
+  const container = $("jobs-list"); if (!container) return; clear(container);
+  setText("queue-toggle-btn", state.queuePaused ? t("jobs.resume") : t("jobs.pause"));
+  if (!state.jobs.length) return empty(container, "", t("jobs.empty.title"), t("jobs.empty.detail"));
+  state.jobs.forEach((job) => {
+    const card = element("article", "job-history-card"); const heading = element("div", "card-title");
+    const copy = element("div"); copy.append(element("h4", "", job.input_dir), element("div", "file-path", job.updated_at));
+    heading.append(copy, badge(localizeEnum("jobs.state", job.state), ["completed"].includes(job.state) ? "ok" : ["failed"].includes(job.state) ? "danger" : ["cancelled", "interrupted"].includes(job.state) ? "warn" : "info")); card.append(heading);
+    if (job.error_message) card.append(element("div", "inline-error", `${job.error_code || "JOB_ERROR"}: ${job.error_message}`));
+    const actions = element("div", "button-row");
+    if (job.state === "awaiting_review") {
+      const review = element("button", "primary compact", t("jobs.review")); review.type = "button";
+      review.addEventListener("click", () => openSavedJob(job.id)); actions.append(review);
+    }
+    if (job.state === "queued_for_execution") {
+      const up = element("button", "ghost compact", t("jobs.moveUp")); up.type = "button";
+      const down = element("button", "ghost compact", t("jobs.moveDown")); down.type = "button";
+      up.addEventListener("click", () => moveQueuedJob(job, -1)); down.addEventListener("click", () => moveQueuedJob(job, 1)); actions.append(up, down);
+    }
+    if (["failed", "cancelled", "interrupted"].includes(job.state)) {
+      const retry = element("button", "secondary compact", t("jobs.retry")); retry.type = "button";
+      retry.addEventListener("click", async () => { await callApi("retry_job", job.id); await loadJobs(); }); actions.append(retry);
+    }
+    if (["completed", "failed", "cancelled", "interrupted"].includes(job.state)) {
+      const view = element("button", "secondary compact", t("jobs.view")); view.type = "button";
+      view.addEventListener("click", () => openSavedJob(job.id)); actions.append(view);
+      const output = element("button", "ghost compact", t("jobs.openOutput")); output.type = "button";
+      output.addEventListener("click", async () => { try { await callApi("open_job_output", job.id); } catch (error) { showError(error.message); } }); actions.append(output);
+      const diagnostics = element("button", "ghost compact", t("jobs.diagnostics")); diagnostics.type = "button";
+      diagnostics.addEventListener("click", async () => { try { const result = await callApi("export_job_diagnostics", job.id); showToast(t("toast.diagnostics.body", { path: result.path }), "success", t("toast.diagnostics.title")); } catch (error) { showError(error.message); } }); actions.append(diagnostics);
+      if (job.state === "completed" && state.config?.plex?.enabled) {
+        const plex = element("button", "ghost compact", t("jobs.retryPlex")); plex.type = "button";
+        plex.addEventListener("click", async () => {
+          plex.disabled = true;
+          try {
+            const result = await callApi("retry_plex_refresh", job.id);
+            showToast(t("jobs.retryPlexSuccess", { count: result.results.length }), "success", t("jobs.retryPlex"));
+          } catch (error) { showError(error.message); }
+          finally { plex.disabled = false; }
+        }); actions.append(plex);
+      }
+      const replan = element("button", "ghost compact", t("jobs.replan")); replan.type = "button";
+      replan.addEventListener("click", async () => { await callApi("replan_job", job.id); await loadJobs(); }); actions.append(replan);
+    }
+    card.append(actions); container.append(card);
+  });
+  container.className = "stack";
+}
+
+async function openSavedJob(jobId) {
+  try {
+    const saved = await callApi("load_job", jobId);
+    state.inputDir = saved.job.input_dir; $("input-dir").value = saved.job.input_dir;
+    if (saved.job.state === "awaiting_review") {
+      state.planReport = saved.report; state.runReport = null; state.planEdits.clear(); renderPlans(state.planReport); renderResults(null);
+    } else {
+      state.runReport = saved.report; renderResults(state.runReport);
+    }
+    window.location.hash = saved.job.state === "awaiting_review" ? "#/workspace/plan-section" : "#/workspace/run-section";
+    updateRunButton();
+  } catch (error) { showError(error.message); }
+}
+
+async function moveQueuedJob(job, delta) {
+  try { await callApi("reorder_job", { job_id: job.id, position: Math.max(0, Number(job.position || 0) + delta) }); await loadJobs(); }
+  catch (error) { showError(error.message); }
+}
+
+async function toggleQueue() {
+  try {
+    await callApi(state.queuePaused ? "resume_queue" : "pause_queue");
+    state.queuePaused = !state.queuePaused; renderJobs();
+  } catch (error) { showError(error.message); }
+}
+
+async function renderFontCache() {
+  if (!window.pywebview?.api?.get_font_cache || !$("font-cache-summary")) return;
+  try {
+    const cache = await callApi("get_font_cache");
+    renderSummary($("font-cache-summary"), [
+      [t("environment.cache.status"), cache.enabled ? t("summary.available") : t("summary.unavailable")],
+      [t("environment.cache.entries"), String(cache.entries)],
+      [t("environment.cache.size"), formatBytes(cache.size_bytes)],
+      [t("environment.cache.limit"), formatBytes(cache.max_size_bytes)],
+      [t("environment.cache.path"), cache.path],
+    ]);
+  } catch (error) { showToast(error.message, "error", t("environment.cache.title")); }
+}
+
+async function clearFontCache() {
+  try { await callApi("clear_font_cache"); await renderFontCache(); showToast(t("environment.cache.cleared"), "success", t("environment.cache.title")); }
+  catch (error) { showToast(error.message, "error", t("environment.cache.title")); }
+}
+
+function formatBytes(value) {
+  const bytes = Number(value || 0); if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
 function renderPlans(report) {
   const container = $("plans"); clear(container); clear($("plan-summary"));
+  $("apply-plan-edits-btn")?.classList.toggle("hidden", !Array.from(state.planEdits.values()).some((edit) => !edit.pristine));
   if (!report) return empty(container, "03", t("plan.empty.title"), t("plan.empty.detail"));
   $("plan-summary").append(
     badge(countText(report.plans.length, "count.plan.one", "count.plan.other"), "info"),
@@ -796,10 +1012,20 @@ function renderPlanCard(plan) {
   const article = element("article", "plan-card");
   const title = element("div", "card-title"); const heading = element("div");
   heading.append(element("h4", "", plan.source_video_name), element("div", "file-path", plan.source_video));
-  title.append(heading, badge(plan.output_name, "info")); article.append(title, element("div", "file-path", t("plan.output", { path: plan.output_path })));
+  const enabledLabel = element("label", "plan-enabled toggle-row");
+  const enabled = element("input"); enabled.type = "checkbox"; enabled.checked = currentPlanEdit(plan).enabled;
+  enabled.addEventListener("change", () => { const edit = currentPlanEdit(plan); edit.enabled = enabled.checked; touchEdit(edit); });
+  enabledLabel.append(enabled, element("span", "", t("plan.includeVideo")), badge(plan.output_name, "info"));
+  title.append(heading, enabledLabel); article.append(title, element("div", "file-path", t("plan.output", { path: plan.output_path })));
   const grid = element("div", "track-grid");
-  grid.append(trackBox(t("plan.subtitles"), plan.subtitle_tracks, renderSubtitle), trackBox(t("plan.audio"), plan.audio_tracks, renderAudio), trackBox(t("plan.fonts"), plan.attachments, (item) => document.createTextNode(item.name)));
+  grid.append(
+    editableExternalBox(plan, "subtitle"),
+    editableExternalBox(plan, "audio"),
+    trackBox(t("plan.fonts"), plan.attachments, (item) => document.createTextNode(item.name))
+  );
   article.append(grid);
+  if (plan.source_tracks?.some((track) => track.type === "audio")) article.append(renderSourceAudioTracks(plan));
+  article.append(renderAvailableAssignments(plan));
   const subset = plan.font_subset_intent?.summary;
   if (subset) {
     const summary = element("div", "subset-summary");
@@ -815,6 +1041,161 @@ function renderPlanCard(plan) {
   if (plan.cleanup_candidates?.length) article.append(trackBox(t("plan.cleanupCandidates"), plan.cleanup_candidates, (item) => itemNode(item.name, item.path)));
   if (plan.skipped_files?.length) article.append(renderSkippedFiles(plan.skipped_files, t("plan.planSkippedFiles")));
   return article;
+}
+
+function currentPlanEdit(plan) {
+  if (!state.planEdits.has(plan.source_video)) {
+    state.planEdits.set(plan.source_video, {
+      source_video: plan.source_video,
+      revision: Number(plan.edit_revision || 0) + 1,
+      enabled: true,
+      included_subtitles: plan.subtitle_tracks.map((track) => track.path),
+      included_external_audio: plan.audio_tracks.map((track) => track.path),
+      source_track_overrides: [],
+      subtitle_metadata_overrides: [],
+      external_track_order: plan.external_track_order?.length ? [...plan.external_track_order] : [
+        ...plan.subtitle_tracks.map((track) => `subtitle:${track.path}`),
+        ...plan.audio_tracks.map((track) => `audio:${track.path}`),
+      ],
+      pristine: true,
+    });
+  }
+  return state.planEdits.get(plan.source_video);
+}
+
+function markPlanEdited() {
+  for (const [key, edit] of state.planEdits) if (edit.pristine) state.planEdits.delete(key);
+  document.querySelectorAll(".plan-card").forEach((card) => card.classList.add("has-edits"));
+  $("apply-plan-edits-btn")?.classList.remove("hidden");
+  updateRunButton();
+}
+
+function touchEdit(edit) { delete edit.pristine; markPlanEdited(); }
+
+function editableExternalBox(plan, kind) {
+  const edit = currentPlanEdit(plan);
+  const items = kind === "subtitle" ? plan.subtitle_tracks : plan.audio_tracks;
+  const selectedKey = kind === "subtitle" ? "included_subtitles" : "included_external_audio";
+  const title = kind === "subtitle" ? t("plan.subtitles") : t("plan.audio");
+  const box = element("div", "track-box editable-track-box"); box.append(element("h5", "", title));
+  if (!items.length) { box.append(element("div", "file-path", t("plan.none"))); return box; }
+  const list = element("ul", "item-list");
+  items.forEach((track) => {
+    const li = element("li", "editable-track"); const label = element("label", "track-check");
+    const input = element("input"); input.type = "checkbox"; input.checked = edit[selectedKey].includes(track.path);
+    input.addEventListener("change", () => {
+      edit[selectedKey] = input.checked
+        ? [...new Set([...edit[selectedKey], track.path])]
+        : edit[selectedKey].filter((path) => path !== track.path);
+      rebuildExternalOrder(edit);
+      touchEdit(edit);
+    });
+    label.append(input, kind === "subtitle" ? renderSubtitle(track) : renderAudio(track)); li.append(label);
+    const orderControls = element("span", "track-order-controls");
+    const up = element("button", "ghost compact", t("plan.moveUp")); up.type = "button";
+    const down = element("button", "ghost compact", t("plan.moveDown")); down.type = "button";
+    const move = (delta) => {
+      const current = edit[selectedKey].indexOf(track.path); if (current < 0) return;
+      const target = Math.max(0, Math.min(edit[selectedKey].length - 1, current + delta));
+      if (target === current) return;
+      edit[selectedKey].splice(current, 1); edit[selectedKey].splice(target, 0, track.path);
+      rebuildExternalOrder(edit); touchEdit(edit); renderPlans(state.planReport);
+    };
+    up.addEventListener("click", () => move(-1)); down.addEventListener("click", () => move(1));
+    up.disabled = edit[selectedKey].indexOf(track.path) <= 0; down.disabled = edit[selectedKey].indexOf(track.path) >= edit[selectedKey].length - 1;
+    orderControls.append(up, down); li.append(orderControls);
+    if (kind === "subtitle") {
+      const details = element("details", "track-editor"); details.append(element("summary", "", t("plan.editMetadata")));
+      const fields = element("div", "track-editor-fields");
+      [
+        ["track_name", track.track_name], ["mkv_language", track.mkv_language], ["ietf_language", track.ietf_language],
+      ].forEach(([field, value]) => {
+        const fieldLabel = element("label", ""); fieldLabel.append(element("span", "", t(`plan.field.${field}`)));
+        const textInput = element("input"); textInput.type = "text"; textInput.value = value;
+        textInput.addEventListener("input", () => updateSubtitleOverride(edit, track, field, textInput.value));
+        fieldLabel.append(textInput); fields.append(fieldLabel);
+      });
+      [["default_track", track.default_track], ["forced_track", track.forced_track]].forEach(([field, value]) => {
+        const flag = element("label", "track-flag"); const checkbox = element("input"); checkbox.type = "checkbox"; checkbox.checked = Boolean(value);
+        checkbox.addEventListener("change", () => updateSubtitleOverride(edit, track, field, checkbox.checked));
+        flag.append(checkbox, document.createTextNode(t(`plan.field.${field}`))); fields.append(flag);
+      });
+      details.append(fields); li.append(details);
+    }
+    list.append(li);
+  });
+  box.append(list); return box;
+}
+
+function updateSubtitleOverride(edit, track, field, value) {
+  let override = edit.subtitle_metadata_overrides.find((item) => item.path === track.path);
+  if (!override) { override = { path: track.path }; edit.subtitle_metadata_overrides.push(override); }
+  override[field] = value; touchEdit(edit);
+}
+
+function renderSourceAudioTracks(plan) {
+  const edit = currentPlanEdit(plan); const details = element("details", "source-track-panel");
+  const summary = element("summary", ""); summary.append(element("strong", "", t("plan.sourceAudio")), badge(t("plan.trackCount", { count: plan.source_tracks.filter((item) => item.type === "audio").length }), "info")); details.append(summary);
+  const list = element("div", "source-track-list");
+  plan.source_tracks.filter((track) => track.type === "audio").forEach((track) => {
+    const row = element("div", "source-track-row"); const copy = element("div", "source-track-copy");
+    copy.append(element("strong", "", `${track.id} · ${track.title || t("plan.unknownTitle")}`), element("span", "file-path", `${track.codec || "?"} / ${track.language || t("plan.unknownLanguage")} / ${track.channels || "?"}ch`), element("span", "decision-reason", localizeEnum("track.reason", track.decision_reason)));
+    const controls = element("div", "source-track-controls"); const keep = element("label", "track-check"); const input = element("input"); input.type = "checkbox";
+    const existingOverride = edit.source_track_overrides.find((item) => item.track_id === track.id);
+    input.checked = existingOverride ? existingOverride.included : track.included;
+    input.addEventListener("change", () => {
+      edit.source_track_overrides = edit.source_track_overrides.filter((item) => item.track_id !== track.id);
+      edit.source_track_overrides.push({ track_id: track.id, included: input.checked }); touchEdit(edit);
+    }); keep.append(input, document.createTextNode(t("plan.keepTrack")));
+    const preview = element("button", "ghost compact", t("plan.preview")); preview.type = "button";
+    preview.disabled = !state.config?.ffmpeg?.available;
+    preview.addEventListener("click", () => previewAudioTrack(plan, track, row, preview));
+    controls.append(keep, preview); row.append(copy, controls); list.append(row);
+  });
+  details.append(list); return details;
+}
+
+async function previewAudioTrack(plan, track, row, button) {
+  button.disabled = true;
+  try {
+    if (state.activePreviewId) await callApi("delete_audio_preview", state.activePreviewId);
+    const result = await callApi("create_audio_preview", { snapshot: state.planReport.snapshot, source_video: plan.source_video, track_id: track.id, start_seconds: 60, duration_seconds: 15 });
+    state.activePreviewId = result.preview_id;
+    row.querySelector("audio")?.remove(); const player = element("audio", "audio-preview"); player.controls = true; player.src = result.uri; row.append(player); await player.play().catch(() => {});
+  } catch (error) { showToast(error.message, "error", t("plan.previewFailed")); } finally { button.disabled = false; }
+}
+
+function renderAvailableAssignments(plan) {
+  const details = element("details", "source-track-panel assignment-panel");
+  details.append(element("summary", "", t("plan.assignments")));
+  const edit = currentPlanEdit(plan); const list = element("div", "assignment-list");
+  const groups = [
+    ["subtitle", state.planReport?.available_subtitles || [], "included_subtitles"],
+    ["audio", state.planReport?.available_audio || [], "included_external_audio"],
+  ];
+  groups.forEach(([kind, candidates, field]) => candidates.forEach((candidate) => {
+    if ((kind === "subtitle" ? plan.subtitle_tracks : plan.audio_tracks).some((track) => track.path === candidate.path)) return;
+    const row = element("div", "source-track-row"); const copy = itemNode(candidate.name, candidate.path);
+    const button = element("button", "ghost compact"); button.type = "button";
+    const sync = () => { button.textContent = edit[field].includes(candidate.path) ? t("plan.unassign") : t("plan.assign"); };
+    button.addEventListener("click", () => {
+      edit[field] = edit[field].includes(candidate.path)
+        ? edit[field].filter((path) => path !== candidate.path)
+        : [...edit[field], candidate.path];
+      rebuildExternalOrder(edit);
+      touchEdit(edit); sync();
+    });
+    sync(); row.append(copy, button); list.append(row);
+  }));
+  if (!list.childNodes.length) list.append(element("div", "file-path", t("plan.noAssignments")));
+  details.append(list); return details;
+}
+
+function rebuildExternalOrder(edit) {
+  edit.external_track_order = [
+    ...edit.included_subtitles.map((path) => `subtitle:${path}`),
+    ...edit.included_external_audio.map((path) => `audio:${path}`),
+  ];
 }
 
 function renderSubtitle(track) {
@@ -914,13 +1295,15 @@ function showToast(message, tone = "info", title = "", action = null, timeout = 
   if (timeout > 0) window.setTimeout(() => toast.remove(), timeout);
 }
 
-function clearReports() { state.planReport = null; state.runReport = null; renderPlans(null); renderResults(null); updateRunButton(); }
+function clearReports() { state.planReport = null; state.runReport = null; state.planEdits.clear(); renderPlans(null); renderResults(null); updateRunButton(); }
 function updateRunButton() {
   const busy = state.loading || Boolean(state.activeJobId); const hasPlan = Boolean(state.planReport?.plans?.length);
-  $("run-btn").disabled = busy || !hasPlan; $("plan-btn").disabled = busy; $("choose-dir-btn").disabled = busy;
+  const hasUnappliedEdits = Array.from(state.planEdits.values()).some((edit) => !edit.pristine);
+  $("run-btn").disabled = busy || !hasPlan || hasUnappliedEdits; $("plan-btn").disabled = busy; $("choose-dir-btn").disabled = busy;
+  if ($("apply-plan-edits-btn")) $("apply-plan-edits-btn").disabled = busy || !Array.from(state.planEdits.values()).some((edit) => !edit.pristine);
   $("save-settings-btn").disabled = busy || !state.settingsDirty;
   if ($("save-environment-btn")) $("save-environment-btn").disabled = busy || !state.environmentDirty;
-  ["input-dir", "cleanup", "extra-dir", "output-dir", "output-suffix", "name-strategy", "name-template", "font-subset", "overwrite"].forEach((id) => {
+  ["input-dir", "cleanup", "extra-dir", "output-dir", "output-suffix", "name-strategy", "name-template", "font-subset", "overwrite", "audio-filter-enabled", "audio-exclude-patterns", "audio-keep-languages", "keep-default-audio", "keep-unknown-audio", "allow-no-audio"].forEach((id) => {
     const control = $(id); if (!control) return;
     control.disabled = busy;
     control.setAttribute("aria-disabled", String(busy));

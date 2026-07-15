@@ -14,7 +14,7 @@ from .models import AppConfig
 from .muxer import resolve_mkvmerge_path, windows_no_window_flag
 
 
-def export_diagnostics(config: AppConfig, output: Path) -> Path:
+def export_diagnostics(config: AppConfig, output: Path, job_context: dict | None = None) -> Path:
     output = output.expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     config_data = redact_config(config_to_dict(config))
@@ -29,6 +29,11 @@ def export_diagnostics(config: AppConfig, output: Path) -> Path:
         archive.writestr("system.json", json.dumps(payload, indent=2, ensure_ascii=False))
         archive.writestr("config.redacted.json", json.dumps(config_data, indent=2, ensure_ascii=False))
         archive.writestr("README.txt", "No media files or full home-directory paths are included.\n")
+        if job_context is not None:
+            archive.writestr(
+                "job.redacted.json",
+                json.dumps(redact_paths(job_context), indent=2, ensure_ascii=False),
+            )
         latest_log = find_latest_log()
         if latest_log is not None:
             text = latest_log.read_text(encoding="utf-8", errors="replace")[-200_000:]
@@ -45,7 +50,23 @@ def redact_config(data: dict) -> dict:
         redacted["mkvmerge"]["path"] = f"<PATH>/{Path(redacted['mkvmerge']['path']).name}"
     if redacted.get("font", {}).get("unrar_path"):
         redacted["font"]["unrar_path"] = f"<PATH>/{Path(redacted['font']['unrar_path']).name}"
+    for mapping in redacted.get("plex", {}).get("path_mappings", []):
+        if mapping.get("local_root"):
+            mapping["local_root"] = f"<PATH>/{Path(mapping['local_root']).name}"
     return redacted
+
+
+def redact_paths(value):
+    if isinstance(value, dict):
+        return {key: redact_paths(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [redact_paths(item) for item in value]
+    if isinstance(value, str) and ("/" in value or "\\" in value):
+        # URLs are public integration metadata rather than local file paths.
+        if value.startswith(("http://", "https://")):
+            return value
+        return f"<PATH>/{Path(value).name}"
+    return value
 
 
 def dependency_versions() -> dict[str, str]:

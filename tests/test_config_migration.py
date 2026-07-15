@@ -52,6 +52,23 @@ def test_migrate_config_creates_backup(tmp_path):
     assert target == path
     assert backup is not None and backup.exists()
     migrated = json.loads(path.read_text(encoding="utf-8"))
-    assert migrated["config_version"] == 3
+    assert migrated["config_version"] == 4
     assert migrated["ffmpeg"] == {"path": ""}
     assert migrated["notifications"] == {"enabled": False}
+    assert migrated["font_cache"] == {"enabled": True, "max_size_mb": 2048, "max_age_days": 90}
+    assert migrated["updates"] == {"enabled": False, "interval_hours": 24, "timeout_seconds": 3.0}
+    assert migrated["plex"] == {
+        "enabled": False,
+        "server_url": "",
+        "section_id": "",
+        "token_env": "PLEXMUXY_PLEX_TOKEN",
+        "path_mappings": [],
+    }
+    assert migrated["tracks"] == {
+        "audio_filter_enabled": False,
+        "exclude_audio_title_patterns": [],
+        "keep_audio_languages": [],
+        "keep_default_audio": True,
+        "keep_all_when_unknown": True,
+        "allow_no_audio": False,
+    }
