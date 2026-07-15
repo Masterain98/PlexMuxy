@@ -24,15 +24,17 @@
       let localeMode = "system";
       try {
         const savedLocale = localStorage.getItem("plexmuxy-locale");
-        if (["system", "en", "zh-CN"].includes(savedLocale)) localeMode = savedLocale;
+        if (["system", "en", "zh-CN", "zh-TW", "ru"].includes(savedLocale)) localeMode = savedLocale;
       } catch (_) {
         // System language remains the safe fallback when storage is unavailable.
       }
       const browserLocale = navigator.languages?.[0] || navigator.language || "en";
       const resolvedLocale = localeMode === "system" ? browserLocale : localeMode;
       const isSimplifiedChinese = /^(zh$|zh-(CN|Hans|SG)(-|$))/i.test(resolvedLocale);
+      const isTraditionalChinese = /^(zh-(TW|Hant|HK|MO)(-|$))/i.test(resolvedLocale);
+      const isRussian = /^ru(-|$)/i.test(resolvedLocale);
       document.documentElement.dataset.localeMode = localeMode;
-      document.documentElement.dataset.locale = isSimplifiedChinese ? "zh-CN" : "en";
+      document.documentElement.dataset.locale = isSimplifiedChinese ? "zh-CN" : (isTraditionalChinese ? "zh-TW" : (isRussian ? "ru" : "en"));
       document.documentElement.lang = document.documentElement.dataset.locale;
     })();
   </script>
@@ -201,12 +203,22 @@
                 </button>
                 <button class="theme-option language-option" type="button" data-locale-mode="en" aria-pressed="false">
                   <svg class="icon" aria-hidden="true"><use href="#icon-language"></use></svg>
-                  <span><strong data-i18n="language.english">English</strong><small data-i18n="language.englishDescription">English interface</small></span>
+                  <span><strong>English</strong><small data-i18n="language.englishDescription">English interface</small></span>
                   <svg class="icon option-check" aria-hidden="true"><use href="#icon-check"></use></svg>
                 </button>
                 <button class="theme-option language-option" type="button" data-locale-mode="zh-CN" aria-pressed="false">
                   <svg class="icon" aria-hidden="true"><use href="#icon-language"></use></svg>
-                  <span><strong data-i18n="language.chinese">简体中文</strong><small data-i18n="language.chineseDescription">Simplified Chinese interface</small></span>
+                  <span><strong>简体中文</strong><small data-i18n="language.chineseDescription">Simplified Chinese interface</small></span>
+                  <svg class="icon option-check" aria-hidden="true"><use href="#icon-check"></use></svg>
+                </button>
+                <button class="theme-option language-option" type="button" data-locale-mode="zh-TW" aria-pressed="false">
+                  <svg class="icon" aria-hidden="true"><use href="#icon-language"></use></svg>
+                  <span><strong>繁體中文</strong><small data-i18n="language.traditionalChineseDescription">Traditional Chinese interface</small></span>
+                  <svg class="icon option-check" aria-hidden="true"><use href="#icon-check"></use></svg>
+                </button>
+                <button class="theme-option language-option" type="button" data-locale-mode="ru" aria-pressed="false">
+                  <svg class="icon" aria-hidden="true"><use href="#icon-language"></use></svg>
+                  <span><strong>Русский</strong><small data-i18n="language.russianDescription">Russian interface</small></span>
                   <svg class="icon option-check" aria-hidden="true"><use href="#icon-check"></use></svg>
                 </button>
               </div>

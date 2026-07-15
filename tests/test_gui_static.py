@@ -164,6 +164,8 @@ def test_gui_provides_extensible_i18n_with_simplified_chinese():
     assert 'const STORAGE_KEY = "plexmuxy-locale"' in i18n_javascript
     assert 'file: "./locales/en.json"' in i18n_javascript
     assert 'file: "./locales/zh-CN.json"' in i18n_javascript
+    assert 'file: "./locales/zh-TW.json"' in i18n_javascript
+    assert 'file: "./locales/ru.json"' in i18n_javascript
     assert "await fetch(" in i18n_javascript
     assert "async function loadCatalog" in i18n_javascript
     assert 'window.PlexMuxyI18n' in i18n_javascript
@@ -176,16 +178,19 @@ def test_gui_provides_extensible_i18n_with_simplified_chinese():
 def test_gui_locale_catalogs_have_matching_keys_and_placeholders():
     locale_dir = ROOT / "plexmuxy_gui" / "static" / "locales"
     english = json.loads((locale_dir / "en.json").read_text(encoding="utf-8"))
-    simplified_chinese = json.loads((locale_dir / "zh-CN.json").read_text(encoding="utf-8"))
+    placeholder_pattern = re.compile(r"\{([\w-]+)\}")
 
     assert english
-    assert english.keys() == simplified_chinese.keys()
     assert all(isinstance(value, str) for value in english.values())
-    assert all(isinstance(value, str) for value in simplified_chinese.values())
 
-    placeholder_pattern = re.compile(r"\{([\w-]+)\}")
-    for key, source_text in english.items():
-        assert set(placeholder_pattern.findall(source_text)) == set(placeholder_pattern.findall(simplified_chinese[key])), key
+    for catalog_path in sorted(locale_dir.glob("*.json")):
+        if catalog_path.name == "en.json":
+            continue
+        catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+        assert english.keys() == catalog.keys(), catalog_path.name
+        assert all(isinstance(value, str) for value in catalog.values())
+        for key, source_text in english.items():
+            assert set(placeholder_pattern.findall(source_text)) == set(placeholder_pattern.findall(catalog[key])), f"{catalog_path.name}:{key}"
 
 
 def test_gui_source_catalog_covers_static_and_dynamic_translation_keys():

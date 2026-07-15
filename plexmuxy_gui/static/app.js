@@ -134,8 +134,8 @@ function syncLocaleControls() {
   const mode = window.PlexMuxyI18n.getMode();
   const locale = window.PlexMuxyI18n.getLocale();
   state.localeMode = mode;
-  const modeLabels = { system: t("language.system"), en: t("language.english"), "zh-CN": t("language.chinese") };
-  const localeLabel = locale === "zh-CN" ? t("language.chinese") : t("language.english");
+  const modeLabels = { system: t("language.system"), en: t("language.english"), "zh-CN": t("language.chinese"), "zh-TW": t("language.traditionalChinese"), ru: t("language.russian") };
+  const localeLabel = locale === "zh-CN" ? t("language.chinese") : (locale === "zh-TW" ? t("language.traditionalChinese") : (locale === "ru" ? t("language.russian") : t("language.english")));
   setText("language-label", modeLabels[mode] || localeLabel);
   setText("language-detail", mode === "system" ? t("language.following", { language: localeLabel }) : t("language.fixed"));
   document.querySelectorAll(".language-option").forEach((button) => {

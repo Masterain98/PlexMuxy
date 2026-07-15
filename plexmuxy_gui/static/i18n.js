@@ -5,7 +5,9 @@
   const DEFAULT_LOCALE = "en";
   const LOCALES = Object.freeze({
     en: Object.freeze({ file: "./locales/en.json", labelKey: "language.english" }),
-    "zh-CN": Object.freeze({ file: "./locales/zh-CN.json", labelKey: "language.chinese" })
+    "zh-CN": Object.freeze({ file: "./locales/zh-CN.json", labelKey: "language.chinese" }),
+    "zh-TW": Object.freeze({ file: "./locales/zh-TW.json", labelKey: "language.traditionalChinese" }),
+    ru: Object.freeze({ file: "./locales/ru.json", labelKey: "language.russian" })
   });
   const SUPPORTED_LOCALES = Object.freeze(Object.keys(LOCALES));
   const SUPPORTED_MODES = Object.freeze(["system", ...SUPPORTED_LOCALES]);
@@ -19,6 +21,8 @@
   function normalizeLocale(value) {
     const normalized = String(value || "").replace("_", "-").toLowerCase();
     if (normalized === "zh" || normalized.startsWith("zh-cn") || normalized.startsWith("zh-hans") || normalized.startsWith("zh-sg")) return "zh-CN";
+    if (normalized.startsWith("zh-tw") || normalized.startsWith("zh-hant") || normalized.startsWith("zh-hk") || normalized.startsWith("zh-mo")) return "zh-TW";
+    if (normalized.startsWith("ru")) return "ru";
     return DEFAULT_LOCALE;
   }
 
