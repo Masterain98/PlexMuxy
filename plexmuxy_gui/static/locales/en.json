@@ -457,6 +457,16 @@
   "about.repository": "View source code",
   "about.license": "Read license",
   "about.footer": "Thanks to the open-source projects that make PlexMuxy possible.",
+  "about.formats.eyebrow": "Supported file types",
+  "about.formats.title": "What PlexMuxy can mux",
+  "about.formats.description": "PlexMuxy reads the following source formats and always writes a single Matroska (.mkv) file:",
+  "about.formats.video": "Video containers",
+  "about.formats.subtitles": "External subtitles",
+  "about.formats.audio": "External audio",
+  "about.formats.fonts": "Font attachments",
+  "about.formats.archives": "Font archives",
+  "about.formats.output": "Output",
+  "about.formats.note": "The video-container list is configurable in config.json under media.video_extensions (and the other media.*_extensions lists), so additional containers that mkvmerge can demux can be enabled.",
   "toast.linkError.title": "Could not open link",
   "version": "Version {version}"
 }

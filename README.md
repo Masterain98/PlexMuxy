@@ -117,6 +117,22 @@ Each subtitle or external audio file is assigned once using this priority: exact
 
 Equal best candidates become `ambiguous_match` and are skipped. Low-confidence candidates become `unmatched`. The GUI and CLI display these reasons; PlexMuxy never chooses by filename ordering.
 
+## Supported file types
+
+PlexMuxy reads the following source formats and always writes a Matroska (`.mkv`) output:
+
+| Role | Extensions (default) |
+| --- | --- |
+| Video containers | `.mkv`, `.mp4`, `.avi`, `.flv` |
+| External subtitles | `.ass`, `.ssa` |
+| External audio | `.mka` |
+| Font attachments | `.ttf`, `.otf`, `.ttc`, `.otc` |
+| Font archives | `.zip`, `.7z`, `.rar` |
+
+The video-container list is configurable in `config.json` under `media.video_extensions` (and the other `media.*_extensions` lists), so additional containers that `mkvmerge` can demux can be enabled. Output is always Matroska, which is what Plex expects.
+
+For the scenario from issue #14: PlexMuxy already muxes an `.avi` video with an `.ssa` subtitle into a single `.mkv`. See [Commands](#commands) and [Configuration](#configuration) for the `--output-dir`, `--name-strategy`, and `--cleanup` job overrides that control where the output lands and how it is named.
+
 ## Fonts and source tracks
 
 `font.mode=all` preserves the compatibility-first behavior. `referenced` uses the structural ASS/SSA parser and internal font names to select complete fonts. `subset` performs real glyph subsetting: it follows dynamic `Format` fields plus Style and override state (`\fn`, `\r`, `\b`, `\i`, `\p`, and `\t(...)`), enumerates every TTF/OTF/TTC/OTC face, and deterministically matches internal family, weight, italic, and cmap metadata. Temporary subtitles rewrite only validated families to `PMX_<hash>` aliases; source subtitles and fonts are never modified.

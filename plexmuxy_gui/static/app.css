@@ -2154,6 +2154,36 @@ progress::-moz-progress-bar {
   font-size: 13px !important;
 }
 
+.format-list {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(140px, max-content) minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 4px 0 0;
+}
+
+.format-list dt {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.format-list dd {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.format-list code {
+  display: inline-block;
+  padding: 1px 6px;
+  margin: 0 4px 4px 0;
+  border-radius: var(--radius-xs);
+  background: var(--color-control);
+  border: 1px solid var(--color-border);
+  font-family: var(--font-product-ui);
+  font-size: 0.85em;
+  color: var(--color-text-body);
+}
+
 .credit-list {
   display: grid;
   gap: 0;

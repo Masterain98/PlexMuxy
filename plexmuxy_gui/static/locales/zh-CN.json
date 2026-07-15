@@ -457,6 +457,16 @@
   "about.repository": "查看源代码",
   "about.license": "阅读许可证",
   "about.footer": "感谢为 PlexMuxy 提供基础能力的开源项目。",
+  "about.formats.eyebrow": "支持的文件类型",
+  "about.formats.title": "PlexMuxy 可以封装的格式",
+  "about.formats.description": "PlexMuxy 读取以下来源格式，并始终输出为单个 Matroska（.mkv）文件：",
+  "about.formats.video": "视频容器",
+  "about.formats.subtitles": "外挂字幕",
+  "about.formats.audio": "外挂音频",
+  "about.formats.fonts": "字体附件",
+  "about.formats.archives": "字体压缩包",
+  "about.formats.output": "输出",
+  "about.formats.note": "视频容器列表可在 config.json 的 media.video_extensions（以及其它 media.*_extensions 列表）中配置，因此也可以启用 mkvmerge 能够解封装的其它容器。",
   "toast.linkError.title": "无法打开链接",
   "version": "版本 {version}"
 }

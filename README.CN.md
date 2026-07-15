@@ -81,6 +81,22 @@ Windows 可在该页面启用任务结束通知。当前实现使用 Windows She
 
 一个资源若对多个视频具有相同最高分，会以 `ambiguous_match` 跳过；低于阈值则为 `unmatched`。程序不会按文件排序猜测归属。
 
+## 支持的文件类型
+
+PlexMuxy 读取以下来源格式，并始终输出为 Matroska（`.mkv`）容器：
+
+| 角色 | 扩展名（默认） |
+| --- | --- |
+| 视频容器 | `.mkv`、`.mp4`、`.avi`、`.flv` |
+| 外挂字幕 | `.ass`、`.ssa` |
+| 外挂音频 | `.mka` |
+| 字体附件 | `.ttf`、`.otf`、`.ttc`、`.otc` |
+| 字体压缩包 | `.zip`、`.7z`、`.rar` |
+
+视频容器列表可在 `config.json` 的 `media.video_extensions`（以及其它 `media.*_extensions` 列表）中配置，因此也可以启用 `mkvmerge` 能够解封装的其它容器。输出始终为 Matroska，这正是 Plex 期望的格式。
+
+针对 issue #14 中的场景：PlexMuxy 已经可以把 `.avi` 视频与 `.ssa` 字幕封装为单个 `.mkv`。可参考[命令示例](#命令示例)与[配置与兼容性](#配置与兼容性)中的 `--output-dir`、`--name-strategy`、`--cleanup` 等任务参数，控制输出位置和文件命名方式。
+
 ## 字体、压缩包和源轨道
 
 `font.mode=all` 默认附加全部字体；`referenced` 使用 ASS/SSA 结构解析与字体内部名称选择完整字体；`subset` 会真正生成只含所需字符的字体附件。子集模式按动态 `Format`、Style 和 override 状态解析 `\fn`、`\r`、`\b`、`\i`、`\p` 与 `\t(...)`，枚举 TTF/OTF/TTC/OTC 的全部 face，并按内部 family、weight、italic 和 cmap 做确定性匹配。临时字幕只把已验证 family 改为 `PMX_<hash>` alias，源字幕和源字体不会被修改。

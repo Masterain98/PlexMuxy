@@ -608,6 +608,29 @@
                 <p class="about-note" data-i18n="about.disclaimer">PlexMuxy is an independent open-source project and is not affiliated with, endorsed by, or sponsored by Plex.</p>
               </section>
 
+              <section class="panel about-section" aria-labelledby="about-formats-title">
+                <div class="about-section-heading">
+                  <p class="eyebrow" data-i18n="about.formats.eyebrow">Supported file types</p>
+                  <h3 id="about-formats-title" data-i18n="about.formats.title">What PlexMuxy can mux</h3>
+                </div>
+                <p data-i18n="about.formats.description">PlexMuxy reads the following source formats and always writes a single Matroska (.mkv) file:</p>
+                <dl class="format-list">
+                  <dt data-i18n="about.formats.video">Video containers</dt>
+                  <dd><code>.mkv</code> <code>.mp4</code> <code>.avi</code> <code>.flv</code></dd>
+                  <dt data-i18n="about.formats.subtitles">External subtitles</dt>
+                  <dd><code>.ass</code> <code>.ssa</code></dd>
+                  <dt data-i18n="about.formats.audio">External audio</dt>
+                  <dd><code>.mka</code></dd>
+                  <dt data-i18n="about.formats.fonts">Font attachments</dt>
+                  <dd><code>.ttf</code> <code>.otf</code> <code>.ttc</code> <code>.otc</code></dd>
+                  <dt data-i18n="about.formats.archives">Font archives</dt>
+                  <dd><code>.zip</code> <code>.7z</code> <code>.rar</code></dd>
+                  <dt data-i18n="about.formats.output">Output</dt>
+                  <dd><code>.mkv</code> (Matroska)</dd>
+                </dl>
+                <p class="about-note" data-i18n="about.formats.note">The video-container list is configurable in config.json under media.video_extensions (and the other media.*_extensions lists), so additional containers that mkvmerge can demux can be enabled.</p>
+              </section>
+
               <section class="panel about-section" aria-labelledby="about-credits-title">
                 <div class="about-section-heading">
                   <p class="eyebrow" data-i18n="about.credits.eyebrow">Credits</p>
