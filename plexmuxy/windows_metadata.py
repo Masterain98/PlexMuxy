@@ -4,8 +4,17 @@ import ctypes
 import json
 import os
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+
+if sys.platform == "win32":
+    # ``ctypes.windll`` only exists on Windows; alias it so this module
+    # type-checks on other platforms (the path is short-circuited there).
+    _windll = ctypes.windll
+else:
+    _windll: Any = None
 
 
 @dataclass(frozen=True)
@@ -29,7 +38,7 @@ def read_windows_file_metadata(path: Path) -> WindowsFileMetadata:
     if os.name != "nt":
         return WindowsFileMetadata()
     try:
-        version = ctypes.windll.version
+        version = _windll.version
         size = version.GetFileVersionInfoSizeW(str(path), None)
         if not size:
             return WindowsFileMetadata()

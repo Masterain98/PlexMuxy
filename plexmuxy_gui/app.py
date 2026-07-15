@@ -7,11 +7,25 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 if sys.platform == "win32":
     # Python 3.13 no longer lazily imports ctypes submodules; this makes
     # ``ctypes.wintypes`` available for the icon/app-id helpers below.
     import ctypes.wintypes  # noqa: F401
+
+    # Windows-only ctypes attributes are absent from the type stubs on other
+    # platforms. Expose them as module globals so the helpers below type-check
+    # cross-platform while keeping their runtime no-op behaviour on non-Windows.
+    _windll = ctypes.windll
+    _wintypes = ctypes.wintypes
+    _HRESULT = ctypes.HRESULT
+    _WINFUNCTYPE = ctypes.WINFUNCTYPE
+else:
+    _windll: Any = None
+    _wintypes: Any = None
+    _HRESULT: Any = None
+    _WINFUNCTYPE: Any = None
 
 from plexmuxy.logging_utils import configure_logging
 
@@ -82,13 +96,13 @@ _APP_USER_MODEL_ID = "com.plexmuxy.gui"
 def _set_windows_app_id(app_id: str) -> None:
     """Group the taskbar button under a stable identity instead of python.exe."""
     try:
-        shell32 = ctypes.windll.shell32
+        shell32 = _windll.shell32
     except AttributeError:
         return
     try:
         set_app_id = shell32.SetCurrentProcessExplicitAppUserModelID
-        set_app_id.argtypes = [ctypes.wintypes.LPCWSTR]
-        set_app_id.restype = ctypes.HRESULT
+        set_app_id.argtypes = [_wintypes.LPCWSTR]
+        set_app_id.restype = _HRESULT
         set_app_id(app_id)
     except Exception:  # noqa: BLE001 - cosmetic; never block startup.
         pass
@@ -111,7 +125,7 @@ def _apply_window_icon_when_ready(icon_path: str) -> None:
 def _set_native_window_icon(icon_path: str) -> bool:
     """Set the big/small icons on the PlexMuxy top-level window. Returns True if applied."""
     try:
-        user32 = ctypes.windll.user32
+        user32 = _windll.user32
     except AttributeError:
         return False
 
@@ -122,14 +136,14 @@ def _set_native_window_icon(icon_path: str) -> bool:
 
     load_image = user32.LoadImageW
     load_image.argtypes = [
-        ctypes.wintypes.HANDLE,
-        ctypes.wintypes.LPCWSTR,
-        ctypes.wintypes.UINT,
+        _wintypes.HANDLE,
+        _wintypes.LPCWSTR,
+        _wintypes.UINT,
         ctypes.c_int,
         ctypes.c_int,
-        ctypes.wintypes.UINT,
+        _wintypes.UINT,
     ]
-    load_image.restype = ctypes.wintypes.HANDLE
+    load_image.restype = _wintypes.HANDLE
 
     big = load_image(0, icon_path, IMAGE_ICON, 256, 256, LR_LOADFROMFILE)
     if not big:
@@ -142,33 +156,33 @@ def _set_native_window_icon(icon_path: str) -> bool:
 
     send_message = user32.SendMessageW
     send_message.argtypes = [
-        ctypes.wintypes.HWND,
-        ctypes.wintypes.UINT,
-        ctypes.wintypes.WPARAM,
-        ctypes.wintypes.LPARAM,
+        _wintypes.HWND,
+        _wintypes.UINT,
+        _wintypes.WPARAM,
+        _wintypes.LPARAM,
     ]
-    send_message.restype = ctypes.wintypes.LPARAM
+    send_message.restype = _wintypes.LPARAM
 
     get_window_thread_process_id = user32.GetWindowThreadProcessId
-    get_window_thread_process_id.argtypes = [ctypes.wintypes.HWND, ctypes.POINTER(ctypes.wintypes.DWORD)]
-    get_window_thread_process_id.restype = ctypes.wintypes.DWORD
+    get_window_thread_process_id.argtypes = [_wintypes.HWND, ctypes.POINTER(_wintypes.DWORD)]
+    get_window_thread_process_id.restype = _wintypes.DWORD
 
     get_window_text_length = user32.GetWindowTextLengthW
-    get_window_text_length.argtypes = [ctypes.wintypes.HWND]
+    get_window_text_length.argtypes = [_wintypes.HWND]
     get_window_text_length.restype = ctypes.c_int
 
     get_window_text = user32.GetWindowTextW
-    get_window_text.argtypes = [ctypes.wintypes.HWND, ctypes.wintypes.LPWSTR, ctypes.c_int]
+    get_window_text.argtypes = [_wintypes.HWND, _wintypes.LPWSTR, ctypes.c_int]
     get_window_text.restype = ctypes.c_int
 
     enum_windows = user32.EnumWindows
-    enum_proc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+    enum_proc = _WINFUNCTYPE(ctypes.c_bool, _wintypes.HWND, _wintypes.LPARAM)
     pid = os.getpid()
     applied = False
 
     def _match(hwnd, _lparam):
         nonlocal applied
-        owner = ctypes.wintypes.DWORD()
+        owner = _wintypes.DWORD()
         get_window_thread_process_id(hwnd, ctypes.byref(owner))
         if owner.value != pid:
             return True

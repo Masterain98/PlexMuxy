@@ -124,7 +124,7 @@ def test_update_and_plex_config_are_strict_and_safe_by_default():
             "server_url": "https://plex.example.test",
             "section_id": "2",
             "token_env": "MY_PLEX_TOKEN",
-            "path_mappings": [{"local_root": "C:/media", "server_root": "/media"}],
+            "path_mappings": [{"local_root": str(Path.cwd() / "media"), "server_root": "/media"}],
         },
     })
     assert config.updates.interval_hours == 12

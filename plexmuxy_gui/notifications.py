@@ -14,6 +14,13 @@ from typing import Any
 
 APP_USER_MODEL_ID = "com.plexmuxy.gui"
 
+if sys.platform == "win32":
+    import winreg  # noqa: F401
+else:
+    # ``winreg`` only exists on Windows; alias it as Any so the toast-capability
+    # helper type-checks on other platforms (it short-circuits before use there).
+    winreg: Any = None
+
 
 @dataclass(frozen=True)
 class NotificationCapability:
@@ -154,8 +161,6 @@ def _toast_capability() -> NotificationCapability:
     if not powershell:
         return NotificationCapability(False, "windows-toast", "Windows PowerShell is unavailable")
     try:
-        import winreg
-
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\plexmuxy"):
             pass
     except OSError:
