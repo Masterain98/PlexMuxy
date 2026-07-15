@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
+import sys
 
 import pytest
 
@@ -64,6 +65,7 @@ def test_enforces_download_size_limit_and_removes_partial_file(tmp_path: Path):
     assert not destination.exists()
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only: RARLAB UnRAR acquisition requires Windows")
 def test_verified_installer_is_atomically_published_and_returns_candidate(tmp_path: Path, monkeypatch):
     tools = tmp_path / "tools"
     monkeypatch.setattr("plexmuxy.tool_downloads.platform_tools_path", lambda: tools)
@@ -95,6 +97,7 @@ def test_signature_failure_does_not_publish_installer(tmp_path: Path, monkeypatc
     assert not (tools / "downloads" / "unrarw64.exe").exists()
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only: RARLAB UnRAR acquisition requires Windows")
 def test_concurrent_install_request_is_rejected():
     assert _install_lock.acquire(blocking=False)
     try:
@@ -104,6 +107,7 @@ def test_concurrent_install_request_is_rejected():
         _install_lock.release()
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only: RARLAB UnRAR acquisition requires Windows")
 def test_windows_x64_is_required(monkeypatch):
     monkeypatch.setattr("plexmuxy.tool_downloads.platform.machine", lambda: "ARM64")
     with pytest.raises(RuntimeError, match="Windows x64"):

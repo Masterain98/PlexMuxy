@@ -1,5 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
+import sys
 
 import pytest
 
@@ -53,6 +54,7 @@ def test_dependency_falls_back_to_application_directory(tmp_path: Path, monkeypa
     assert result.source == "application-directory"
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only: reads the registry")
 def test_auto_detect_ignores_persisted_override(tmp_path: Path, monkeypatch) -> None:
     detected = tmp_path / "mkvmerge.exe"
     detected.write_bytes(b"candidate")
@@ -211,6 +213,7 @@ def test_registry_discovery_scans_hives_and_bitness(tmp_path: Path) -> None:
     assert {access for _root, access in fake.accesses} == {fake.KEY_READ | fake.KEY_WOW64_64KEY, fake.KEY_READ | fake.KEY_WOW64_32KEY}
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only: parses Windows registry paths")
 def test_registry_display_icon_and_uninstall_paths_allow_unquoted_spaces() -> None:
     directories = list(_registry_install_directories({
         "InstallLocation": "",

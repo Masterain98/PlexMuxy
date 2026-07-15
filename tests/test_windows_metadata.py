@@ -1,5 +1,8 @@
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 from plexmuxy.windows_metadata import read_windows_file_metadata, verify_authenticode
 
@@ -14,6 +17,7 @@ def test_missing_version_resource_returns_none(tmp_path: Path):
     assert metadata.product_name is None
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only: calls the inbox PowerShell security module")
 def test_authenticode_uses_inbox_security_module_and_parses_json(monkeypatch, tmp_path: Path):
     executable = tmp_path / "installer.exe"
     captured = {}
@@ -39,6 +43,7 @@ def test_authenticode_uses_inbox_security_module_and_parses_json(monkeypatch, tm
     assert captured["kwargs"]["encoding"] == "utf-8"
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only: calls the inbox PowerShell security module")
 def test_authenticode_reports_powershell_module_failure(monkeypatch, tmp_path: Path):
     executable = tmp_path / "installer.exe"
 
