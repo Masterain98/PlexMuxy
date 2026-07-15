@@ -1,3 +1,5 @@
+import os
+
 from plexmuxy.config import default_config
 from plexmuxy.dependencies import DependencyInspection
 from plexmuxy.models import JobReport, MuxPlan, MuxResult
@@ -254,7 +256,8 @@ def test_choose_dependency_uses_open_picker_and_validates_allowlist(tmp_path, mo
     assert response["ok"] is True
     assert response["data"]["path"] == str(executable.resolve())
     assert window.dialog_call[1]["allow_multiple"] is False
-    assert window.dialog_call[1]["file_types"] == ("Executable files (*.exe)",)
+    expected_file_types = ("Executable files (*.exe)",) if os.name == "nt" else ("All files (*.*)",)
+    assert window.dialog_call[1]["file_types"] == expected_file_types
 
 
 def test_choose_dependency_rejects_wrong_executable_name(tmp_path):
