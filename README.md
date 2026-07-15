@@ -20,7 +20,7 @@ PlexMuxy safely batches video, external audio, ASS/SSA subtitles, and font attac
 
 ## Install
 
-PlexMuxy requires Python 3.10–3.13 and [MKVToolNix](https://mkvtoolnix.download/). Ensure `mkvmerge` is on `PATH`, or set `mkvmerge.path` in the config.
+PlexMuxy requires Python 3.10–3.14 and [MKVToolNix](https://mkvtoolnix.download/). Ensure `mkvmerge` is on `PATH`, or set `mkvmerge.path` in the config.
 
 ```bash
 pip install plexmuxy

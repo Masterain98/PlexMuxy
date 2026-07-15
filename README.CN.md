@@ -20,7 +20,7 @@ PlexMuxy 用于将视频、外挂音频、ASS/SSA 字幕和字体安全地批量
 
 ## 安装
 
-需要 Python 3.10–3.13 和 [MKVToolNix](https://mkvtoolnix.download/)。请把 `mkvmerge` 加入 `PATH`，或配置 `mkvmerge.path`。
+需要 Python 3.10–3.14 和 [MKVToolNix](https://mkvtoolnix.download/)。请把 `mkvmerge` 加入 `PATH`，或配置 `mkvmerge.path`。
 
 ```bash
 pip install plexmuxy
