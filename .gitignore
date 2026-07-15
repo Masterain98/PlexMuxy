@@ -14,3 +14,4 @@ dist/
 build/
 main.spec
 *.mo
+packaging/version_info.txt

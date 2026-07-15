@@ -195,6 +195,15 @@ uv run --extra build python -m PyInstaller --clean --noconfirm plexmuxy-cli.spec
 uv run --extra build python -m PyInstaller --clean --noconfirm plexmuxy-gui.spec
 ```
 
+The Windows installer is produced from the same single version source. After the
+PyInstaller step above, run the local build helper — it requires
+[Inno Setup](https://jrsoftware.org/isinfo.php) (`iscc` on `PATH`) and forwards the
+version read from `plexmuxy/VERSION` to the Inno Setup script:
+
+```bash
+pwsh scripts/build_installer.ps1
+```
+
 See [architecture](docs/architecture.md), [troubleshooting](docs/troubleshooting.md), [security](docs/security.md), and [release process](docs/release-process.md).
 
 ## License

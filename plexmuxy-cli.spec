@@ -8,7 +8,7 @@ a = Analysis(
     ["packaging/cli_entry.py"],
     pathex=["."],
     binaries=[],
-    datas=[("plexmuxy/locales", "plexmuxy/locales")],
+    datas=[("plexmuxy/locales", "plexmuxy/locales"), ("plexmuxy/VERSION", "plexmuxy")],
     hiddenimports=(
         collect_submodules("fontTools")
         + collect_submodules("patoolib")
@@ -37,6 +37,7 @@ exe = EXE(
     upx=True,
     console=True,
     icon="logo/plexmuxy-app.ico",
+    version="packaging/version_info.txt",
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

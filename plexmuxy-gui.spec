@@ -9,7 +9,7 @@ a = Analysis(
     ["packaging/gui_entry.py"],
     pathex=["."],
     binaries=[],
-    datas=[("plexmuxy_gui/static", "plexmuxy_gui/static"), ("plexmuxy/locales", "plexmuxy/locales")],
+    datas=[("plexmuxy_gui/static", "plexmuxy_gui/static"), ("plexmuxy/locales", "plexmuxy/locales"), ("plexmuxy/VERSION", "plexmuxy")],
     hiddenimports=(
         collect_submodules("fontTools")
         + collect_submodules("patoolib")
@@ -40,6 +40,7 @@ exe = EXE(
     console=False,
     icon="logo/plexmuxy-app.ico",
     manifest="packaging/plexmuxy-gui.manifest",
+    version="packaging/version_info.txt",
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
