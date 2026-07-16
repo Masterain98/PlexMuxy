@@ -7,6 +7,7 @@ const state = {
   lastNonSubsetFontMode: "all",
   planEdits: new Map(), jobs: [], queuePaused: false, activePreviewId: null,
   dependencyDrafts: { mkvmerge: null, ffmpeg: null, unrar: null }, dependencyBusy: {},
+  currentDiagnosticsJobId: null,
 };
 
 const THEME_STORAGE_KEY = "plexmuxy-theme";
@@ -47,6 +48,9 @@ function bindEvents() {
     ["plan-btn", "click", generatePlan], ["run-btn", "click", runMux], ["cancel-btn", "click", cancelJob],
     ["apply-plan-edits-btn", "click", applyPlanEdits], ["refresh-jobs-btn", "click", loadJobs],
     ["queue-toggle-btn", "click", toggleQueue], ["clear-font-cache-btn", "click", clearFontCache],
+    ["delete-all-jobs-btn", "click", deleteAllJobs],
+    ["diagnostics-export-btn", "click", exportDiagnosticsFromDialog],
+    ["diagnostics-copy-btn", "click", copyDiagnosticsFromDialog],
     ["open-font-cache-btn", "click", () => callApi("open_font_cache_location")],
     ["check-updates-btn", "click", checkUpdates],
     ["input-dir", "input", (event) => { state.inputDir = event.target.value; clearReports(); }],
@@ -789,14 +793,65 @@ function requiresDeleteConfirmation(payload) {
   return Boolean(payload.overrides.cleanup === "delete" || task.delete_original_video || task.delete_original_audio || task.delete_subtitle || font.delete_fonts_after_mux);
 }
 
-function confirmAction(message) {
+function confirmAction(message, options = {}) {
   const dialog = $("confirm-dialog");
-  setText("confirm-dialog-body", message + " " + t("confirm.review"));
+  setText("confirm-dialog-title", options.title || t("confirm.title"));
+  setText("confirm-dialog-body", options.review === false ? message : `${message} ${t("confirm.review")}`);
+  setText("confirm-confirm-btn", options.confirmLabel || t("confirm.run"));
+  dialog.classList.toggle("danger", Boolean(options.danger));
   dialog.returnValue = "";
   dialog.showModal();
   return new Promise((resolve) => {
     dialog.addEventListener("close", () => resolve(dialog.returnValue === "confirm"), { once: true });
   });
+}
+
+async function deleteAllJobs() {
+  if (!state.jobs.length) return;
+  if (await confirmAction(t("jobs.deleteAllConfirm"), { title: t("jobs.deleteAllTitle"), confirmLabel: t("jobs.deleteAll"), danger: true, review: false })) {
+    try { await callApi("clear_jobs"); await loadJobs(); showToast(t("toast.jobsCleared.body", { count: state.jobs.length }), "success", t("toast.jobsCleared.title")); }
+    catch (error) { showError(error.message); }
+  }
+}
+
+async function previewJobDiagnostics(job) {
+  state.currentDiagnosticsJobId = job.id;
+  const dialog = $("diagnostics-dialog");
+  const content = $("diagnostics-content");
+  content.textContent = t("jobs.diagnostics.loading");
+  dialog.returnValue = "";
+  dialog.showModal();
+  try {
+    const result = await callApi("get_job_diagnostics", job.id);
+    content.textContent = result.text;
+  } catch (error) {
+    content.textContent = error.message;
+  }
+}
+
+async function exportDiagnosticsFromDialog() {
+  const jobId = state.currentDiagnosticsJobId;
+  const dialog = $("diagnostics-dialog");
+  if (!jobId) return;
+  dialog.querySelector("#diagnostics-export-btn").disabled = true;
+  try {
+    const result = await callApi("export_job_diagnostics", jobId);
+    showToast(t("toast.diagnostics.body", { path: result.path }), "success", t("toast.diagnostics.title"), {
+      label: t("toast.diagnostics.open"),
+      callback: async () => { try { await callApi("open_diagnostics_location"); } catch (error) { showToast(error.message, "error", t("toast.environmentError.title")); } },
+    }, 12000);
+  } catch (error) { showError(error.message); }
+  finally { dialog.querySelector("#diagnostics-export-btn").disabled = false; }
+}
+
+async function copyDiagnosticsFromDialog() {
+  const text = $("diagnostics-content").textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(t("jobs.diagnostics.copied"), "success", t("toast.diagnostics.title"));
+  } catch (error) {
+    showToast(error.message, "error", t("toast.environmentError.title"));
+  }
 }
 
 async function callApi(method, payload) {
@@ -976,7 +1031,9 @@ async function loadJobs() {
 function renderJobs() {
   const container = $("jobs-list"); if (!container) return; clear(container);
   setText("queue-toggle-btn", state.queuePaused ? t("jobs.resume") : t("jobs.pause"));
-  if (!state.jobs.length) return empty(container, "", t("jobs.empty.title"), t("jobs.empty.detail"));
+  const deleteAllButton = $("delete-all-jobs-btn");
+  if (deleteAllButton) deleteAllButton.disabled = !state.jobs.length;
+  if (!state.jobs.length) return empty(container, "02", t("jobs.empty.title"), t("jobs.empty.detail"));
   state.jobs.forEach((job) => {
     const card = element("article", "job-history-card"); const heading = element("div", "card-title");
     const copy = element("div"); copy.append(element("h4", "", job.input_dir), element("div", "file-path", job.updated_at));
@@ -1001,8 +1058,6 @@ function renderJobs() {
       view.addEventListener("click", () => openSavedJob(job.id)); actions.append(view);
       const output = element("button", "ghost compact", t("jobs.openOutput")); output.type = "button";
       output.addEventListener("click", async () => { try { await callApi("open_job_output", job.id); } catch (error) { showError(error.message); } }); actions.append(output);
-      const diagnostics = element("button", "ghost compact", t("jobs.diagnostics")); diagnostics.type = "button";
-      diagnostics.addEventListener("click", async () => { try { const result = await callApi("export_job_diagnostics", job.id); showToast(t("toast.diagnostics.body", { path: result.path }), "success", t("toast.diagnostics.title")); } catch (error) { showError(error.message); } }); actions.append(diagnostics);
       if (job.state === "completed" && state.config?.plex?.enabled) {
         const plex = element("button", "ghost compact", t("jobs.retryPlex")); plex.type = "button";
         plex.addEventListener("click", async () => {
@@ -1017,6 +1072,15 @@ function renderJobs() {
       const replan = element("button", "ghost compact", t("jobs.replan")); replan.type = "button";
       replan.addEventListener("click", async () => { await callApi("replan_job", job.id); await loadJobs(); }); actions.append(replan);
     }
+    const diagnostics = element("button", "ghost compact", t("jobs.diagnostics")); diagnostics.type = "button";
+    diagnostics.addEventListener("click", () => previewJobDiagnostics(job)); actions.append(diagnostics);
+    const remove = element("button", "destructive compact", t("jobs.delete")); remove.type = "button";
+    remove.addEventListener("click", async () => {
+      if (await confirmAction(t("jobs.deleteConfirm"), { title: t("jobs.deleteTitle"), confirmLabel: t("jobs.delete"), danger: true, review: false })) {
+        try { await callApi("delete_job", job.id); await loadJobs(); showToast(t("toast.jobDeleted.body"), "success", t("toast.jobDeleted.title")); }
+        catch (error) { showError(error.message); }
+      }
+    }); actions.append(remove);
     card.append(actions); container.append(card);
   });
   container.className = "stack";

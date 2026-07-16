@@ -448,11 +448,11 @@
             <div id="jobs-view" class="view hidden" data-view="jobs">
               <div class="page-heading">
                 <div><p class="breadcrumb" data-i18n="jobs.breadcrumb">Task history</p><h2 data-i18n="jobs.title">Queue and history</h2><p data-i18n="jobs.description">Directory tasks run one at a time and remain visible after restart.</p></div>
-                <div class="button-row"><button id="queue-toggle-btn" class="secondary" type="button" data-i18n="jobs.pause">Pause queue</button><button id="refresh-jobs-btn" class="ghost" type="button" data-i18n="jobs.refresh">Refresh</button></div>
+                <div class="button-row"><button id="queue-toggle-btn" class="secondary" type="button" data-i18n="jobs.pause">Pause queue</button><button id="delete-all-jobs-btn" class="ghost" type="button" data-i18n="jobs.deleteAll">Clear history</button><button id="refresh-jobs-btn" class="ghost" type="button" data-i18n="jobs.refresh">Refresh</button></div>
               </div>
               <section class="panel" aria-labelledby="jobs-list-title">
                 <div class="panel-header"><div><h3 id="jobs-list-title" data-i18n="jobs.listTitle">Tasks</h3><p class="section-description" data-i18n="jobs.listDescription">Review status, retry interrupted work, or reopen the output location.</p></div></div>
-                <div id="jobs-list" class="stack empty-state"><h4 data-i18n="jobs.empty.title">No task history</h4><p data-i18n="jobs.empty.detail">Generate a plan to create the first persistent task.</p></div>
+                <div id="jobs-list" class="stack empty-state"><span class="empty-icon" aria-hidden="true">02</span><h4 data-i18n="jobs.empty.title">No task history</h4><p data-i18n="jobs.empty.detail">Generate a plan to create the first persistent task.</p></div>
               </section>
             </div>
 
@@ -690,8 +690,8 @@
         <p id="confirm-dialog-body"></p>
       </div>
       <div class="dialog-actions">
-        <button class="secondary" type="submit" value="cancel" data-i18n="confirm.back">Go back</button>
-        <button class="primary" type="submit" value="confirm" data-i18n="confirm.run">Run mux</button>
+        <button id="confirm-cancel-btn" class="secondary" type="submit" value="cancel" data-i18n="confirm.back">Go back</button>
+        <button id="confirm-confirm-btn" class="primary" type="submit" value="confirm" data-i18n="confirm.run">Run mux</button>
       </div>
     </form>
   </dialog>
@@ -707,6 +707,22 @@
       <div class="dialog-actions">
         <button class="secondary" type="submit" value="cancel" data-i18n="close.stay">Keep open</button>
         <button class="destructive" type="submit" value="confirm" data-i18n="close.confirm">Close PlexMuxy</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="diagnostics-dialog" class="diagnostics-dialog" aria-labelledby="diagnostics-dialog-title" aria-describedby="diagnostics-dialog-body">
+    <form method="dialog">
+      <div class="dialog-copy">
+        <p class="eyebrow" data-i18n="jobs.diagnostics.eyebrow">Diagnostics</p>
+        <h2 id="diagnostics-dialog-title" data-i18n="jobs.diagnostics.title">Job diagnostics</h2>
+        <p id="diagnostics-dialog-body" data-i18n="jobs.diagnostics.description">Preview the information included in the exported archive, then export it if needed.</p>
+      </div>
+      <pre id="diagnostics-content" class="diagnostics-content" tabindex="0"></pre>
+      <div class="dialog-actions">
+        <button id="diagnostics-copy-btn" class="ghost" type="button" data-i18n="jobs.diagnostics.copy">Copy</button>
+        <button class="secondary" type="submit" value="close" data-i18n="jobs.diagnostics.close">Close</button>
+        <button id="diagnostics-export-btn" class="primary" type="button" data-i18n="jobs.diagnostics.export">Export archive</button>
       </div>
     </form>
   </dialog>

@@ -17,14 +17,8 @@ from .muxer import resolve_mkvmerge_path, windows_no_window_flag
 def export_diagnostics(config: AppConfig, output: Path, job_context: dict | None = None) -> Path:
     output = output.expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
-    config_data = redact_config(config_to_dict(config))
-    payload = {
-        "plexmuxy_version": __version__,
-        "python_version": sys.version,
-        "platform": platform.platform(),
-        "dependencies": dependency_versions(),
-        "mkvmerge": mkvmerge_info(config),
-    }
+    payload = collect_diagnostic_payload(config, job_context)
+    config_data = payload["config"]
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("system.json", json.dumps(payload, indent=2, ensure_ascii=False))
         archive.writestr("config.redacted.json", json.dumps(config_data, indent=2, ensure_ascii=False))
@@ -40,6 +34,47 @@ def export_diagnostics(config: AppConfig, output: Path, job_context: dict | None
             text = text.replace(str(Path.home()), "<HOME>")
             archive.writestr("latest.log", text)
     return output
+
+
+def collect_diagnostic_payload(config: AppConfig, job_context: dict | None = None) -> dict:
+    config_data = redact_config(config_to_dict(config))
+    payload: dict = {
+        "plexmuxy_version": __version__,
+        "python_version": sys.version,
+        "platform": platform.platform(),
+        "dependencies": dependency_versions(),
+        "mkvmerge": mkvmerge_info(config),
+        "config": config_data,
+    }
+    if job_context is not None:
+        payload["job"] = redact_paths(job_context)
+    return payload
+
+
+def format_diagnostic_payload(payload: dict) -> str:
+    lines = []
+    lines.append("PlexMuxy Diagnostics")
+    lines.append("=" * 32)
+    lines.append(f"PlexMuxy version: {payload.get('plexmuxy_version', 'unknown')}")
+    lines.append(f"Python version: {payload.get('python_version', 'unknown')}")
+    lines.append(f"Platform: {payload.get('platform', 'unknown')}")
+    dependencies = payload.get("dependencies") or {}
+    if dependencies:
+        lines.append("Dependencies: " + ", ".join(f"{name}={version}" for name, version in dependencies.items()))
+    mkvmerge = payload.get("mkvmerge") or {}
+    if mkvmerge.get("version"):
+        lines.append(f"mkvmerge: {mkvmerge.get('version')}")
+    lines.append("")
+    config = payload.get("config")
+    if config is not None:
+        lines.append("Configuration:")
+        lines.append(json.dumps(config, indent=2, ensure_ascii=False))
+    job = payload.get("job")
+    if job is not None:
+        lines.append("")
+        lines.append("Job context:")
+        lines.append(json.dumps(job, indent=2, ensure_ascii=False))
+    return "\n".join(lines)
 
 
 def redact_config(data: dict) -> dict:

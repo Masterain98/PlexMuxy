@@ -288,6 +288,16 @@ class JobStore:
                     (position, utc_now(), job_id),
                 )
 
+    def delete_job(self, job_id: str) -> None:
+        with self._lock, self._connection:
+            self._connection.execute("DELETE FROM jobs WHERE id = ?", (str(job_id),))
+
+    def clear_jobs(self) -> int:
+        with self._lock, self._connection:
+            count = self._connection.execute("SELECT COUNT(*) AS total FROM jobs").fetchone()["total"]
+            self._connection.execute("DELETE FROM jobs")
+        return int(count)
+
 
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))

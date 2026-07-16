@@ -36,7 +36,11 @@ from plexmuxy.dependencies import (
     resolve_mkvmerge,
     resolve_unrar,
 )
-from plexmuxy.diagnostics import export_diagnostics as write_diagnostics
+from plexmuxy.diagnostics import (
+    collect_diagnostic_payload,
+    export_diagnostics as write_diagnostics,
+    format_diagnostic_payload,
+)
 from plexmuxy.font_cache import FontSubsetCache
 from plexmuxy.integrations.plex import refresh_paths
 from plexmuxy.job_store import JobStore, platform_state_path
@@ -646,6 +650,33 @@ class PlexMuxyApi:
             path = write_diagnostics(load_or_default_config(), destination, job_context=context)
             self._last_diagnostics_path = path
             return self.ok({"path": str(path), "directory": str(path.parent)})
+        return self.guarded(run)
+
+    def get_job_diagnostics(self, job_id: str) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            store, _queue = self._ensure_jobs()
+            job = store.get_job(str(job_id))
+            context = {
+                "job": asdict(job),
+                "events": [asdict(event) for event in store.list_events(job.id)],
+                "report": store.load_report(job.id),
+            }
+            payload = collect_diagnostic_payload(load_or_default_config(), context)
+            return self.ok({"text": format_diagnostic_payload(payload)})
+        return self.guarded(run)
+
+    def delete_job(self, job_id: str) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            store, _queue = self._ensure_jobs()
+            store.delete_job(str(job_id))
+            return self.ok({"job_id": str(job_id)})
+        return self.guarded(run)
+
+    def clear_jobs(self) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            store, _queue = self._ensure_jobs()
+            removed = store.clear_jobs()
+            return self.ok({"removed": removed})
         return self.guarded(run)
 
     def retry_plex_refresh(self, job_id: str) -> dict[str, Any]:

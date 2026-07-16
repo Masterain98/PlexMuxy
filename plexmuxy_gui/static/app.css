@@ -1416,6 +1416,66 @@ p {
   gap: 18px;
 }
 
+.card-title .badge {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.confirm-dialog.danger .dialog-mark {
+  background: var(--color-danger-surface);
+  color: var(--color-danger-text);
+}
+
+.confirm-dialog.danger #confirm-confirm-btn,
+.confirm-dialog.danger #confirm-confirm-btn:active:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-danger) 50%, transparent);
+  background: var(--color-danger-surface);
+  color: var(--color-danger-text);
+}
+
+.confirm-dialog.danger #confirm-confirm-btn:hover:not(:disabled) {
+  border-color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger-surface) 82%, var(--color-danger) 18%);
+  color: var(--color-danger-text);
+}
+
+.diagnostics-dialog {
+  width: min(720px, calc(100vw - 32px));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0;
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-popover);
+  color: var(--color-text-body);
+}
+
+.diagnostics-dialog::backdrop {
+  background: var(--color-scrim);
+  backdrop-filter: blur(3px);
+}
+
+.diagnostics-dialog form {
+  display: grid;
+  gap: 0;
+  padding: 22px;
+}
+
+.diagnostics-content {
+  margin: 18px 0 0;
+  max-height: min(60vh, 520px);
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  background: var(--color-canvas);
+  color: var(--color-text-body);
+  font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .card-title h4 {
   margin: 0;
   font-size: 15px;
