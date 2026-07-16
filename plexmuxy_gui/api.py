@@ -38,8 +38,10 @@ from plexmuxy.dependencies import (
 )
 from plexmuxy.diagnostics import (
     collect_diagnostic_payload,
-    export_diagnostics as write_diagnostics,
     format_diagnostic_payload,
+)
+from plexmuxy.diagnostics import (
+    export_diagnostics as write_diagnostics,
 )
 from plexmuxy.font_cache import FontSubsetCache
 from plexmuxy.integrations.plex import refresh_paths
