@@ -42,6 +42,8 @@ def plan_edits_from_payload(payload: Any) -> dict[Path, PlanEdit]:
         "source_track_overrides",
         "subtitle_metadata_overrides",
         "external_track_order",
+        "extra_subtitles",
+        "extra_audio",
     }
     for index, item in enumerate(payload):
         if not isinstance(item, dict):
@@ -69,6 +71,8 @@ def plan_edits_from_payload(payload: Any) -> dict[Path, PlanEdit]:
                 item.get("subtitle_metadata_overrides", []), index
             ),
             external_track_order=_payload_strings(item.get("external_track_order", []), index),
+            extra_subtitles=_payload_paths(item, "extra_subtitles", index),
+            extra_audio=_payload_paths(item, "extra_audio", index),
         )
     return result
 
@@ -152,6 +156,16 @@ def apply_plan_edits(
 ) -> tuple[list[MuxPlan], list[SkippedFile]]:
     if not edits:
         return plans, []
+    # Manually-added external files are not part of the scan. Register them as
+    # known inputs so the selection/validation below treats them like discovered
+    # tracks (the per-track builders already synthesize plan entries for paths
+    # that are absent from a plan's own track list).
+    extra_subtitle_paths: set[Path] = set()
+    extra_audio_paths: set[Path] = set()
+    for requested_edit in edits.values():
+        extra_subtitle_paths.update(requested_edit.extra_subtitles)
+        extra_audio_paths.update(requested_edit.extra_audio)
+    scan = _register_extra_tracks(scan, extra_subtitle_paths, extra_audio_paths)
     known_videos = _known(scan.videos)
     known_subtitles = _known(scan.subtitles)
     known_audio = _known(scan.audios)
@@ -248,6 +262,20 @@ def source_track_overrides_from_edits(edits: Mapping[Path, PlanEdit]) -> dict[Pa
 
 def _known(paths: Sequence[Path]) -> dict[Path, Path]:
     return {path.expanduser().resolve(): path for path in paths}
+
+
+def _register_extra_tracks(
+    scan: ScanResult,
+    subtitle_paths: set[Path],
+    audio_paths: set[Path],
+) -> ScanResult:
+    if not subtitle_paths and not audio_paths:
+        return scan
+    return replace(
+        scan,
+        subtitles=[*scan.subtitles, *subtitle_paths],
+        audios=[*scan.audios, *audio_paths],
+    )
 
 
 def _selected_paths(

@@ -200,7 +200,11 @@ def plan_font_subsets(
     if not intent.issues:
         return [], intent, warnings, None
     warnings.extend(f"{issue.code}:{issue.message}" for issue in intent.issues)
-    if config.font.missing_font_action == "fallback-all":
+    # Subset failures are governed by subset_failure_action (default "fallback-full"),
+    # NOT missing_font_action (which only applies to the "referenced" font mode). Using
+    # the wrong field here meant subsetting always skipped the video instead of falling
+    # back to the full fonts, even with the default fallback policy.
+    if config.font.subset_failure_action == "fallback-full":
         return fonts, intent, [*warnings, "font_subset_fallback_all"], None
     reason = "font_subset_blocked"
     return [], intent, warnings, reason

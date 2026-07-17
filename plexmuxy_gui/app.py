@@ -45,6 +45,7 @@ EXPOSED_API_METHODS = (
     "cancel_job",
     "choose_dependency",
     "choose_directory",
+    "choose_external_track",
     "clear_jobs",
     "close_window",
     "delete_job",

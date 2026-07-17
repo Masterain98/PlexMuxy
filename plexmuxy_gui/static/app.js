@@ -6,7 +6,7 @@ const state = {
   loadingMessageKey: "loading.initializing", lastJobStatus: null, currentView: "workspace",
   lastNonSubsetFontMode: "all",
   planEdits: new Map(), jobs: [], queuePaused: false, activePreviewId: null,
-  planSaving: false, planSaveError: null,
+  planSaving: false,
   planOrder: null, planData: null, collapsedCards: new Set(),
   dependencyDrafts: { mkvmerge: null, ffmpeg: null, unrar: null }, dependencyBusy: {},
   currentDiagnosticsJobId: null,
@@ -49,6 +49,7 @@ function bindEvents() {
     ["diagnostics-btn", "click", exportDiagnostics], ["save-settings-btn", "click", saveSettings],
     ["save-environment-btn", "click", saveEnvironmentSettings], ["test-notification-btn", "click", testNotification],
     ["plan-btn", "click", generatePlan], ["run-btn", "click", runMux], ["cancel-btn", "click", cancelJob],
+    ["plan-save-fab", "click", savePlanEdits],
     ["refresh-jobs-btn", "click", loadJobs],
     ["queue-toggle-btn", "click", toggleQueue], ["clear-font-cache-btn", "click", clearFontCache],
     ["delete-all-jobs-btn", "click", deleteAllJobs],
@@ -733,31 +734,102 @@ async function generatePlan() {
   } catch (error) { showError(error.message); } finally { setLoading(false); }
 }
 
-let planSaveTimer = null;
-let planSaveInFlight = false;
-let planSaveDirty = false;
+// --- Manual plan-edit saving (no auto-save) ---------------------------------
+// Edits are held in memory and only persisted when the user clicks the floating
+// "Save" button. A per-edit baseline (a snapshot of the original plan-derived
+// values) lets us count *actual* changes, so reverting a setting back to its
+// original value decrements the unsaved-change counter.
 
-function schedulePlanSave() {
-  setPlanSaveStatus("pending");
-  clearTimeout(planSaveTimer);
-  planSaveTimer = setTimeout(runPlanSave, 400);
-  updateRunButton();
+function snapshotBaseline(edit) {
+  edit.baseline = JSON.parse(JSON.stringify({
+    enabled: edit.enabled,
+    included_subtitles: edit.included_subtitles,
+    included_external_audio: edit.included_external_audio,
+    source_track_overrides: edit.source_track_overrides,
+    subtitle_metadata_overrides: edit.subtitle_metadata_overrides,
+    extra_subtitles: edit.extra_subtitles,
+    extra_audio: edit.extra_audio,
+    external_track_order: edit.external_track_order,
+  }));
 }
 
-async function runPlanSave() {
-  planSaveTimer = null;
-  // Never run two saves at once; if edits arrived while one was in flight,
-  // re-run after it finishes so the user never sees the awaiting-review race.
-  if (planSaveInFlight) { planSaveDirty = true; return; }
+// Counts how many individual settings in one edit differ from its baseline.
+// Derived fields (external_track_order) are excluded from the count so that
+// toggling inclusion never double-counts alongside the order it implies.
+function countEditChanges(edit) {
+  const b = edit.baseline; if (!b) return 0;
+  let n = 0;
+  if (edit.enabled !== b.enabled) n += 1;
+  n += symmetricDiffCount(edit.included_subtitles, b.included_subtitles);
+  n += symmetricDiffCount(edit.included_external_audio, b.included_external_audio);
+  n += overrideChanges(edit.source_track_overrides, b.source_track_overrides, "track_id");
+  n += overrideChanges(edit.subtitle_metadata_overrides, b.subtitle_metadata_overrides, "path");
+  return n;
+}
+
+function totalChangeCount() {
+  let total = 0;
+  state.planEdits.forEach((edit) => { total += countEditChanges(edit); });
+  return total;
+}
+
+function symmetricDiffCount(a = [], b = []) {
+  const setA = new Set(a), setB = new Set(b);
+  let n = 0;
+  setA.forEach((x) => { if (!setB.has(x)) n += 1; });
+  setB.forEach((x) => { if (!setA.has(x)) n += 1; });
+  return n;
+}
+
+// Counts overrides (keyed by track_id/path) whose state differs between the
+// current and baseline arrays, counting both additions and removals once each.
+function overrideChanges(current = [], baseline = [], key) {
+  const baseById = new Map(baseline.map((o) => [o[key], o]));
+  const curById = new Map(current.map((o) => [o[key], o]));
+  let n = 0;
+  current.forEach((item) => {
+    const base = baseById.get(item[key]);
+    if (!base || JSON.stringify(base) !== JSON.stringify(item)) n += 1;
+  });
+  baseline.forEach((item) => { if (!curById.has(item[key])) n += 1; });
+  return n;
+}
+
+// Strips client-only bookkeeping (baseline/pristine) before sending an edit to
+// the backend, which only understands the real plan fields.
+function stripEdit(edit) {
+  const { baseline, pristine, ...rest } = edit;
+  return rest;
+}
+
+// Shows or hides the floating "Save" button and keeps its red-dot counter in
+// sync with the number of unsaved setting changes.
+function updateSaveButton() {
+  const fab = $("plan-save-fab"); if (!fab) return;
+  const count = totalChangeCount();
+  const countEl = fab.querySelector(".fab-count");
+  if (countEl) countEl.textContent = String(count);
+  fab.classList.toggle("hidden", count === 0);
+}
+
+function setSaveSaving(saving) {
+  const fab = $("plan-save-fab"); if (!fab) return;
+  fab.disabled = saving;
+  fab.classList.toggle("saving", saving);
+  const label = fab.querySelector(".fab-label");
+  if (label) label.textContent = saving ? t("plan.saving") : t("plan.save");
+}
+
+async function savePlanEdits() {
   if (!state.planReport?.snapshot || !state.planReport?.job_id) return;
-  const edits = Array.from(state.planEdits.values()).filter((edit) => !edit.pristine);
-  if (!edits.length) { setPlanSaveStatus("idle"); return; }
-  planSaveInFlight = true; state.planSaving = true; setPlanSaveStatus("saving"); updateRunButton();
+  const edits = Array.from(state.planEdits.values()).filter((edit) => countEditChanges(edit) > 0);
+  if (!edits.length) { updateSaveButton(); return; }
+  state.planSaving = true; updateRunButton(); setSaveSaving(true);
   try {
     const payload = buildPayload();
     payload.job_id = state.planReport.job_id;
     payload.base_plan_id = state.planReport.snapshot.plan_id;
-    payload.plan_edits = edits.map(({ pristine, ...edit }) => edit);
+    payload.plan_edits = edits.map((edit) => stripEdit(edit));
     const report = await callApi("update_plan_draft", payload);
     // The backend recomputes the plan list, moving disabled plans (unchecked
     // "include" toggle) into `skipped_files`. Adopt the fresh lists so the top
@@ -781,33 +853,27 @@ async function runPlanSave() {
     // card); expand plans that were just re-enabled.
     [...prevPlanIds].filter((id) => !nextPlanIds.has(id)).forEach((id) => state.collapsedCards.add(id));
     [...nextPlanIds].filter((id) => !prevPlanIds.has(id)).forEach((id) => state.collapsedCards.delete(id));
+    // Rebaseline every saved edit so the saved values become the new "original";
+    // the unsaved counter then drops to zero and the Save button hides. Done
+    // before re-rendering so the button never shows a transient nonzero count.
+    edits.forEach((edit) => snapshotBaseline(edit));
     if (membershipChanged) renderPlans(state.planReport);
     else renderPlanSummary(state.planReport);
     if (report.error) showError(`${report.error_code || "PLAN_ERROR"}: ${report.error}`);
+    showToast(t("toast.planSaved.body"), "success", t("toast.planSaved.title"));
   } catch (error) {
-    setPlanSaveStatus("error", error.message);
+    showToast(error.message, "error", t("toast.planSaveError.title"));
   } finally {
-    planSaveInFlight = false; state.planSaving = false;
-    if (planSaveDirty) { planSaveDirty = false; runPlanSave(); }
-    else { setPlanSaveStatus("saved"); updateRunButton(); }
+    state.planSaving = false; setSaveSaving(false); updateRunButton(); updateSaveButton();
   }
-}
-
-function setPlanSaveStatus(status, message = "") {
-  const el = $("plan-save-status"); if (!el) return;
-  el.dataset.status = status;
-  el.textContent = status === "saving" ? t("plan.saving")
-    : status === "saved" ? t("plan.saved")
-    : status === "error" ? t("plan.saveError", { message })
-    : "";
 }
 
 async function runMux() {
   clearError(); const payload = buildPayload();
   if (!state.planReport?.plans?.length || !state.planReport.snapshot) { showError(t("error.generatePlanFirst")); return; }
-  if (state.planEdits.size && Array.from(state.planEdits.values()).some((edit) => !edit.pristine)) {
-    clearTimeout(planSaveTimer); await runPlanSave();
-  }
+  // Plan edits are only persisted via the floating Save button; starting the
+  // mux job before saving would discard them, so block until everything is saved.
+  if (totalChangeCount() > 0) { showError(t("error.saveEditsFirst")); return; }
   const warnings = [];
   if (requiresDeleteConfirmation(payload)) warnings.push(t("error.deleteWarning"));
   if (payload.overrides.overwrite) warnings.push(t("error.overwriteWarning"));
@@ -1231,8 +1297,7 @@ function renderPlans(report) {
   const container = $("plans"); clear(container);
   state.planSaving = false;
   if (!report) {
-    clearTimeout(planSaveTimer); planSaveInFlight = false; planSaveDirty = false; state.planSaving = false; state.planSaveError = null;
-    clear($("plan-summary")); setPlanSaveStatus("idle"); state.planOrder = null; state.planData = null;
+    clear($("plan-summary")); updateSaveButton(); state.planOrder = null; state.planData = null;
     return empty(container, "03", t("plan.empty.title"), t("plan.empty.detail"));
   }
   // Keep the latest full plan data for every source so a disabled plan can still
@@ -1310,13 +1375,7 @@ function renderPlanSummary(report) {
     if (mkv || ietf) languages.add(key);
   }));
   if (languages.size) summary.append(badge(countText(languages.size, "count.subtitleLanguages.one", "count.subtitleLanguages.other"), "info"));
-  const subsetPlans = report.plans.filter((plan) => plan.font_subset_intent?.summary);
-  if (subsetPlans.length) {
-    const familyCount = subsetPlans.reduce((total, plan) => total + Number(plan.font_subset_intent.summary.requested_family_count || 0), 0);
-    const attachmentCount = subsetPlans.reduce((total, plan) => total + Number(plan.font_subset_intent.summary.expected_attachment_count || 0), 0);
-    summary.append(badge(t("plan.subsetSummary", { families: familyCount, attachments: attachmentCount }), "info"));
-  }
-  setPlanSaveStatus("idle");
+  updateSaveButton();
 }
 
 function dirnameOf(path) {
@@ -1359,24 +1418,32 @@ function renderPlanCard(plan, { collapsed = false, disabled = false } = {}) {
   if (disabled) title.append(badge(t("plan.disabledBadge"), "warn"));
   article.append(title);
 
-  // Source folder + compact output name. When the output lands in the same
-  // folder as the source, show only the output filename instead of the full path
-  // (the directory is already implied by the source folder above).
+  // Compact output name. When the output lands in the same folder as the
+  // source, show only the output filename instead of the full path.
   const sourceDir = dirnameOf(plan.source_video);
   const outputDir = dirnameOf(plan.output_path);
   const outputDisplay = sourceDir && outputDir === sourceDir ? basenameOf(plan.output_path) : plan.output_path;
   const meta = element("div", "plan-meta");
-  if (sourceDir) meta.append(element("div", "file-path plan-source", t("plan.sourceFolder", { path: sourceDir })));
   meta.append(element("div", "file-path plan-output", t("plan.output", { path: outputDisplay })));
-  article.append(meta);
+
+  // "Add external file as track": opens a native picker rooted in the project
+  // directory; the chosen file is classified by extension and dropped into the
+  // matching section so the user can keep editing it. Shown on the same row as
+  // the output filename (left/right) so the action reads as adding to this file.
+  const addBtn = element("button", "ghost add-external-btn"); addBtn.type = "button";
+  addBtn.append(iconSvg("icon-plus"), element("span", "", t("plan.addExternal")));
+  addBtn.addEventListener("click", () => addExternalTrack(plan, article));
+
+  const outputRow = element("div", "plan-output-row");
+  outputRow.append(meta, addBtn);
+  article.append(outputRow);
   const grid = element("div", "track-grid");
-  grid.append(
-    renderSubtitleSection(plan),
-    renderAudioSection(plan),
-    trackBox(t("plan.fonts"), plan.attachments, (item) => document.createTextNode(item.name), t("plan.attachmentCount", { count: plan.attachments.length }), "attachments-box")
-  );
+  const fontsBox = trackBox(t("plan.fonts"), plan.attachments, (item) => document.createTextNode(item.name), t("plan.attachmentCount", { count: plan.attachments.length }), "attachments-box");
+  // When font subsetting is active for this plan, surface it as a badge to the
+  // right of the attachment count so the mode is obvious at a glance.
+  if (plan.font_subset_intent?.summary) fontsBox.firstElementChild?.append(badge(t("plan.fontSubsetBadge"), "info"));
+  grid.append(renderSubtitleSection(plan), renderAudioSection(plan), fontsBox);
   article.append(grid);
-  article.append(renderAvailableAssignments(plan));
   const subset = plan.font_subset_intent?.summary;
   if (subset) {
     const summary = element("div", "subset-summary");
@@ -1389,14 +1456,13 @@ function renderPlanCard(plan, { collapsed = false, disabled = false } = {}) {
     );
     article.append(summary);
   }
-  if (plan.cleanup_candidates?.length) article.append(trackBox(t("plan.cleanupCandidates"), plan.cleanup_candidates, (item) => itemNode(item.name, item.path)));
   if (plan.skipped_files?.length) article.append(renderSkippedFiles(plan.skipped_files, t("plan.planSkippedFiles")));
   return article;
 }
 
 function currentPlanEdit(plan) {
   if (!state.planEdits.has(plan.source_video)) {
-    state.planEdits.set(plan.source_video, {
+    const edit = {
       source_video: plan.source_video,
       revision: Number(plan.edit_revision || 0) + 1,
       enabled: true,
@@ -1404,12 +1470,15 @@ function currentPlanEdit(plan) {
       included_external_audio: plan.audio_tracks.map((track) => track.path),
       source_track_overrides: [],
       subtitle_metadata_overrides: [],
+      extra_subtitles: [],
+      extra_audio: [],
       external_track_order: plan.external_track_order?.length ? [...plan.external_track_order] : [
         ...plan.subtitle_tracks.map((track) => `subtitle:${track.path}`),
         ...plan.audio_tracks.map((track) => `audio:${track.path}`),
       ],
-      pristine: true,
-    });
+    };
+    snapshotBaseline(edit);
+    state.planEdits.set(plan.source_video, edit);
   }
   return state.planEdits.get(plan.source_video);
 }
@@ -1419,7 +1488,7 @@ function markPlanEdited(cardEl) {
   else document.querySelectorAll(".plan-card").forEach((card) => card.classList.add("has-edits"));
 }
 
-function touchEdit(edit, cardEl) { delete edit.pristine; markPlanEdited(cardEl); schedulePlanSave(); }
+function touchEdit(edit, cardEl) { markPlanEdited(cardEl); updateSaveButton(); }
 
 // Merges the external subtitle files (外挂) and the source container's own
 // subtitle tracks (已有) into a single "字幕" section, mirroring renderAudioSection.
@@ -1444,11 +1513,21 @@ function renderSubtitleSection(plan) {
       edit.included_subtitles = input.checked
         ? [...new Set([...edit.included_subtitles, track.path])]
         : edit.included_subtitles.filter((path) => path !== track.path);
+      // A subtitle excluded from the draft can no longer carry metadata
+      // overrides; drop them so the payload stays valid (the backend rejects
+      // overrides that reference an excluded subtitle).
+      if (!input.checked) {
+        edit.subtitle_metadata_overrides = (edit.subtitle_metadata_overrides || []).filter((item) => item.path !== track.path);
+        renderTrackBadges(badgeRow, externalBadge, effectiveSubtitleFlags(edit, track));
+      }
       rebuildExternalOrder(edit);
       touchEdit(edit, li.closest(".plan-card"));
     });
     const copy = element("div", "source-track-copy");
-    copy.append(badge(t("plan.audioExternal"), "info"), renderSubtitle(track));
+    const badgeRow = element("div", "badge-row");
+    const externalBadge = badge(t("plan.audioExternal"), "info");
+    renderTrackBadges(badgeRow, externalBadge, effectiveSubtitleFlags(edit, track));
+    copy.append(badgeRow, renderSubtitle(track));
     label.append(input, copy); li.append(label, makeDraggable(li, list, edit, "included_subtitles"));
     const details = element("details", "track-editor"); details.append(element("summary", "", t("plan.editMetadata")));
     const fields = element("div", "track-editor-fields");
@@ -1463,7 +1542,10 @@ function renderSubtitleSection(plan) {
     });
     [["default_track", track.default_track], ["forced_track", track.forced_track]].forEach(([field, value]) => {
       const flag = element("label", "track-flag"); const checkbox = element("input"); checkbox.type = "checkbox"; checkbox.checked = Boolean(value);
-      checkbox.addEventListener("change", () => updateSubtitleOverride(edit, track, field, checkbox.checked, li.closest(".plan-card")));
+      checkbox.addEventListener("change", () => {
+        updateSubtitleOverride(edit, track, field, checkbox.checked, li.closest(".plan-card"));
+        renderTrackBadges(badgeRow, externalBadge, effectiveSubtitleFlags(edit, track));
+      });
       flag.append(checkbox, document.createTextNode(t(`plan.field.${field}`))); fields.append(flag);
     });
     details.append(fields); li.append(details);
@@ -1477,17 +1559,24 @@ function renderSubtitleSection(plan) {
     const existingOverride = edit.source_track_overrides.find((item) => item.track_id === track.id);
     input.checked = existingOverride ? existingOverride.included : track.included;
     input.addEventListener("change", () => {
+      // Reverting a source track to its original inclusion drops the override,
+      // so the unsaved-change counter decrements back to zero for that setting.
       edit.source_track_overrides = edit.source_track_overrides.filter((item) => item.track_id !== track.id);
-      edit.source_track_overrides.push({ track_id: track.id, included: input.checked });
+      if (input.checked !== track.included) {
+        edit.source_track_overrides.push({ track_id: track.id, included: input.checked });
+      }
       touchEdit(edit, li.closest(".plan-card"));
     });
     const copy = element("div", "source-track-copy");
+    const badgeRow = element("div", "badge-row");
+    renderTrackBadges(badgeRow, badge(t("plan.audioSource"), "ok"), track);
     copy.append(
-      badge(t("plan.audioSource"), "ok"),
-      element("strong", "", `${track.id} · ${track.title || t("plan.unknownTitle")}`),
-      element("span", "file-path", track.language || t("plan.unknownLanguage")),
-      element("span", "decision-reason", localizeEnum("track.reason", track.decision_reason))
+      badgeRow,
+      element("strong", "", `${track.id} · ${track.title || t("plan.unknownTitle")}`)
     );
+    appendMetaRows(copy, [metaRow("plan.field.language", track.language)]);
+    const reasonSpan = decisionReasonSpan(track.decision_reason);
+    if (reasonSpan) copy.append(reasonSpan);
     label.append(input, copy);
     li.append(label);
     list.append(li);
@@ -1576,7 +1665,17 @@ function setupTrackDrag(list, edit, selectedKey) {
 function syncSubtitleOverrideValue(edit, track, field, value) {
   let override = edit.subtitle_metadata_overrides.find((item) => item.path === track.path);
   if (!override) { override = { path: track.path }; edit.subtitle_metadata_overrides.push(override); }
-  override[field] = value; delete edit.pristine;
+  override[field] = value;
+  // If the override no longer differs from the original track values, drop it so
+  // reverting a subtitle setting (e.g. toggling 默认 off then back on) counts as
+  // zero unsaved changes.
+  const original = {
+    track_name: track.track_name, mkv_language: track.mkv_language, ietf_language: track.ietf_language,
+    default_track: track.default_track, forced_track: track.forced_track,
+  };
+  const fields = ["track_name", "mkv_language", "ietf_language", "default_track", "forced_track"];
+  const changed = fields.some((f) => override[f] !== original[f]);
+  if (!changed) edit.subtitle_metadata_overrides = edit.subtitle_metadata_overrides.filter((item) => item.path !== track.path);
 }
 
 function updateSubtitleOverride(edit, track, field, value, cardEl) {
@@ -1625,17 +1724,26 @@ function renderAudioSection(plan) {
     const existingOverride = edit.source_track_overrides.find((item) => item.track_id === track.id);
     input.checked = existingOverride ? existingOverride.included : track.included;
     input.addEventListener("change", () => {
+      // Reverting a source track to its original inclusion drops the override,
+      // so the unsaved-change counter decrements back to zero for that setting.
       edit.source_track_overrides = edit.source_track_overrides.filter((item) => item.track_id !== track.id);
-      edit.source_track_overrides.push({ track_id: track.id, included: input.checked });
+      if (input.checked !== track.included) {
+        edit.source_track_overrides.push({ track_id: track.id, included: input.checked });
+      }
       touchEdit(edit, li.closest(".plan-card"));
     });
     const copy = element("div", "source-track-copy");
     copy.append(
       badge(t("plan.audioSource"), "ok"),
-      element("strong", "", `${track.id} · ${track.title || t("plan.unknownTitle")}`),
-      element("span", "file-path", `${track.codec || "?"} / ${track.language || t("plan.unknownLanguage")} / ${track.channels || "?"}ch`),
-      element("span", "decision-reason", localizeEnum("track.reason", track.decision_reason))
+      element("strong", "", `${track.id} · ${track.title || t("plan.unknownTitle")}`)
     );
+    appendMetaRows(copy, [
+      metaRow("plan.field.codec", track.codec),
+      metaRow("plan.field.language", track.language),
+      metaRow("plan.field.channels", track.channels ? `${track.channels}ch` : null),
+    ]);
+    const reasonSpan = decisionReasonSpan(track.decision_reason);
+    if (reasonSpan) copy.append(reasonSpan);
     label.append(input, copy);
     const preview = element("button", "ghost compact", t("plan.preview")); preview.type = "button";
     preview.disabled = !state.config?.ffmpeg?.available;
@@ -1658,30 +1766,42 @@ async function previewAudioTrack(plan, track, row, button) {
   } catch (error) { showToast(error.message, "error", t("plan.previewFailed")); } finally { button.disabled = false; }
 }
 
-function renderAvailableAssignments(plan) {
-  const details = element("details", "source-track-panel assignment-panel");
-  details.append(element("summary", "", t("plan.assignments")));
-  const edit = currentPlanEdit(plan); const list = element("div", "assignment-list");
-  const groups = [
-    ["subtitle", state.planReport?.available_subtitles || [], "included_subtitles"],
-    ["audio", state.planReport?.available_audio || [], "included_external_audio"],
-  ];
-  groups.forEach(([kind, candidates, field]) => candidates.forEach((candidate) => {
-    if ((kind === "subtitle" ? plan.subtitle_tracks : plan.audio_tracks).some((track) => track.path === candidate.path)) return;
-    const row = element("div", "source-track-row"); const copy = itemNode(candidate.name, candidate.path);
-    const button = element("button", "ghost compact"); button.type = "button";
-    const sync = () => { button.textContent = edit[field].includes(candidate.path) ? t("plan.unassign") : t("plan.assign"); };
-    button.addEventListener("click", () => {
-      edit[field] = edit[field].includes(candidate.path)
-        ? edit[field].filter((path) => path !== candidate.path)
-        : [...edit[field], candidate.path];
-      rebuildExternalOrder(edit);
-      touchEdit(edit, row.closest(".plan-card")); sync();
-    });
-    sync(); row.append(copy, button); list.append(row);
-  }));
-  if (!list.childNodes.length) list.append(element("div", "file-path", t("plan.noAssignments")));
-  details.append(list); return details;
+// Opens a native file picker (rooted in the project directory) so the user can
+// add an external subtitle or audio file that the scan did not auto-match. The
+// chosen file is classified by extension and dropped into the matching section;
+// it is also recorded in the edit's extra_* list so the backend treats it as a
+// manually-added input when the draft is saved.
+async function addExternalTrack(plan, cardEl) {
+  const inputDir = state.planReport?.snapshot?.input_dir || state.inputDir || $("input-dir").value.trim() || "";
+  if (!inputDir) { showError(t("error.chooseInput")); return; }
+  const startDir = dirnameOf(plan.source_video);
+  let picked;
+  try {
+    picked = await callApi("choose_external_track", { input_dir: inputDir, start_dir: startDir });
+  } catch (error) {
+    showError(error.message); return;
+  }
+  if (!picked || picked.cancelled) return;
+  const edit = currentPlanEdit(plan);
+  const isSubtitle = picked.kind === "subtitle";
+  const tracksKey = isSubtitle ? "subtitle_tracks" : "audio_tracks";
+  const includedKey = isSubtitle ? "included_subtitles" : "included_external_audio";
+  const extraKey = isSubtitle ? "extra_subtitles" : "extra_audio";
+  if (plan[tracksKey].some((track) => track.path === picked.path)) {
+    showToast(t("plan.addExternal.duplicate", { name: picked.name }), "warning");
+    return;
+  }
+  const stem = picked.name.replace(/\.[^.]+$/, "");
+  const track = isSubtitle
+    ? { path: picked.path, name: picked.name, track_name: stem, mkv_language: "und", ietf_language: "und", default_track: false, forced_track: false, match_reason: "manual_assignment" }
+    : { path: picked.path, name: picked.name, language: null, match_reason: "manual_assignment" };
+  plan[tracksKey].push(track);
+  edit[includedKey] = [...new Set([...edit[includedKey], picked.path])];
+  edit[extraKey] = [...new Set([...(edit[extraKey] || []), picked.path])];
+  rebuildExternalOrder(edit);
+  touchEdit(edit, cardEl);
+  renderPlans(state.planReport);
+  showToast(t("plan.addExternal.added", { name: picked.name }), "success");
 }
 
 function rebuildExternalOrder(edit) {
@@ -1692,12 +1812,37 @@ function rebuildExternalOrder(edit) {
 }
 
 function renderSubtitle(track) {
-  const wrapper = element("div"); const flags = [track.default_track ? t("track.default") : "", track.forced_track ? t("track.forced") : ""].filter(Boolean);
-  wrapper.append(document.createTextNode(`${track.name}${flags.length ? ` (${flags.join(", ")})` : ""}`));
-  wrapper.append(element("div", "file-path", `${track.track_name} / ${track.mkv_language} / ${track.ietf_language}`), element("div", "file-path", track.match_reason)); return wrapper;
+  const wrapper = element("div");
+  wrapper.append(document.createTextNode(track.name));
+  appendMetaRows(wrapper, [
+    metaRow("plan.field.track_name", track.track_name),
+    metaRow("plan.field.mkv_language", track.mkv_language),
+    metaRow("plan.field.ietf_language", track.ietf_language),
+    metaRow("plan.matchReason", localizeEnum("track.reason", track.match_reason)),
+  ]);
+  return wrapper;
 }
-function renderAudio(track) { return itemNode(track.name, track.match_reason); }
+function renderAudio(track) {
+  const wrapper = element("div");
+  wrapper.append(document.createTextNode(track.name));
+  appendMetaRows(wrapper, [
+    metaRow("plan.field.language", track.language),
+    metaRow("plan.matchReason", localizeEnum("track.reason", track.match_reason)),
+  ]);
+  return wrapper;
+}
 function itemNode(text, detail) { const node = element("div", "", text); if (detail) node.append(element("div", "file-path", detail)); return node; }
+// Renders one metadata value on its own line with a localized label prefix so
+// users can tell what each value means (e.g. "MKV language: chi"). Returns null
+// when the value is empty so callers can skip it.
+function metaRow(labelKey, value) {
+  if (value === null || value === undefined || value === "") return null;
+  const row = element("div", "track-meta-row");
+  row.append(element("span", "track-meta-label", t(labelKey)));
+  row.append(element("span", "track-meta-value", String(value)));
+  return row;
+}
+function appendMetaRows(container, rows) { rows.forEach((node) => { if (node) container.append(node); }); }
 
 function boxHeader(title, countText) {
   const head = element("h5", "", title);
@@ -1737,9 +1882,7 @@ function reincludeDisabledPlan(sourceVideo) {
   const edit = state.planEdits.get(sourceVideo);
   if (!edit) return;
   edit.enabled = true;
-  delete edit.pristine;
-  markPlanEdited(null);
-  schedulePlanSave();
+  touchEdit(edit, null);
 }
 
 function renderResults(report) {
@@ -1797,7 +1940,38 @@ function renderProgress(status) {
   }
 }
 function badge(text, type) { return element("span", `badge ${["ok", "warn", "danger", "info"].includes(type) ? type : ""}`, text); }
+// Track-level flags (默认 / 强制) rendered as badges next to the
+// 外挂 / 已有 source-type badge, never inline after the filename.
+function trackFlagBadges(track) {
+  const badges = [];
+  if (track.default_track) badges.push(badge(t("track.default"), "info"));
+  if (track.forced_track) badges.push(badge(t("track.forced"), "warn"));
+  return badges;
+}
+// Resolves a subtitle track's effective default/forced flags, honoring any
+// per-track metadata override the user has toggled in the editor.
+function effectiveSubtitleFlags(edit, track) {
+  const override = edit.subtitle_metadata_overrides.find((item) => item.path === track.path);
+  return {
+    default_track: override && "default_track" in override ? override.default_track : track.default_track,
+    forced_track: override && "forced_track" in override ? override.forced_track : track.forced_track,
+  };
+}
+// (Re)populates a badge row with the source-type badge followed by the
+// default/forced flag badges. Clearing first lets callers refresh the row
+// (e.g. when a flag toggle changes) without rebuilding the whole section.
+function renderTrackBadges(container, sourceBadge, trackLike) {
+  clear(container);
+  container.append(sourceBadge, ...trackFlagBadges(trackLike));
+}
+// The "过滤未启用，予以保留" reason is noise whenever audio filtering is off
+// (the default), so it is suppressed entirely from the decision-reason line.
+function decisionReasonSpan(reason) {
+  if (!reason || reason === "preserve_filter_disabled") return null;
+  return element("span", "decision-reason", localizeEnum("track.reason", reason));
+}
 function element(tag, className = "", text = null) { const node = document.createElement(tag); if (className) node.className = className; if (text !== null) node.textContent = String(text); return node; }
+function iconSvg(name) { const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("class", "icon"); svg.innerHTML = `<use href="#${name}"></use>`; return svg; }
 function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
 function empty(container, number, title, detail) {
   clear(container); container.className = "stack empty-state";

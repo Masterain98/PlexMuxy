@@ -1286,17 +1286,42 @@ p {
   display: none;
 }
 
-.plan-save-status {
-  min-height: 18px;
-  margin-top: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-text-tertiary);
+/* Floating "Save" button: appears only when there are unsaved plan edits. The
+   red dot in the corner counts the number of changed settings, decrementing
+   when a setting is reverted to its original value. */
+.plan-save-fab {
+  position: fixed; right: 24px; bottom: 24px; z-index: 60;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 12px 18px; border: none; border-radius: 999px;
+  background: var(--color-brand); color: var(--color-on-brand);
+  font: inherit; font-weight: 600; cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  transition: transform 0.12s ease, filter 0.12s ease;
 }
 
-.plan-save-status[data-status="saving"] { color: var(--color-text-secondary); }
-.plan-save-status[data-status="saved"] { color: var(--color-success); }
-.plan-save-status[data-status="error"] { color: var(--color-danger-text); }
+/* Override the global `button:hover` rule (which would paint the faint hover
+   background over the brand color); scope with the element selector so our
+   specificity wins and the brand background stays solid on hover. */
+button.plan-save-fab:hover:not(:disabled) { background: var(--color-brand); filter: brightness(1.05); transform: translateY(-1px); }
+.plan-save-fab:active { transform: translateY(0); }
+.plan-save-fab:disabled { cursor: progress; }
+.plan-save-fab.saving { background: var(--color-brand); }
+
+/* Spinner shown while the save request is in flight, replacing the save icon so
+   the "保存中…" label stays fully legible (no opacity fade). */
+.plan-save-fab .fab-spinner { display: none; width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; animation: fab-spin 0.7s linear infinite; }
+.plan-save-fab.saving .fab-icon { display: none; }
+.plan-save-fab.saving .fab-spinner { display: inline-block; }
+@keyframes fab-spin { to { transform: rotate(360deg); } }
+
+.plan-save-fab .fab-count {
+  position: absolute; top: -6px; right: -6px;
+  min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px;
+  background: var(--color-danger); color: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; line-height: 1;
+  border: 2px solid var(--color-surface, #fff);
+}
 
 .badge {
   display: inline-flex;
@@ -1332,6 +1357,10 @@ p {
 .badge.info {
   color: var(--color-text-secondary);
 }
+
+/* Groups the source-type badge (外挂 / 已有) with the default/forced flag
+   badges on a single wrapping line to save vertical space. */
+.badge-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 
 .stack {
   display: grid;
@@ -1432,29 +1461,36 @@ p {
 
 .plan-card.has-edits { border-color: color-mix(in srgb, var(--color-brand) 55%, var(--color-border)); }
 .plan-enabled { flex-wrap: wrap; justify-content: flex-end; }
-.editable-track, .source-track-row { display: grid; gap: 9px; }
+
+/* "Add external file as track" action, shown on the same row as the output
+   filename (left/right) so it reads as adding tracks to this specific file. */
+.plan-output-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0 2px; }
+.plan-output-row .plan-meta { flex: 1 1 auto; min-width: 0; }
+.add-external-btn { flex: 0 0 auto; gap: 6px; }
+.add-external-btn .icon { width: 15px; height: 15px; }
+.editable-track { display: grid; gap: 9px; }
 .track-check { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
 /* Override the global input sizing so plan checkboxes stay compact. */
 .track-check > input,
 .plan-enabled > input,
 .track-flag > input,
-.source-track-row > label > input,
 .card-title > label > input {
   width: 16px; height: 16px; min-height: 0; min-width: 0;
   flex: none; margin: 0; padding: 0; accent-color: var(--color-brand);
 }
 .track-check > input { margin-top: 3px; }
 .track-editor { margin-left: 22px; }
-.track-editor summary, .source-track-panel summary { color: var(--color-text-secondary); font-size: 12px; cursor: pointer; }
+.track-editor summary { color: var(--color-text-secondary); font-size: 12px; cursor: pointer; }
 .track-editor-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding-top: 10px; }
 .track-editor-fields label { display: grid; gap: 5px; color: var(--color-text-tertiary); font-size: 11px; }
 .track-editor-fields .track-flag { display: flex; align-items: center; gap: 6px; }
-.source-track-panel { border-top: 1px solid var(--color-divider); padding-top: 13px; }
-.source-track-panel > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.source-track-list { display: grid; gap: 0; padding-top: 8px; }
-.source-track-row { grid-template-columns: minmax(0, 1fr) auto; align-items: center; border-top: 1px solid var(--color-divider); padding: 10px 0; }
 .source-track-copy { display: grid; gap: 3px; }
 .decision-reason { color: var(--color-text-tertiary); font-size: 12px; }
+/* Labeled metadata rows: one value per line, each prefixed with a localized
+   label so users can tell what the value means (e.g. "MKV language: chi"). */
+.track-meta-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 12px; line-height: 19px; }
+.track-meta-label { color: var(--color-text-tertiary); flex: 0 0 auto; font-weight: 600; }
+.track-meta-value { color: var(--color-text-secondary); word-break: break-word; }
 .source-track-controls { display: flex; align-items: center; gap: 8px; }
 .track-order-controls { display: inline-flex; gap: 4px; margin-left: auto; }
 .track-drag-handle { cursor: grab; user-select: none; align-self: center; display: inline-flex; align-items: center; color: var(--color-text-tertiary); padding: 0 6px; line-height: 0; }
@@ -1500,6 +1536,12 @@ p {
   justify-content: space-between;
   gap: 18px;
 }
+
+/* Vertically center the filename title with the include-video toggle on the
+   right; the toggle is a 44px-tall row whose content is centered, so without
+   this alignment the checkbox sits below the title's first line. Scoped to
+   plan cards so job-history cards keep their top-aligned layout. */
+.plan-card > .card-title { align-items: center; }
 
 .card-title .badge {
   flex: 0 0 auto;
@@ -2104,8 +2146,7 @@ progress::-moz-progress-bar {
     border-left: 0;
   }
 
-  .track-editor-fields,
-  .source-track-row {
+  .track-editor-fields {
     grid-template-columns: minmax(0, 1fr);
   }
 

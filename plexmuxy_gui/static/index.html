@@ -59,6 +59,7 @@
     <symbol id="icon-external" viewBox="0 0 24 24"><path d="M13 5h6v6M19 5l-8 8M18 14v5H5V6h5" /></symbol>
     <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 20h16" /></symbol>
     <symbol id="icon-save" viewBox="0 0 24 24"><path d="M5 3.5h12l2 2v15H5zM8 3.5v6h8v-6M8 20.5v-7h8v7" /></symbol>
+    <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
     <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7" /></symbol>
     <symbol id="icon-question" viewBox="0 0 24 24"><path d="M8.5 9a3.5 3.5 0 1 1 5.7 2.7c-1.4 1.1-2.2 1.7-2.2 3.3M12 18.5v.1" /></symbol>
     <symbol id="icon-spinner" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7" /></symbol>
@@ -405,7 +406,6 @@
                 </div>
               </div>
               <div id="plan-summary" class="count-row" aria-label="Plan summary" data-i18n-aria-label="plan.summary"></div>
-              <div id="plan-save-status" class="plan-save-status" aria-live="polite" data-status="idle"></div>
               <div id="plans" class="stack empty-state">
                 <span class="empty-icon" aria-hidden="true">03</span>
                 <h4 data-i18n="plan.empty.title">No plan yet</h4>
@@ -680,6 +680,14 @@
   </div>
 
   <div id="toast-region" class="toast-region" role="region" aria-label="Notifications" data-i18n-aria-label="toast.region" aria-live="polite" aria-relevant="additions"></div>
+
+  <button id="plan-save-fab" class="plan-save-fab hidden" type="button" aria-live="polite">
+    <span class="fab-count" aria-hidden="true">0</span>
+    <span class="fab-spinner" aria-hidden="true"></span>
+    <svg class="icon fab-icon" aria-hidden="true"><use href="#icon-save"></use></svg>
+    <span class="fab-label" data-i18n="plan.save">Save</span>
+  </button>
+
 
   <dialog id="confirm-dialog" class="confirm-dialog" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-body">
     <form method="dialog">

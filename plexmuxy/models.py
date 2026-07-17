@@ -244,6 +244,12 @@ class PlanEdit:
     source_track_overrides: tuple[TrackOverride, ...] = ()
     subtitle_metadata_overrides: tuple[SubtitleOverride, ...] = ()
     external_track_order: tuple[str, ...] = ()
+    # External files the user picked manually (not discovered by the scan). They
+    # are registered into the scan's known inputs so the rest of the pipeline
+    # treats them like discovered tracks; the per-track builders synthesize plan
+    # entries for paths that are not already in a plan's track list.
+    extra_subtitles: tuple[Path, ...] = ()
+    extra_audio: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True)

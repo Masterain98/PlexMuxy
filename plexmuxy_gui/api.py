@@ -224,6 +224,81 @@ class PlexMuxyApi:
 
         return self.guarded(run)
 
+    def choose_external_track(self, payload: dict[str, Any]) -> dict[str, Any]:
+        def run() -> dict[str, Any]:
+            if self._window is None:
+                return self.fail("Window is not ready")
+            import webview
+
+            dialog_type = getattr(getattr(webview, "FileDialog", object), "OPEN", None)
+            if dialog_type is None:
+                dialog_type = getattr(webview, "OPEN_DIALOG", None)
+            if dialog_type is None:
+                return self.fail("File picker is not available in this pywebview version")
+            if not isinstance(payload, dict):
+                return self.fail("Input directory is required")
+            input_dir_raw = payload.get("input_dir")
+            if not input_dir_raw or not str(input_dir_raw).strip():
+                return self.fail("Input directory is required")
+            input_dir = Path(str(input_dir_raw).strip()).expanduser().resolve()
+            if not input_dir.is_dir():
+                return self.fail("Input directory does not exist")
+            config = load_or_default_config()
+            subtitle_extensions = {ext.casefold() for ext in config.media.subtitle_extensions}
+            audio_extensions = {ext.casefold() for ext in config.media.audio_extensions}
+            # Root the picker inside the project directory (and offer the source
+            # file's own folder as a convenient starting point); the user can
+            # still navigate, but we reject anything outside the project root.
+            start_dir = input_dir
+            start_dir_raw = payload.get("start_dir")
+            if start_dir_raw:
+                candidate = Path(str(start_dir_raw).strip()).expanduser().resolve()
+                try:
+                    candidate.relative_to(input_dir)
+                    start_dir = candidate
+                except ValueError:
+                    start_dir = input_dir
+            # pywebview's parse_file_type (used by WinForms, GTK and Cocoa) expects
+            # the "Description (ext1;ext2)" shape: the description must be [\\w ]+
+            # only (letters/digits/space) and the extensions inside the parentheses
+            # must be ';'-separated and '*'-prefixed, otherwise it raises
+            # "is not a valid file filter". Keep the label to word/space characters
+            # and join extensions with ';'.
+            wildcards = ";".join(f"*{ext}" for ext in sorted(subtitle_extensions | audio_extensions))
+            file_types = (f"Subtitles and audio ({wildcards})",)
+            result = self._window.create_file_dialog(
+                dialog_type,
+                directory=str(start_dir),
+                allow_multiple=False,
+                file_types=file_types,
+            )
+            if not result:
+                return self.ok({"cancelled": True})
+            selected = Path(str(result[0])).expanduser().resolve()
+            # Enforce that the chosen file stays inside the project directory.
+            try:
+                selected.relative_to(input_dir)
+            except ValueError:
+                return self.fail("Selected file is outside the project directory")
+            if not selected.is_file():
+                return self.fail("Selected path is not a file")
+            extension = selected.suffix.casefold()
+            if extension in subtitle_extensions:
+                kind = "subtitle"
+            elif extension in audio_extensions:
+                kind = "audio"
+            else:
+                return self.fail("Unsupported file type selected")
+            return self.ok({
+                "cancelled": False,
+                "path": str(selected),
+                "name": selected.name,
+                "kind": kind,
+                "relative_path": str(selected.relative_to(input_dir)),
+            })
+
+        return self.guarded(run)
+
     def open_project_link(self, link: str) -> dict[str, Any]:
         def run() -> dict[str, Any]:
             url = PROJECT_LINKS.get(str(link))
