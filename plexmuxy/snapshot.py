@@ -17,13 +17,30 @@ from .models import (
 )
 
 
+def _normalize_hash_numbers(value: object) -> object:
+    # Collapse whole-number floats (e.g. 3.0) to ints (3) so the digest is
+    # invariant to the int/float representation. The plan config survives a
+    # round-trip through the GUI/UI bridge, where JavaScript serializes 3.0 as
+    # "3"; normalizing here keeps the digest stable whether the value arrives as
+    # a Python float (snapshot creation) or a JS-collapsed int (validation).
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, dict):
+        return {key: _normalize_hash_numbers(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_normalize_hash_numbers(item) for item in value]
+    return value
+
+
 def calculate_config_hash(config_data: dict) -> str:
-    # Round-trip through JSON so that whole-number floats (e.g. 1.0) and ints
-    # (1) serialize identically. The plan config survives a JSON round-trip
-    # through the GUI/UI bridge, where 1.0 collapses to 1; hashing the
-    # JSON-normalized form keeps the digest stable across that round-trip.
-    canonical = json.dumps(config_data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    canonical = json.dumps(json.loads(canonical), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    canonical = json.dumps(
+        _normalize_hash_numbers(config_data),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 

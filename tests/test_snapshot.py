@@ -42,6 +42,41 @@ def test_snapshot_round_trip_and_validation(tmp_path):
     assert restored.plan_id == snapshot.plan_id
 
 
+def _collapse_whole_floats(value):
+    # Mirror the GUI/UI bridge, where JavaScript serializes whole-number floats
+    # (e.g. 3.0) as ints (3) on the snapshot round-trip.
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, dict):
+        return {key: _collapse_whole_floats(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_collapse_whole_floats(item) for item in value]
+    return value
+
+
+def test_config_hash_is_invariant_to_int_float_collapse():
+    config_data = config_to_dict(default_config())
+    assert isinstance(config_data["updates"]["timeout_seconds"], float)
+
+    collapsed = _collapse_whole_floats(config_data)
+
+    assert isinstance(collapsed["updates"]["timeout_seconds"], int)
+    assert calculate_config_hash(config_data) == calculate_config_hash(collapsed)
+
+
+def test_validate_accepts_snapshot_after_bridge_int_float_collapse(tmp_path):
+    video = tmp_path / "Example.mkv"
+    video.write_bytes(b"video")
+    config = default_config()
+    snapshot = create_plan_snapshot(tmp_path, [MuxPlan(video, tmp_path / "Example_Plex.mkv")], config)
+
+    bridged = snapshot_from_dict(_collapse_whole_floats(snapshot_to_dict(snapshot)))
+
+    validate_plan_snapshot(bridged, parse_config(bridged.config))
+
+
 def test_snapshot_rejects_changed_input(tmp_path):
     video = tmp_path / "Example.mkv"
     video.write_bytes(b"video")
