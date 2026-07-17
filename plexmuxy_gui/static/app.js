@@ -4,6 +4,7 @@ const state = {
   settingsDirty: false, environmentDirty: false, themeMode: "system", systemThemeQuery: null, navigationObserver: null,
   navigationTarget: null, navigationScrollCleanup: null, localeMode: "system",
   loadingMessageKey: "loading.initializing", lastJobStatus: null, currentView: "workspace",
+  routed: false, lastHandledRoute: "",
   lastNonSubsetFontMode: "all",
   planEdits: new Map(), jobs: [], queuePaused: false, activePreviewId: null,
   planSaving: false,
@@ -444,6 +445,11 @@ function parseRoute(hash = window.location.hash) {
 
 function handleRoute(smooth = false) {
   const route = parseRoute();
+  const routeKey = route.view + (route.view === "workspace" ? `:${$(route.section) ? route.section : "directory-section"}` : "");
+  const firstRoute = !state.routed;
+  const routeChanged = routeKey !== state.lastHandledRoute;
+  state.routed = true;
+  state.lastHandledRoute = routeKey;
   state.currentView = route.view;
   const workspace = $("workspace-view"); const environment = $("environment-view"); const jobs = $("jobs-view"); const about = $("about-view");
   const showWorkspace = route.view === "workspace";
@@ -460,7 +466,17 @@ function handleRoute(smooth = false) {
     const section = $(route.section) ? route.section : "directory-section";
     const target = `#\/workspace/${section}`;
     setActiveNavigation(target);
-    window.setTimeout(() => scrollToSection(`#${section}`, smooth), 0);
+    // On the very first load of the default (top) section, stay at the top of
+    // the page so the intro header is visible. Otherwise only scroll when the
+    // route actually changes or this is an explicit navigation, so redundant
+    // re-initialization (DOMContentLoaded + pywebviewready) does not nudge the
+    // scroll position away from the top.
+    if (firstRoute && section === "directory-section") {
+      $("app-shell").scrollTop = 0;
+      $("main-content")?.scrollTo({ top: 0, behavior: "auto" });
+    } else if (routeChanged || smooth) {
+      window.setTimeout(() => scrollToSection(`#${section}`, smooth), 0);
+    }
   } else if (route.view === "environment") {
     state.navigationScrollCleanup?.();
     state.navigationTarget = null;
@@ -491,9 +507,9 @@ function scrollToSection(targetSelector, smooth) {
   state.navigationTarget = navigationKey;
   setActiveNavigation(navigationKey);
   $("app-shell").scrollTop = 0;
-  const top = main.scrollTop + target.getBoundingClientRect().top - main.getBoundingClientRect().top - 24;
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const useSmoothScroll = smooth && !reducedMotion;
+  const targetTop = () => Math.max(0, main.scrollTop + target.getBoundingClientRect().top - main.getBoundingClientRect().top - 24);
   let settleTimer = null;
   const releaseNavigationLock = () => {
     if (settleTimer) window.clearTimeout(settleTimer);
@@ -509,10 +525,34 @@ function scrollToSection(targetSelector, smooth) {
     settleTimer = window.setTimeout(releaseNavigationLock, 140);
   };
   state.navigationScrollCleanup = releaseNavigationLock;
+  if (!useSmoothScroll) {
+    main.scrollTo({ top: targetTop(), behavior: "auto" });
+    window.requestAnimationFrame(releaseNavigationLock);
+    return;
+  }
+  // Drive the smooth scroll ourselves so the destination is re-measured on every
+  // frame. Otherwise the native smooth scroll commits against the scroll range
+  // as it existed when the animation began; if content above the target shifts
+  // (the plan list growing after generation), the view strands at the target's
+  // previous, higher offset instead of reaching the section.
+  const duration = 420;
+  const startTop = main.scrollTop;
+  const startTime = (window.performance?.now?.() ?? Date.now());
+  const animate = (now) => {
+    const elapsed = (now ?? (window.performance?.now?.() ?? Date.now())) - startTime;
+    const progress = Math.min(1, elapsed / duration);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    const dest = targetTop();
+    if (progress < 1 && Math.abs(dest - startTop) > 1) {
+      main.scrollTo({ top: startTop + (dest - startTop) * eased, behavior: "auto" });
+      window.requestAnimationFrame(animate);
+      return;
+    }
+    main.scrollTo({ top: dest, behavior: "auto" });
+    handleProgrammaticScroll();
+  };
   main.addEventListener("scroll", handleProgrammaticScroll, { passive: true });
-  main.scrollTo({ top: Math.max(0, top), behavior: useSmoothScroll ? "smooth" : "auto" });
-  if (useSmoothScroll) handleProgrammaticScroll();
-  else window.requestAnimationFrame(releaseNavigationLock);
+  window.requestAnimationFrame(animate);
 }
 
 function setActiveNavigation(target) {
