@@ -1442,6 +1442,46 @@ p {
   white-space: nowrap;
 }
 
+.plan-meta {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.plan-output {
+  color: var(--color-text-secondary);
+  font-weight: 550;
+}
+
+.plan-collapse {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: color-mix(in srgb, var(--color-border) 55%, transparent);
+  color: var(--color-text-secondary);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.plan-collapse:hover { background: var(--color-brand); color: #fff; }
+
+.card-heading { flex: 1 1 auto; min-width: 0; }
+
+.plan-card.collapsed > *:not(.card-title) { display: none; }
+
+.plan-card-disabled { opacity: 0.72; }
+
+.plan-skipped-note { margin-top: 4px; color: var(--color-text-tertiary); font-size: 12px; }
+
 .confirm-dialog.danger .dialog-mark {
   background: var(--color-danger-surface);
   color: var(--color-danger-text);

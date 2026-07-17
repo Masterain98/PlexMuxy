@@ -7,6 +7,7 @@ const state = {
   lastNonSubsetFontMode: "all",
   planEdits: new Map(), jobs: [], queuePaused: false, activePreviewId: null,
   planSaving: false, planSaveError: null,
+  planOrder: null, planData: null, collapsedCards: new Set(),
   dependencyDrafts: { mkvmerge: null, ffmpeg: null, unrar: null }, dependencyBusy: {},
   currentDiagnosticsJobId: null,
 };
@@ -727,13 +728,30 @@ async function runPlanSave() {
     payload.base_plan_id = state.planReport.snapshot.plan_id;
     payload.plan_edits = edits.map(({ pristine, ...edit }) => edit);
     const report = await callApi("update_plan_draft", payload);
+    // The backend recomputes the plan list, moving disabled plans (unchecked
+    // "include" toggle) into `skipped_files`. Adopt the fresh lists so the top
+    // counts stay accurate.
+    const prevPlanIds = new Set((state.planReport.plans || []).map((p) => p.source_video));
     state.planReport.job_id = report.job_id;
     state.planReport.snapshot = report.snapshot;
+    state.planReport.plans = report.plans;
+    state.planReport.skipped_files = report.skipped_files;
     (report.plans || []).forEach((plan) => {
       const edit = state.planEdits.get(plan.source_video);
       if (edit) edit.revision = Number(plan.edit_revision || 0);
     });
-    renderPlanSummary(state.planReport);
+    // Toggling a plan in/out changes membership, so rebuild the cards (the
+    // disabled one moves to the skipped section). Other edits only change plan
+    // contents, so refreshing the summary is enough and avoids disrupting
+    // in-progress text inputs.
+    const nextPlanIds = new Set((report.plans || []).map((p) => p.source_video));
+    const membershipChanged = prevPlanIds.size !== nextPlanIds.size || [...prevPlanIds].some((id) => !nextPlanIds.has(id));
+    // Auto-collapse plans that just became disabled (rendered inline as a minimal
+    // card); expand plans that were just re-enabled.
+    [...prevPlanIds].filter((id) => !nextPlanIds.has(id)).forEach((id) => state.collapsedCards.add(id));
+    [...nextPlanIds].filter((id) => !prevPlanIds.has(id)).forEach((id) => state.collapsedCards.delete(id));
+    if (membershipChanged) renderPlans(state.planReport);
+    else renderPlanSummary(state.planReport);
     if (report.error) showError(`${report.error_code || "PLAN_ERROR"}: ${report.error}`);
   } catch (error) {
     setPlanSaveStatus("error", error.message);
@@ -1181,11 +1199,63 @@ function formatBytes(value) {
 function renderPlans(report) {
   const container = $("plans"); clear(container);
   state.planSaving = false;
-  if (!report) { clearTimeout(planSaveTimer); planSaveInFlight = false; planSaveDirty = false; state.planSaving = false; state.planSaveError = null; clear($("plan-summary")); setPlanSaveStatus("idle"); return empty(container, "03", t("plan.empty.title"), t("plan.empty.detail")); }
+  if (!report) {
+    clearTimeout(planSaveTimer); planSaveInFlight = false; planSaveDirty = false; state.planSaving = false; state.planSaveError = null;
+    clear($("plan-summary")); setPlanSaveStatus("idle"); state.planOrder = null; state.planData = null;
+    return empty(container, "03", t("plan.empty.title"), t("plan.empty.detail"));
+  }
+  // Keep the latest full plan data for every source so a disabled plan can still
+  // be rendered in place (and re-expanded instantly) instead of jumping to a
+  // bottom section.
+  state.planData = state.planData || new Map();
+  (report.plans || []).forEach((plan) => state.planData.set(plan.source_video, plan));
+  const disabledSources = new Map(
+    (report.skipped_files || []).filter((s) => s.reason === "disabled_by_user").map((s) => [s.path, s])
+  );
+  syncPlanOrder(report, disabledSources);
   renderPlanSummary(report);
-  report.plans.forEach((plan) => container.append(renderPlanCard(plan)));
-  if (report.skipped_files.length) container.append(renderSkippedFiles(report.skipped_files, t("plan.skippedFiles")));
+  state.planOrder.forEach((source) => {
+    if (disabledSources.has(source)) {
+      const cached = state.planData.get(source);
+      if (cached) { container.append(renderPlanCard(cached, { collapsed: true, disabled: true })); return; }
+      container.append(renderDisabledPlanCard(disabledSources.get(source)));
+      return;
+    }
+    const plan = state.planData.get(source);
+    if (plan) container.append(renderPlanCard(plan, { collapsed: state.collapsedCards.has(source) }));
+  });
+  const topSkipped = (report.skipped_files || []).filter((s) => s.reason !== "disabled_by_user");
+  if (topSkipped.length) container.append(trackBox(t("plan.skippedFiles"), topSkipped, (item) => itemNode(item.name, `${item.reason} / ${item.stage}`)));
   container.className = "stack"; if (!container.childNodes.length) empty(container, "03", t("plan.empty.noPlansTitle"), t("plan.empty.noPlansDetail"));
+}
+
+// Keep a stable, ordered list of sources (active plans + in-place disabled ones)
+// so a disabled plan stays where it was instead of jumping to the bottom.
+function syncPlanOrder(report, disabledSources) {
+  const current = [...(report.plans || []).map((p) => p.source_video), ...disabledSources.keys()];
+  const existing = state.planOrder || [];
+  const seen = new Set();
+  const ordered = [];
+  for (const source of existing) {
+    if ((report.plans || []).some((p) => p.source_video === source) || disabledSources.has(source)) {
+      ordered.push(source); seen.add(source);
+    }
+  }
+  for (const source of current) if (!seen.has(source)) { ordered.push(source); seen.add(source); }
+  state.planOrder = ordered;
+}
+
+function setCardCollapsed(source, collapsed) {
+  const card = [...document.querySelectorAll(".plan-card")].find((el) => el.dataset.source === source);
+  if (!card) return;
+  card.classList.toggle("collapsed", collapsed);
+  if (collapsed) state.collapsedCards.add(source); else state.collapsedCards.delete(source);
+}
+
+function togglePlanCollapse(source) {
+  const card = [...document.querySelectorAll(".plan-card")].find((el) => el.dataset.source === source);
+  if (!card) return;
+  setCardCollapsed(source, !card.classList.contains("collapsed"));
 }
 
 function renderPlanSummary(report) {
@@ -1218,15 +1288,56 @@ function renderPlanSummary(report) {
   setPlanSaveStatus("idle");
 }
 
-function renderPlanCard(plan) {
-  const article = element("article", "plan-card");
-  const title = element("div", "card-title"); const heading = element("div");
-  heading.append(element("h4", "", plan.source_video_name), element("div", "file-path", plan.source_video));
+function dirnameOf(path) {
+  const normalized = String(path).replace(/\\/g, "/");
+  const idx = normalized.lastIndexOf("/");
+  return idx <= 0 ? "" : normalized.slice(0, idx);
+}
+
+function basenameOf(path) {
+  const normalized = String(path).replace(/\\/g, "/");
+  const idx = normalized.lastIndexOf("/");
+  return idx < 0 ? String(path) : normalized.slice(idx + 1);
+}
+
+function renderPlanCard(plan, { collapsed = false, disabled = false } = {}) {
+  const article = element("article", "plan-card" + (collapsed ? " collapsed" : "") + (disabled ? " plan-card-disabled" : ""));
+  article.dataset.source = plan.source_video;
+
+  // Header: source filename plus the include-video toggle. The long source path
+  // is shown once below (as the source folder) to avoid repeating the filename.
+  const title = element("div", "card-title");
+  const toggle = element("button", "plan-collapse", collapsed ? "▸" : "▾");
+  toggle.type = "button"; toggle.title = t("plan.toggleCollapse");
+  toggle.addEventListener("click", () => togglePlanCollapse(plan.source_video));
+  const heading = element("div", "card-heading");
+  heading.append(element("h4", "", plan.source_video_name));
   const enabledLabel = element("label", "plan-enabled toggle-row");
   const enabled = element("input"); enabled.type = "checkbox"; enabled.checked = currentPlanEdit(plan).enabled;
-  enabled.addEventListener("change", () => { const edit = currentPlanEdit(plan); edit.enabled = enabled.checked; touchEdit(edit, article); });
-  enabledLabel.append(enabled, element("span", "", t("plan.includeVideo")), badge(plan.output_name, "info"));
-  title.append(heading, enabledLabel); article.append(title, element("div", "file-path", t("plan.output", { path: plan.output_path })));
+  enabled.addEventListener("change", () => {
+    const edit = currentPlanEdit(plan);
+    edit.enabled = enabled.checked;
+    touchEdit(edit, article);
+    // Immediate feedback: collapse on disable, expand on enable, and grey out
+    // disabled cards — without waiting for the edit to be saved.
+    article.classList.toggle("plan-card-disabled", !enabled.checked);
+    setCardCollapsed(plan.source_video, !enabled.checked);
+  });
+  enabledLabel.append(enabled, element("span", "", t("plan.includeVideo")));
+  title.append(toggle, heading, enabledLabel);
+  if (disabled) title.append(badge(t("plan.disabledBadge"), "warn"));
+  article.append(title);
+
+  // Source folder + compact output name. When the output lands in the same
+  // folder as the source, show only the output filename instead of the full path
+  // (the directory is already implied by the source folder above).
+  const sourceDir = dirnameOf(plan.source_video);
+  const outputDir = dirnameOf(plan.output_path);
+  const outputDisplay = sourceDir && outputDir === sourceDir ? basenameOf(plan.output_path) : plan.output_path;
+  const meta = element("div", "plan-meta");
+  if (sourceDir) meta.append(element("div", "file-path plan-source", t("plan.sourceFolder", { path: sourceDir })));
+  meta.append(element("div", "file-path plan-output", t("plan.output", { path: outputDisplay })));
+  article.append(meta);
   const grid = element("div", "track-grid");
   grid.append(
     editableExternalBox(plan, "subtitle"),
@@ -1445,6 +1556,35 @@ function trackBox(title, items, renderer) {
 }
 
 function renderSkippedFiles(skipped, title) { return trackBox(title, skipped, (item) => itemNode(item.name, `${item.reason} / ${item.stage}`)); }
+
+// Minimal fallback for a disabled plan whose full data is not cached (rare);
+// the normal path renders a disabled plan as a full in-place card instead.
+function renderDisabledPlanCard(skip) {
+  const article = element("article", "plan-card plan-card-disabled");
+  article.dataset.source = skip.path;
+  const title = element("div", "card-title");
+  const heading = element("div", "card-heading");
+  heading.append(element("h4", "", skip.name));
+  const enabledLabel = element("label", "plan-enabled toggle-row");
+  const enabled = element("input"); enabled.type = "checkbox"; enabled.checked = false;
+  enabled.addEventListener("change", () => reincludeDisabledPlan(skip.path));
+  enabledLabel.append(enabled, element("span", "", t("plan.includeVideo")));
+  title.append(heading, enabledLabel);
+  article.append(title);
+  article.append(element("div", "file-path plan-skipped-note", t("plan.disabledNote")));
+  return article;
+}
+
+// A plan disabled via the "include" toggle is re-included by checking its
+// checkbox on the (collapsed) disabled card; see renderDisabledPlanCard.
+function reincludeDisabledPlan(sourceVideo) {
+  const edit = state.planEdits.get(sourceVideo);
+  if (!edit) return;
+  edit.enabled = true;
+  delete edit.pristine;
+  markPlanEdited(null);
+  schedulePlanSave();
+}
 
 function renderResults(report) {
   const container = $("results"); clear(container); clear($("result-summary"));
