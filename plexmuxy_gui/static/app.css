@@ -442,7 +442,6 @@ p {
   min-height: 0;
   border-right: 1px solid var(--color-border);
   background: var(--color-sidebar);
-  backdrop-filter: blur(12px);
   transition: width var(--duration-normal) var(--ease-emphasized), transform var(--duration-normal) var(--ease-emphasized), background-color var(--duration-normal) var(--ease-standard);
 }
 
@@ -632,7 +631,6 @@ p {
   border-bottom: 1px solid var(--color-border);
   padding: 0 20px 0 24px;
   background: var(--color-topbar);
-  backdrop-filter: blur(12px);
 }
 
 .topbar-leading,
@@ -861,7 +859,14 @@ p {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  scroll-behavior: smooth;
+  /* `scroll-behavior: smooth` and the default scroll-anchoring caused a
+     layout self-invalidation loop on focus (a single node re-dirtied ~hundreds
+     of times, each triggering a full-frame layout of ~5100 objects). Smooth
+     focus-scroll-into-view animated across frames and re-targeted when layout
+     shifted; anchoring re-dirtied the anchor node. Both disabled here. The JS
+     nav still passes `behavior` explicitly to scrollTo, so nav scrolls are
+     unaffected. */
+  overflow-anchor: none;
   scrollbar-color: var(--color-text-tertiary) transparent;
   scrollbar-width: thin;
   background:
@@ -1379,6 +1384,50 @@ p {
   padding: 16px;
   background: var(--color-canvas-soft);
   box-shadow: var(--shadow-media);
+  /* ----------------------------------------------------------------------
+   * PERF — subtitle-metadata input lag in large plan lists (24+ episodes).
+   * Status: mitigated to "acceptable light lag"; NOT fully resolved. Shelved.
+   * ----------------------------------------------------------------------
+   * Symptom: clicking into a subtitle metadata text field (focus) still has
+   * perceptible lag; typing/deleting is smooth. Before mitigation the worst
+   * case was multi-second freezes. Root cause is renderer Layout thrash on the
+   * plan list — NOT our JS (event handlers measure ~0ms; DevTools traces
+   * showed up to ~4.8s of full-frame `performLayout` passes, a single node
+   * self-invalidating layout ~1600x per recording).
+   *
+   * Landmines (verified by traces + live A/B) — do NOT reintroduce:
+   *  1. `content-visibility: auto` is REQUIRED here. Removing it regresses
+   *     catastrophically (~2s per focus) because all 24 heavy cards render and
+   *     each gets laid out on every interaction.
+   *  2. An EXPLICIT `contain: layout paint style` is FORBIDDEN on this rule.
+   *     Combined with CVV it caused a 165-iteration layout loop on focus: the
+   *     focused card (trace "nodeId 110") self-invalidated layout repeatedly
+   *     through CVV's re-evaluation. CVV already implies the needed containment,
+   *     so explicit `contain` is both redundant and harmful.
+   *     A/B results: CVV-only (this config) = fastest;
+   *     explicit-contain WITHOUT CVV = catastrophic; both removed = middle.
+   *  3. `.main` must NOT use `scroll-behavior: smooth` (focus-scroll animation
+   *     loop) and uses `overflow-anchor: none` (scroll-anchor re-dirtying).
+   *  4. `.sidebar`/`.topbar` `backdrop-filter` was removed as a precaution; it
+   *     is NOT the focus culprit and may be restored for the frosted look.
+   *  5. An injected "AdGuard Popup Blocker" userscript forced layout on every
+   *     animation frame (external; users must exclude 127.0.0.1 in AdGuard).
+   *
+   * Residual: light focus-click lag from CVV re-evaluation when the focus
+   * target's subtree must be resolved. Accepted as the current trade-off.
+   *
+   * Future ideas when revisiting:
+   *  - Virtualize the plan list (render only visible cards) instead of CVV.
+   *  - Lazy-render heavy sub-sections (e.g., the font attachments list, which
+   *    can be 20+ rows per card) behind a collapsible/lazy region, or apply
+   *    CVV to those inner heavy blocks rather than whole cards.
+   *  - Re-test with a newer WebView2/Chromium; CVV+focus behavior may improve.
+   *  - Record a trace with invalidation tracking (if a future DevTools build
+   *    exposes it again) to map the self-invalidating node to a precise
+   *    element/selector and finish this off.
+   * ---------------------------------------------------------------------- */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 240px;
 }
 
 .plan-card.has-edits { border-color: color-mix(in srgb, var(--color-brand) 55%, var(--color-border)); }
@@ -1408,7 +1457,22 @@ p {
 .decision-reason { color: var(--color-text-tertiary); font-size: 12px; }
 .source-track-controls { display: flex; align-items: center; gap: 8px; }
 .track-order-controls { display: inline-flex; gap: 4px; margin-left: auto; }
+.track-drag-handle { cursor: grab; user-select: none; align-self: center; display: inline-flex; align-items: center; color: var(--color-text-tertiary); padding: 0 6px; line-height: 0; }
+.track-drag-handle svg { display: block; }
+.track-drag-handle:active { cursor: grabbing; }
+.audio-row.dragging, li.dragging { opacity: 0.4; }
+.audio-row.drop-target { border-top-color: var(--color-brand); }
 .editable-track { align-items: start; }
+.audio-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 9px; border-top: 1px solid var(--color-divider); padding: 10px 0; }
+.audio-row .source-track-copy { display: grid; gap: 3px; }
+.audio-row .track-check { align-items: flex-start; }
+.audio-row .track-order-controls { margin-left: 0; }
+.audio-row .badge { margin-top: 2px; }
+/* 字幕 / 音频 are track rows, so they keep a divider under the heading and
+   between every row. 字体 is a plain attachment list: it gets a single divider
+   directly under the heading (first item only), not between each filename. */
+.plan-card .editable-track { border-top: 1px solid var(--color-divider); padding: 10px 0; }
+.plan-card .track-box.attachments-box .item-list > li:first-child { border-top: 1px solid var(--color-divider); padding-top: 10px; }
 .compact-settings { margin-bottom: 18px; }
 .setting-row textarea { width: min(520px, 100%); resize: vertical; }
 .audio-preview { grid-column: 1 / -1; width: 100%; height: 34px; }
@@ -1569,6 +1633,9 @@ p {
 }
 
 .track-box h5 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: var(--color-text-tertiary);
   font-size: 11px;
   font-weight: 600;

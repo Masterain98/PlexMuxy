@@ -1340,12 +1340,11 @@ function renderPlanCard(plan, { collapsed = false, disabled = false } = {}) {
   article.append(meta);
   const grid = element("div", "track-grid");
   grid.append(
-    editableExternalBox(plan, "subtitle"),
-    editableExternalBox(plan, "audio"),
-    trackBox(t("plan.fonts"), plan.attachments, (item) => document.createTextNode(item.name))
+    renderSubtitleSection(plan),
+    renderAudioSection(plan),
+    trackBox(t("plan.fonts"), plan.attachments, (item) => document.createTextNode(item.name), t("plan.attachmentCount", { count: plan.attachments.length }), "attachments-box")
   );
   article.append(grid);
-  if (plan.source_tracks?.some((track) => track.type === "audio")) article.append(renderSourceAudioTracks(plan));
   article.append(renderAvailableAssignments(plan));
   const subset = plan.font_subset_intent?.summary;
   if (subset) {
@@ -1391,79 +1390,157 @@ function markPlanEdited(cardEl) {
 
 function touchEdit(edit, cardEl) { delete edit.pristine; markPlanEdited(cardEl); schedulePlanSave(); }
 
-function editableExternalBox(plan, kind) {
+// Merges the external subtitle files (外挂) and the source container's own
+// subtitle tracks (已有) into a single "字幕" section, mirroring renderAudioSection.
+function renderSubtitleSection(plan) {
   const edit = currentPlanEdit(plan);
-  const items = kind === "subtitle" ? plan.subtitle_tracks : plan.audio_tracks;
-  const selectedKey = kind === "subtitle" ? "included_subtitles" : "included_external_audio";
-  const title = kind === "subtitle" ? t("plan.subtitles") : t("plan.audio");
-  const box = element("div", "track-box editable-track-box"); box.append(element("h5", "", title));
-  if (!items.length) { box.append(element("div", "file-path", t("plan.none"))); return box; }
+  const sourceSubs = (plan.source_tracks || []).filter((track) => track.type === "subtitle");
+  const externalSubs = plan.subtitle_tracks || [];
+  const box = element("div", "track-box editable-track-box");
+  box.append(boxHeader(t("plan.subtitles"), t("plan.trackCount", { count: sourceSubs.length + externalSubs.length })));
+  if (!sourceSubs.length && !externalSubs.length) {
+    box.append(element("div", "file-path", t("plan.none")));
+    return box;
+  }
   const list = element("ul", "item-list");
-  items.forEach((track) => {
-    const li = element("li", "editable-track"); li.dataset.trackPath = track.path;
+  // External subtitles (外挂): include toggle + reorder + metadata editor.
+  // Uses the same audio-row layout as external audio so the two sections match.
+  externalSubs.forEach((track) => {
+    const li = element("li", "audio-row"); li.dataset.trackPath = track.path;
     const label = element("label", "track-check");
-    const input = element("input"); input.type = "checkbox"; input.checked = edit[selectedKey].includes(track.path);
+    const input = element("input"); input.type = "checkbox"; input.checked = edit.included_subtitles.includes(track.path);
     input.addEventListener("change", () => {
-      edit[selectedKey] = input.checked
-        ? [...new Set([...edit[selectedKey], track.path])]
-        : edit[selectedKey].filter((path) => path !== track.path);
+      edit.included_subtitles = input.checked
+        ? [...new Set([...edit.included_subtitles, track.path])]
+        : edit.included_subtitles.filter((path) => path !== track.path);
       rebuildExternalOrder(edit);
       touchEdit(edit, li.closest(".plan-card"));
     });
-    label.append(input, kind === "subtitle" ? renderSubtitle(track) : renderAudio(track)); li.append(label);
-    const orderControls = element("span", "track-order-controls");
-    const up = element("button", "ghost compact track-order-up", t("plan.moveUp")); up.type = "button";
-    const down = element("button", "ghost compact track-order-down", t("plan.moveDown")); down.type = "button";
-    const move = (delta) => {
-      const order = edit[selectedKey];
-      const current = order.indexOf(track.path); if (current < 0) return;
-      const target = Math.max(0, Math.min(order.length - 1, current + delta));
-      if (target === current) return;
-      order.splice(current, 1); order.splice(target, 0, track.path);
-      rebuildExternalOrder(edit); touchEdit(edit, li.closest(".plan-card"));
-      if (delta > 0) list.insertBefore(li, li.nextElementSibling ? li.nextElementSibling.nextElementSibling : null);
-      else list.insertBefore(li, li.previousElementSibling);
-      syncTrackOrderButtons(list, edit, selectedKey);
-    };
-    up.addEventListener("click", () => move(-1)); down.addEventListener("click", () => move(1));
-    orderControls.append(up, down); li.append(orderControls);
-    if (kind === "subtitle") {
-      const details = element("details", "track-editor"); details.append(element("summary", "", t("plan.editMetadata")));
-      const fields = element("div", "track-editor-fields");
-      [
-        ["track_name", track.track_name], ["mkv_language", track.mkv_language], ["ietf_language", track.ietf_language],
-      ].forEach(([field, value]) => {
-        const fieldLabel = element("label", ""); fieldLabel.append(element("span", "", t(`plan.field.${field}`)));
-        const textInput = element("input"); textInput.type = "text"; textInput.value = value;
-        // Keep the in-memory edit current while typing, but only persist (and
-        // schedule a save) when the field is committed via change/blur.
-        textInput.addEventListener("input", () => syncSubtitleOverrideValue(edit, track, field, textInput.value));
-        textInput.addEventListener("change", () => updateSubtitleOverride(edit, track, field, textInput.value, li.closest(".plan-card")));
-        fieldLabel.append(textInput); fields.append(fieldLabel);
-      });
-      [["default_track", track.default_track], ["forced_track", track.forced_track]].forEach(([field, value]) => {
-        const flag = element("label", "track-flag"); const checkbox = element("input"); checkbox.type = "checkbox"; checkbox.checked = Boolean(value);
-        checkbox.addEventListener("change", () => updateSubtitleOverride(edit, track, field, checkbox.checked, li.closest(".plan-card")));
-        flag.append(checkbox, document.createTextNode(t(`plan.field.${field}`))); fields.append(flag);
-      });
-      details.append(fields); li.append(details);
-    }
+    const copy = element("div", "source-track-copy");
+    copy.append(badge(t("plan.audioExternal"), "info"), renderSubtitle(track));
+    label.append(input, copy); li.append(label, makeDraggable(li, list, edit, "included_subtitles"));
+    const details = element("details", "track-editor"); details.append(element("summary", "", t("plan.editMetadata")));
+    const fields = element("div", "track-editor-fields");
+    [
+      ["track_name", track.track_name], ["mkv_language", track.mkv_language], ["ietf_language", track.ietf_language],
+    ].forEach(([field, value]) => {
+      const fieldLabel = element("label", ""); fieldLabel.append(element("span", "", t(`plan.field.${field}`)));
+      const textInput = element("input"); textInput.type = "text"; textInput.value = value;
+      textInput.addEventListener("input", () => syncSubtitleOverrideValue(edit, track, field, textInput.value));
+      textInput.addEventListener("change", () => updateSubtitleOverride(edit, track, field, textInput.value, li.closest(".plan-card")));
+      fieldLabel.append(textInput); fields.append(fieldLabel);
+    });
+    [["default_track", track.default_track], ["forced_track", track.forced_track]].forEach(([field, value]) => {
+      const flag = element("label", "track-flag"); const checkbox = element("input"); checkbox.type = "checkbox"; checkbox.checked = Boolean(value);
+      checkbox.addEventListener("change", () => updateSubtitleOverride(edit, track, field, checkbox.checked, li.closest(".plan-card")));
+      flag.append(checkbox, document.createTextNode(t(`plan.field.${field}`))); fields.append(flag);
+    });
+    details.append(fields); li.append(details);
     list.append(li);
   });
-  box.append(list); return box;
+  // Source subtitles (已有): keep toggle + info.
+  sourceSubs.forEach((track) => {
+    const li = element("li", "audio-row");
+    const label = element("label", "track-check");
+    const input = element("input"); input.type = "checkbox";
+    const existingOverride = edit.source_track_overrides.find((item) => item.track_id === track.id);
+    input.checked = existingOverride ? existingOverride.included : track.included;
+    input.addEventListener("change", () => {
+      edit.source_track_overrides = edit.source_track_overrides.filter((item) => item.track_id !== track.id);
+      edit.source_track_overrides.push({ track_id: track.id, included: input.checked });
+      touchEdit(edit, li.closest(".plan-card"));
+    });
+    const copy = element("div", "source-track-copy");
+    copy.append(
+      badge(t("plan.audioSource"), "ok"),
+      element("strong", "", `${track.id} · ${track.title || t("plan.unknownTitle")}`),
+      element("span", "file-path", track.language || t("plan.unknownLanguage")),
+      element("span", "decision-reason", localizeEnum("track.reason", track.decision_reason))
+    );
+    label.append(input, copy);
+    li.append(label);
+    list.append(li);
+  });
+  box.append(list);
+  if (externalSubs.length) setupTrackDrag(list, edit, "included_subtitles");
+  return box;
 }
 
-function syncTrackOrderButtons(list, edit, selectedKey) {
-  const order = edit[selectedKey];
-  Array.from(list.children).forEach((li) => {
-    const path = li.dataset.trackPath; if (path === undefined) return;
-    const index = order.indexOf(path);
-    const up = li.querySelector(".track-order-up");
-    const down = li.querySelector(".track-order-down");
-    if (up) up.disabled = index <= 0;
-    if (down) down.disabled = index < 0 || index >= order.length - 1;
+// Drag-to-reorder for external (外挂) track rows. Only the grip handle is
+// draggable (NOT the whole <li>) — making the row itself draggable puts the
+// metadata text inputs inside a draggable ancestor, which makes Chromium lag
+// for several seconds on every focus/keystroke. Keeping the <li> non-draggable
+// avoids that entirely while the handle still drives the reorder. Source (已有)
+// rows have no data-track-path and act as a fixed boundary.
+function makeDraggable(li, list, edit, selectedKey) {
+  const handle = element("span", "track-drag-handle");
+  handle.title = t("plan.dragToReorder");
+  handle.setAttribute("aria-hidden", "true");
+  handle.innerHTML = '<svg viewBox="0 0 10 16" width="10" height="16" fill="currentColor" aria-hidden="true"><circle cx="2.5" cy="3" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="2.5" cy="13" r="1.5"/><circle cx="7.5" cy="3" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="7.5" cy="13" r="1.5"/></svg>';
+  handle.setAttribute("draggable", "true");
+  handle.addEventListener("dragstart", (e) => {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", li.dataset.trackPath || "");
+    // Build the drag ghost from a clone anchored at the cursor, so the preview
+    // stays under the pointer instead of snapping to the row's top-left corner.
+    const rect = li.getBoundingClientRect();
+    const ghost = li.cloneNode(true);
+    ghost.classList.remove("dragging");
+    ghost.style.width = `${rect.width}px`;
+    ghost.style.position = "fixed";
+    ghost.style.top = "-9999px";
+    ghost.style.left = "-9999px";
+    ghost.style.pointerEvents = "none";
+    document.body.appendChild(ghost);
+    try { e.dataTransfer.setDragImage(ghost, e.clientX - rect.left, e.clientY - rect.top); } catch (_) { /* setDragImage unsupported */ }
+    window.setTimeout(() => ghost.remove(), 0);
+    li.classList.add("dragging");
   });
+  handle.addEventListener("dragend", () => {
+    li.classList.remove("dragging");
+    const cardEl = li.closest(".plan-card");
+    const before = edit[selectedKey].join("\u0000");
+    const domOrder = [...list.querySelectorAll("li[data-track-path]")].map((el) => el.dataset.trackPath).filter(Boolean);
+    // Preserve inclusion state: only reorder the included paths to match the
+    // new visual order; excluded rows are ignored for the saved order.
+    const next = domOrder.filter((path) => edit[selectedKey].includes(path));
+    // Only persist when the order actually changed; no-op drags must not save.
+    if (next.join("\u0000") === before) return;
+    edit[selectedKey] = next;
+    rebuildExternalOrder(edit);
+    touchEdit(edit, cardEl);
+  });
+  return handle;
 }
+
+function getDragAfterElement(container, y) {
+  const els = [...container.querySelectorAll("li[data-track-path]:not(.dragging)")];
+  let closest = { offset: -Infinity, element: null };
+  for (const child of els) {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) closest = { offset, element: child };
+  }
+  return closest.element;
+}
+
+function setupTrackDrag(list, edit, selectedKey) {
+  list.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    const dragging = list.querySelector("li.dragging");
+    if (!dragging) return;
+    const after = getDragAfterElement(list, e.clientY);
+    const firstSource = list.querySelector("li:not([data-track-path])");
+    if (after == null) {
+      if (firstSource) list.insertBefore(dragging, firstSource);
+      else list.appendChild(dragging);
+    } else {
+      list.insertBefore(dragging, after);
+    }
+  });
+  list.addEventListener("drop", (e) => e.preventDefault());
+}
+
 
 function syncSubtitleOverrideValue(edit, track, field, value) {
   let override = edit.subtitle_metadata_overrides.find((item) => item.path === track.path);
@@ -1476,26 +1553,68 @@ function updateSubtitleOverride(edit, track, field, value, cardEl) {
   touchEdit(edit, cardEl);
 }
 
-function renderSourceAudioTracks(plan) {
-  const edit = currentPlanEdit(plan); const details = element("details", "source-track-panel");
-  const summary = element("summary", ""); summary.append(element("strong", "", t("plan.sourceAudio")), badge(t("plan.trackCount", { count: plan.source_tracks.filter((item) => item.type === "audio").length }), "info")); details.append(summary);
-  const list = element("div", "source-track-list");
-  plan.source_tracks.filter((track) => track.type === "audio").forEach((track) => {
-    const row = element("div", "source-track-row"); const copy = element("div", "source-track-copy");
-    copy.append(element("strong", "", `${track.id} · ${track.title || t("plan.unknownTitle")}`), element("span", "file-path", `${track.codec || "?"} / ${track.language || t("plan.unknownLanguage")} / ${track.channels || "?"}ch`), element("span", "decision-reason", localizeEnum("track.reason", track.decision_reason)));
-    const controls = element("div", "source-track-controls"); const keep = element("label", "track-check"); const input = element("input"); input.type = "checkbox";
+// Merges both the external audio files (外挂) and the source container's own
+// audio tracks (已有) into a single "音频" section, distinguishing them with a
+// badge instead of splitting them across two separate panels.
+function renderAudioSection(plan) {
+  const edit = currentPlanEdit(plan);
+  const sourceAudio = (plan.source_tracks || []).filter((track) => track.type === "audio");
+  const externalAudio = plan.audio_tracks || [];
+  const box = element("div", "track-box editable-track-box");
+  box.append(boxHeader(t("plan.audio"), t("plan.trackCount", { count: sourceAudio.length + externalAudio.length })));
+  if (!sourceAudio.length && !externalAudio.length) {
+    box.append(element("div", "file-path", t("plan.none")));
+    return box;
+  }
+  const list = element("ul", "item-list");
+  // External audio (外挂): include toggle + reorder controls.
+  externalAudio.forEach((track) => {
+    const li = element("li", "audio-row"); li.dataset.trackPath = track.path;
+    const label = element("label", "track-check");
+    const input = element("input"); input.type = "checkbox";
+    input.checked = edit.included_external_audio.includes(track.path);
+    input.addEventListener("change", () => {
+      edit.included_external_audio = input.checked
+        ? [...new Set([...edit.included_external_audio, track.path])]
+        : edit.included_external_audio.filter((path) => path !== track.path);
+      rebuildExternalOrder(edit);
+      touchEdit(edit, li.closest(".plan-card"));
+    });
+    const copy = element("div", "source-track-copy");
+    copy.append(badge(t("plan.audioExternal"), "info"), renderAudio(track));
+    label.append(input, copy);
+    li.append(label, makeDraggable(li, list, edit, "included_external_audio"));
+    list.append(li);
+  });
+  // Source audio (已有): keep toggle + preview.
+  sourceAudio.forEach((track) => {
+    const li = element("li", "audio-row");
+    const label = element("label", "track-check");
+    const input = element("input"); input.type = "checkbox";
     const existingOverride = edit.source_track_overrides.find((item) => item.track_id === track.id);
     input.checked = existingOverride ? existingOverride.included : track.included;
     input.addEventListener("change", () => {
       edit.source_track_overrides = edit.source_track_overrides.filter((item) => item.track_id !== track.id);
-      edit.source_track_overrides.push({ track_id: track.id, included: input.checked }); touchEdit(edit, row.closest(".plan-card"));
-    }); keep.append(input, document.createTextNode(t("plan.keepTrack")));
+      edit.source_track_overrides.push({ track_id: track.id, included: input.checked });
+      touchEdit(edit, li.closest(".plan-card"));
+    });
+    const copy = element("div", "source-track-copy");
+    copy.append(
+      badge(t("plan.audioSource"), "ok"),
+      element("strong", "", `${track.id} · ${track.title || t("plan.unknownTitle")}`),
+      element("span", "file-path", `${track.codec || "?"} / ${track.language || t("plan.unknownLanguage")} / ${track.channels || "?"}ch`),
+      element("span", "decision-reason", localizeEnum("track.reason", track.decision_reason))
+    );
+    label.append(input, copy);
     const preview = element("button", "ghost compact", t("plan.preview")); preview.type = "button";
     preview.disabled = !state.config?.ffmpeg?.available;
-    preview.addEventListener("click", () => previewAudioTrack(plan, track, row, preview));
-    controls.append(keep, preview); row.append(copy, controls); list.append(row);
+    preview.addEventListener("click", () => previewAudioTrack(plan, track, li, preview));
+    li.append(label, preview);
+    list.append(li);
   });
-  details.append(list); return details;
+  box.append(list);
+  if (externalAudio.length) setupTrackDrag(list, edit, "included_external_audio");
+  return box;
 }
 
 async function previewAudioTrack(plan, track, row, button) {
@@ -1549,8 +1668,14 @@ function renderSubtitle(track) {
 function renderAudio(track) { return itemNode(track.name, track.match_reason); }
 function itemNode(text, detail) { const node = element("div", "", text); if (detail) node.append(element("div", "file-path", detail)); return node; }
 
-function trackBox(title, items, renderer) {
-  const box = element("div", "track-box"); box.append(element("h5", "", title));
+function boxHeader(title, countText) {
+  const head = element("h5", "", title);
+  if (countText) head.append(badge(countText, "info"));
+  return head;
+}
+
+function trackBox(title, items, renderer, countText, boxClass) {
+  const box = element("div", "track-box" + (boxClass ? " " + boxClass : "")); box.append(boxHeader(title, countText));
   if (!items?.length) { box.append(element("div", "file-path", t("plan.none"))); return box; }
   const list = element("ul", "item-list"); items.forEach((item) => { const li = element("li"); li.append(renderer(item)); list.append(li); }); box.append(list); return box;
 }
@@ -1681,10 +1806,10 @@ function updateRunButton() {
   });
   if (!busy) updateOptionAvailability();
 }
+// All errors surface as non-blocking toasts so the UI never yanks the user's
+// scroll position or forces them to a top "needs attention" panel mid-task.
 function showError(message) {
-  setText("alert-message", message); $("alert").classList.remove("hidden");
-  $("app-shell").scrollTop = 0; $("main-content").scrollTo({ top: 0, behavior: "auto" });
-  $("alert").focus({ preventScroll: true });
+  showToast(message, "error", t("error.title"), null, 9000);
 }
 function clearError() { setText("alert-message", ""); $("alert").classList.add("hidden"); }
 function setLoading(value, messageKey = "activity.working") {
