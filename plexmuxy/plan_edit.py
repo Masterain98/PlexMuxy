@@ -71,8 +71,8 @@ def plan_edits_from_payload(payload: Any) -> dict[Path, PlanEdit]:
                 item.get("subtitle_metadata_overrides", []), index
             ),
             external_track_order=_payload_strings(item.get("external_track_order", []), index),
-            extra_subtitles=_payload_paths(item, "extra_subtitles", index),
-            extra_audio=_payload_paths(item, "extra_audio", index),
+            extra_subtitles=_payload_paths(item, "extra_subtitles", index) or (),
+            extra_audio=_payload_paths(item, "extra_audio", index) or (),
         )
     return result
 

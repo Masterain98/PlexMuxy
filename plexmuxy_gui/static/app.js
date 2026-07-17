@@ -1596,7 +1596,20 @@ function makeDraggable(li, list, edit, selectedKey) {
   const handle = element("span", "track-drag-handle");
   handle.title = t("plan.dragToReorder");
   handle.setAttribute("aria-hidden", "true");
-  handle.innerHTML = '<svg viewBox="0 0 10 16" width="10" height="16" fill="currentColor" aria-hidden="true"><circle cx="2.5" cy="3" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="2.5" cy="13" r="1.5"/><circle cx="7.5" cy="3" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="7.5" cy="13" r="1.5"/></svg>';
+  const handleSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  handleSvg.setAttribute("viewBox", "0 0 10 16");
+  handleSvg.setAttribute("width", "10");
+  handleSvg.setAttribute("height", "16");
+  handleSvg.setAttribute("fill", "currentColor");
+  handleSvg.setAttribute("aria-hidden", "true");
+  [[2.5, 3], [2.5, 8], [2.5, 13], [7.5, 3], [7.5, 8], [7.5, 13]].forEach(([cx, cy]) => {
+    const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    dot.setAttribute("cx", String(cx));
+    dot.setAttribute("cy", String(cy));
+    dot.setAttribute("r", "1.5");
+    handleSvg.appendChild(dot);
+  });
+  handle.appendChild(handleSvg);
   handle.setAttribute("draggable", "true");
   handle.addEventListener("dragstart", (e) => {
     e.dataTransfer.effectAllowed = "move";
@@ -1971,7 +1984,14 @@ function decisionReasonSpan(reason) {
   return element("span", "decision-reason", localizeEnum("track.reason", reason));
 }
 function element(tag, className = "", text = null) { const node = document.createElement(tag); if (className) node.className = className; if (text !== null) node.textContent = String(text); return node; }
-function iconSvg(name) { const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("class", "icon"); svg.innerHTML = `<use href="#${name}"></use>`; return svg; }
+function iconSvg(name) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "icon");
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", `#${name}`);
+  svg.appendChild(use);
+  return svg;
+}
 function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
 function empty(container, number, title, detail) {
   clear(container); container.className = "stack empty-state";
