@@ -264,6 +264,48 @@ def test_save_settings_persists_font_subset_mode(monkeypatch, tmp_path):
     assert response["data"]["font"]["mode"] == "subset"
 
 
+def test_get_preferences_returns_defaults_when_missing(monkeypatch, tmp_path):
+    monkeypatch.setattr("plexmuxy_gui.preferences.resolve_config_path", lambda path=None: tmp_path / "config.json")
+    api = PlexMuxyApi()
+
+    response = api.get_preferences()
+
+    assert response["ok"] is True
+    assert response["data"] == {"theme": "system", "locale": "system"}
+
+
+def test_save_preferences_persists_and_round_trips(monkeypatch, tmp_path):
+    monkeypatch.setattr("plexmuxy_gui.preferences.resolve_config_path", lambda path=None: tmp_path / "config.json")
+    api = PlexMuxyApi()
+
+    saved = api.save_preferences({"theme": "dark", "locale": "zh-CN"})
+
+    assert saved["ok"] is True
+    assert saved["data"] == {"theme": "dark", "locale": "zh-CN"}
+    assert (tmp_path / "gui-preferences.json").exists()
+    assert api.get_preferences()["data"] == {"theme": "dark", "locale": "zh-CN"}
+
+
+def test_save_preferences_merges_partial_updates(monkeypatch, tmp_path):
+    monkeypatch.setattr("plexmuxy_gui.preferences.resolve_config_path", lambda path=None: tmp_path / "config.json")
+    api = PlexMuxyApi()
+
+    api.save_preferences({"theme": "light", "locale": "ru"})
+    merged = api.save_preferences({"theme": "dark"})
+
+    assert merged["data"] == {"theme": "dark", "locale": "ru"}
+
+
+def test_save_preferences_rejects_invalid_values(monkeypatch, tmp_path):
+    monkeypatch.setattr("plexmuxy_gui.preferences.resolve_config_path", lambda path=None: tmp_path / "config.json")
+    api = PlexMuxyApi()
+
+    response = api.save_preferences({"theme": "neon"})
+
+    assert response["ok"] is False
+    assert not (tmp_path / "gui-preferences.json").exists()
+
+
 def test_choose_dependency_uses_open_picker_and_validates_allowlist(tmp_path, monkeypatch):
     executable = tmp_path / "ffmpeg.exe"
     executable.write_bytes(b"stub")

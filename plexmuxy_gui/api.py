@@ -58,6 +58,7 @@ from plexmuxy.tool_downloads import install_unrar_from_rarlab as acquire_unrar_f
 from plexmuxy.update_check import check_for_updates
 
 from .notifications import NativeNotifier
+from .preferences import load_preferences, save_preferences
 
 DEPENDENCY_RESOLVERS: dict[str, Callable[[str], DependencyResolution]] = {
     "mkvmerge": resolve_mkvmerge,
@@ -306,6 +307,12 @@ class PlexMuxyApi:
             return self.ok(config_summary(config, self._notifier))
 
         return self.guarded(run)
+
+    def get_preferences(self) -> dict[str, Any]:
+        return self.guarded(lambda: self.ok(load_preferences()))
+
+    def save_preferences(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.guarded(lambda: self.ok(save_preferences(payload if isinstance(payload, dict) else {})))
 
     def init_config(self, force: bool = False) -> dict[str, Any]:
         def run() -> dict[str, Any]:

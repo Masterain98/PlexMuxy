@@ -24,6 +24,7 @@ window.addEventListener("pywebviewready", async () => {
   bindEvents();
   initializeCustomSelects();
   initializeTheme();
+  await syncPreferencesFromBackend();
   initializeNavigation();
   await initialize();
 });
@@ -130,9 +131,38 @@ async function initializeLocaleControls() {
 }
 
 async function chooseLocale(event) {
-  await window.PlexMuxyI18n?.setLocale(event.currentTarget.dataset.localeMode);
+  const mode = event.currentTarget.dataset.localeMode;
+  await window.PlexMuxyI18n?.setLocale(mode);
+  persistPreference({ locale: mode });
   const menu = $("language-menu");
   if (menu) menu.open = false;
+}
+
+// Persist appearance/language choices through the Python backend so they survive
+// restarts. pywebview's http_server binds a random port each launch, which
+// changes the page origin and makes localStorage (isolated per-origin)
+// unreliable for cross-session persistence; the backend file is authoritative.
+function persistPreference(payload) {
+  if (!window.pywebview?.api?.save_preferences) return;
+  callApi("save_preferences", payload).catch(() => { /* Preference persistence is best-effort. */ });
+}
+
+async function syncPreferencesFromBackend() {
+  if (!window.pywebview?.api?.get_preferences) return;
+  let preferences;
+  try { preferences = await callApi("get_preferences"); }
+  catch (_) { return; }
+  if (!preferences) return;
+
+  if (["system", "light", "dark"].includes(preferences.theme) && preferences.theme !== state.themeMode) {
+    applyTheme(preferences.theme, false);
+  }
+  try { localStorage.setItem(THEME_STORAGE_KEY, state.themeMode); } catch (_) { /* Cache is optional. */ }
+
+  const currentLocaleMode = window.PlexMuxyI18n?.getMode();
+  if (window.PlexMuxyI18n && ["system", "en", "zh-CN", "zh-TW", "ru"].includes(preferences.locale) && preferences.locale !== currentLocaleMode) {
+    await window.PlexMuxyI18n.setLocale(preferences.locale);
+  }
 }
 
 function syncLocaleControls() {
@@ -353,6 +383,7 @@ function applyTheme(mode, userInitiated) {
     document.documentElement.classList.add("theme-transition");
     window.setTimeout(() => document.documentElement.classList.remove("theme-transition"), 240);
     try { localStorage.setItem(THEME_STORAGE_KEY, mode); } catch (_) { /* Keep the in-memory choice. */ }
+    persistPreference({ theme: mode });
   }
   document.documentElement.dataset.themeMode = mode;
   document.documentElement.dataset.theme = resolved;
