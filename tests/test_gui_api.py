@@ -175,7 +175,7 @@ def test_plan_job_uses_service_and_serializes_report(monkeypatch, tmp_path):
 
     monkeypatch.setattr("plexmuxy_gui.api.load_or_default_config", default_config)
 
-    def fake_run_mux_job(input_dir, config, dry_run, yes):
+    def fake_run_mux_job(input_dir, config, dry_run, yes, **kwargs):
         calls.append({"input_dir": input_dir, "dry_run": dry_run, "yes": yes})
         return JobReport(input_dir=input_dir, plans=[plan])
 
@@ -225,7 +225,7 @@ def test_run_job_uses_service_and_serializes_report(monkeypatch, tmp_path):
 
     monkeypatch.setattr("plexmuxy_gui.api.load_or_default_config", default_config)
 
-    def fake_run_mux_job(input_dir, config, dry_run, yes):
+    def fake_run_mux_job(input_dir, config, dry_run, yes, **kwargs):
         calls.append({"input_dir": input_dir, "dry_run": dry_run, "yes": yes})
         return JobReport(input_dir=input_dir, plans=[plan])
 

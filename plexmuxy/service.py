@@ -32,7 +32,7 @@ ProgressCallback = Callable[[ProgressEvent], None]
 # Cache the expensive, edit-independent planning intermediates (filesystem scan,
 # font preparation, font catalog, and per-video source-track inspection) so that
 # repeated draft edits re-plan in milliseconds instead of re-scanning everything.
-_plan_cache: "OrderedDict[str, tuple[str, dict]]" = OrderedDict()
+_plan_cache: OrderedDict[str, tuple[str, dict]] = OrderedDict()
 _plan_cache_lock = threading.Lock()
 _PLAN_CACHE_LIMIT = 4
 

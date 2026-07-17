@@ -18,7 +18,12 @@ from .models import (
 
 
 def calculate_config_hash(config_data: dict) -> str:
+    # Round-trip through JSON so that whole-number floats (e.g. 1.0) and ints
+    # (1) serialize identically. The plan config survives a JSON round-trip
+    # through the GUI/UI bridge, where 1.0 collapses to 1; hashing the
+    # JSON-normalized form keeps the digest stable across that round-trip.
     canonical = json.dumps(config_data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    canonical = json.dumps(json.loads(canonical), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
@@ -98,11 +103,10 @@ def validate_plan_snapshot(snapshot: MuxPlanSnapshot, config: AppConfig) -> None
         normalized_saved_config = config_to_dict(parse_config(snapshot.config))
     except Exception as exc:  # ConfigError is intentionally converted to a stale-plan result.
         raise StalePlanError(f"Saved plan configuration is invalid: {exc}") from exc
-    # Hash the normalized config: the snapshot.config survives a JSON round-trip
-    # through the UI bridge, where whole-number floats (e.g. 1.0) collapse to ints
-    # (1); re-deriving via parse_config restores the canonical float form so the
-    # hash stays stable across that round-trip.
-    if calculate_config_hash(normalized_saved_config) != snapshot.config_hash:
+    # Hash the raw saved config: calculate_config_hash round-trips through JSON so
+    # the digest is stable across the UI bridge's int/float collapse, while legacy
+    # (e.g. config_version 2) plans stay valid because they are not re-upgraded here.
+    if calculate_config_hash(snapshot.config) != snapshot.config_hash:
         raise StalePlanError("Saved plan configuration hash is invalid")
     if normalized_saved_config != config_to_dict(config):
         raise StalePlanError("Configuration has changed since the plan was created")
