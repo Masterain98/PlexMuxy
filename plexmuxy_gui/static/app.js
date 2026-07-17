@@ -6,6 +6,7 @@ const state = {
   loadingMessageKey: "loading.initializing", lastJobStatus: null, currentView: "workspace",
   lastNonSubsetFontMode: "all",
   planEdits: new Map(), jobs: [], queuePaused: false, activePreviewId: null,
+  planSaving: false, planSaveError: null,
   dependencyDrafts: { mkvmerge: null, ffmpeg: null, unrar: null }, dependencyBusy: {},
   currentDiagnosticsJobId: null,
 };
@@ -46,7 +47,7 @@ function bindEvents() {
     ["diagnostics-btn", "click", exportDiagnostics], ["save-settings-btn", "click", saveSettings],
     ["save-environment-btn", "click", saveEnvironmentSettings], ["test-notification-btn", "click", testNotification],
     ["plan-btn", "click", generatePlan], ["run-btn", "click", runMux], ["cancel-btn", "click", cancelJob],
-    ["apply-plan-edits-btn", "click", applyPlanEdits], ["refresh-jobs-btn", "click", loadJobs],
+    ["refresh-jobs-btn", "click", loadJobs],
     ["queue-toggle-btn", "click", toggleQueue], ["clear-font-cache-btn", "click", clearFontCache],
     ["delete-all-jobs-btn", "click", deleteAllJobs],
     ["diagnostics-export-btn", "click", exportDiagnosticsFromDialog],
@@ -700,24 +701,64 @@ async function generatePlan() {
   } catch (error) { showError(error.message); } finally { setLoading(false); }
 }
 
-async function applyPlanEdits() {
+let planSaveTimer = null;
+let planSaveInFlight = false;
+let planSaveDirty = false;
+
+function schedulePlanSave() {
+  setPlanSaveStatus("pending");
+  clearTimeout(planSaveTimer);
+  planSaveTimer = setTimeout(runPlanSave, 400);
+  updateRunButton();
+}
+
+async function runPlanSave() {
+  planSaveTimer = null;
+  // Never run two saves at once; if edits arrived while one was in flight,
+  // re-run after it finishes so the user never sees the awaiting-review race.
+  if (planSaveInFlight) { planSaveDirty = true; return; }
   if (!state.planReport?.snapshot || !state.planReport?.job_id) return;
-  clearError(); setLoading(true, "loading.generatingPlan");
+  const edits = Array.from(state.planEdits.values()).filter((edit) => !edit.pristine);
+  if (!edits.length) { setPlanSaveStatus("idle"); return; }
+  planSaveInFlight = true; state.planSaving = true; setPlanSaveStatus("saving"); updateRunButton();
   try {
     const payload = buildPayload();
     payload.job_id = state.planReport.job_id;
     payload.base_plan_id = state.planReport.snapshot.plan_id;
-    payload.plan_edits = Array.from(state.planEdits.values());
-    payload.plan_edits = payload.plan_edits.filter((edit) => !edit.pristine).map(({ pristine, ...edit }) => edit);
-    state.planReport = await callApi("update_plan_draft", payload);
-    state.planEdits.clear(); renderPlans(state.planReport); updateRunButton();
-    if (state.planReport.error) showError(`${state.planReport.error_code || "PLAN_ERROR"}: ${state.planReport.error}`);
-  } catch (error) { showError(error.message); } finally { setLoading(false); }
+    payload.plan_edits = edits.map(({ pristine, ...edit }) => edit);
+    const report = await callApi("update_plan_draft", payload);
+    state.planReport.job_id = report.job_id;
+    state.planReport.snapshot = report.snapshot;
+    (report.plans || []).forEach((plan) => {
+      const edit = state.planEdits.get(plan.source_video);
+      if (edit) edit.revision = Number(plan.edit_revision || 0);
+    });
+    renderPlanSummary(state.planReport);
+    if (report.error) showError(`${report.error_code || "PLAN_ERROR"}: ${report.error}`);
+  } catch (error) {
+    setPlanSaveStatus("error", error.message);
+  } finally {
+    planSaveInFlight = false; state.planSaving = false;
+    if (planSaveDirty) { planSaveDirty = false; runPlanSave(); }
+    else { setPlanSaveStatus("saved"); updateRunButton(); }
+  }
+}
+
+function setPlanSaveStatus(status, message = "") {
+  const el = $("plan-save-status"); if (!el) return;
+  el.dataset.status = status;
+  el.textContent = status === "saving" ? t("plan.saving")
+    : status === "saved" ? t("plan.saved")
+    : status === "error" ? t("plan.saveError", { message })
+    : "";
 }
 
 async function runMux() {
   clearError(); const payload = buildPayload();
   if (!state.planReport?.plans?.length || !state.planReport.snapshot) { showError(t("error.generatePlanFirst")); return; }
+  if (state.planEdits.size && Array.from(state.planEdits.values()).some((edit) => !edit.pristine)) {
+    clearTimeout(planSaveTimer); await runPlanSave();
+  }
   const warnings = [];
   if (requiresDeleteConfirmation(payload)) warnings.push(t("error.deleteWarning"));
   if (payload.overrides.overwrite) warnings.push(t("error.overwriteWarning"));
@@ -1138,22 +1179,43 @@ function formatBytes(value) {
 }
 
 function renderPlans(report) {
-  const container = $("plans"); clear(container); clear($("plan-summary"));
-  $("apply-plan-edits-btn")?.classList.toggle("hidden", !Array.from(state.planEdits.values()).some((edit) => !edit.pristine));
-  if (!report) return empty(container, "03", t("plan.empty.title"), t("plan.empty.detail"));
-  $("plan-summary").append(
+  const container = $("plans"); clear(container);
+  state.planSaving = false;
+  if (!report) { clearTimeout(planSaveTimer); planSaveInFlight = false; planSaveDirty = false; state.planSaving = false; state.planSaveError = null; clear($("plan-summary")); setPlanSaveStatus("idle"); return empty(container, "03", t("plan.empty.title"), t("plan.empty.detail")); }
+  renderPlanSummary(report);
+  report.plans.forEach((plan) => container.append(renderPlanCard(plan)));
+  if (report.skipped_files.length) container.append(renderSkippedFiles(report.skipped_files, t("plan.skippedFiles")));
+  container.className = "stack"; if (!container.childNodes.length) empty(container, "03", t("plan.empty.noPlansTitle"), t("plan.empty.noPlansDetail"));
+}
+
+function renderPlanSummary(report) {
+  const summary = $("plan-summary"); clear(summary);
+  summary.append(
     badge(countText(report.plans.length, "count.plan.one", "count.plan.other"), "info"),
     badge(t("count.skipped", { count: report.skipped_files.length }), report.skipped_files.length ? "warn" : "ok")
   );
+  const fontPaths = new Set();
+  report.plans.forEach((plan) => (plan.attachments || []).forEach((attachment) => {
+    if (attachment.path) fontPaths.add(attachment.path);
+  }));
+  if (fontPaths.size) summary.append(badge(countText(fontPaths.size, "count.fonts.one", "count.fonts.other"), "info"));
+  const languages = new Set();
+  report.plans.forEach((plan) => (plan.subtitle_tracks || []).forEach((track) => {
+    const mkv = (track.mkv_language || "").trim();
+    const ietf = (track.ietf_language || "").trim();
+    // Use the mkv+ietf pair as the identity: two languages can share the same
+    // mkv code (e.g. chi for both zh-Hans and zh-Hant) yet differ by ietf.
+    const key = `${mkv}|${ietf}`;
+    if (mkv || ietf) languages.add(key);
+  }));
+  if (languages.size) summary.append(badge(countText(languages.size, "count.subtitleLanguages.one", "count.subtitleLanguages.other"), "info"));
   const subsetPlans = report.plans.filter((plan) => plan.font_subset_intent?.summary);
   if (subsetPlans.length) {
     const familyCount = subsetPlans.reduce((total, plan) => total + Number(plan.font_subset_intent.summary.requested_family_count || 0), 0);
     const attachmentCount = subsetPlans.reduce((total, plan) => total + Number(plan.font_subset_intent.summary.expected_attachment_count || 0), 0);
-    $("plan-summary").append(badge(t("plan.subsetSummary", { families: familyCount, attachments: attachmentCount }), "info"));
+    summary.append(badge(t("plan.subsetSummary", { families: familyCount, attachments: attachmentCount }), "info"));
   }
-  report.plans.forEach((plan) => container.append(renderPlanCard(plan)));
-  if (report.skipped_files.length) container.append(renderSkippedFiles(report.skipped_files, t("plan.skippedFiles")));
-  container.className = "stack"; if (!container.childNodes.length) empty(container, "03", t("plan.empty.noPlansTitle"), t("plan.empty.noPlansDetail"));
+  setPlanSaveStatus("idle");
 }
 
 function renderPlanCard(plan) {
@@ -1162,7 +1224,7 @@ function renderPlanCard(plan) {
   heading.append(element("h4", "", plan.source_video_name), element("div", "file-path", plan.source_video));
   const enabledLabel = element("label", "plan-enabled toggle-row");
   const enabled = element("input"); enabled.type = "checkbox"; enabled.checked = currentPlanEdit(plan).enabled;
-  enabled.addEventListener("change", () => { const edit = currentPlanEdit(plan); edit.enabled = enabled.checked; touchEdit(edit); });
+  enabled.addEventListener("change", () => { const edit = currentPlanEdit(plan); edit.enabled = enabled.checked; touchEdit(edit, article); });
   enabledLabel.append(enabled, element("span", "", t("plan.includeVideo")), badge(plan.output_name, "info"));
   title.append(heading, enabledLabel); article.append(title, element("div", "file-path", t("plan.output", { path: plan.output_path })));
   const grid = element("div", "track-grid");
@@ -1211,14 +1273,12 @@ function currentPlanEdit(plan) {
   return state.planEdits.get(plan.source_video);
 }
 
-function markPlanEdited() {
-  for (const [key, edit] of state.planEdits) if (edit.pristine) state.planEdits.delete(key);
-  document.querySelectorAll(".plan-card").forEach((card) => card.classList.add("has-edits"));
-  $("apply-plan-edits-btn")?.classList.remove("hidden");
-  updateRunButton();
+function markPlanEdited(cardEl) {
+  if (cardEl) cardEl.classList.add("has-edits");
+  else document.querySelectorAll(".plan-card").forEach((card) => card.classList.add("has-edits"));
 }
 
-function touchEdit(edit) { delete edit.pristine; markPlanEdited(); }
+function touchEdit(edit, cardEl) { delete edit.pristine; markPlanEdited(cardEl); schedulePlanSave(); }
 
 function editableExternalBox(plan, kind) {
   const edit = currentPlanEdit(plan);
@@ -1229,28 +1289,32 @@ function editableExternalBox(plan, kind) {
   if (!items.length) { box.append(element("div", "file-path", t("plan.none"))); return box; }
   const list = element("ul", "item-list");
   items.forEach((track) => {
-    const li = element("li", "editable-track"); const label = element("label", "track-check");
+    const li = element("li", "editable-track"); li.dataset.trackPath = track.path;
+    const label = element("label", "track-check");
     const input = element("input"); input.type = "checkbox"; input.checked = edit[selectedKey].includes(track.path);
     input.addEventListener("change", () => {
       edit[selectedKey] = input.checked
         ? [...new Set([...edit[selectedKey], track.path])]
         : edit[selectedKey].filter((path) => path !== track.path);
       rebuildExternalOrder(edit);
-      touchEdit(edit);
+      touchEdit(edit, li.closest(".plan-card"));
     });
     label.append(input, kind === "subtitle" ? renderSubtitle(track) : renderAudio(track)); li.append(label);
     const orderControls = element("span", "track-order-controls");
-    const up = element("button", "ghost compact", t("plan.moveUp")); up.type = "button";
-    const down = element("button", "ghost compact", t("plan.moveDown")); down.type = "button";
+    const up = element("button", "ghost compact track-order-up", t("plan.moveUp")); up.type = "button";
+    const down = element("button", "ghost compact track-order-down", t("plan.moveDown")); down.type = "button";
     const move = (delta) => {
-      const current = edit[selectedKey].indexOf(track.path); if (current < 0) return;
-      const target = Math.max(0, Math.min(edit[selectedKey].length - 1, current + delta));
+      const order = edit[selectedKey];
+      const current = order.indexOf(track.path); if (current < 0) return;
+      const target = Math.max(0, Math.min(order.length - 1, current + delta));
       if (target === current) return;
-      edit[selectedKey].splice(current, 1); edit[selectedKey].splice(target, 0, track.path);
-      rebuildExternalOrder(edit); touchEdit(edit); renderPlans(state.planReport);
+      order.splice(current, 1); order.splice(target, 0, track.path);
+      rebuildExternalOrder(edit); touchEdit(edit, li.closest(".plan-card"));
+      if (delta > 0) list.insertBefore(li, li.nextElementSibling ? li.nextElementSibling.nextElementSibling : null);
+      else list.insertBefore(li, li.previousElementSibling);
+      syncTrackOrderButtons(list, edit, selectedKey);
     };
     up.addEventListener("click", () => move(-1)); down.addEventListener("click", () => move(1));
-    up.disabled = edit[selectedKey].indexOf(track.path) <= 0; down.disabled = edit[selectedKey].indexOf(track.path) >= edit[selectedKey].length - 1;
     orderControls.append(up, down); li.append(orderControls);
     if (kind === "subtitle") {
       const details = element("details", "track-editor"); details.append(element("summary", "", t("plan.editMetadata")));
@@ -1260,12 +1324,15 @@ function editableExternalBox(plan, kind) {
       ].forEach(([field, value]) => {
         const fieldLabel = element("label", ""); fieldLabel.append(element("span", "", t(`plan.field.${field}`)));
         const textInput = element("input"); textInput.type = "text"; textInput.value = value;
-        textInput.addEventListener("input", () => updateSubtitleOverride(edit, track, field, textInput.value));
+        // Keep the in-memory edit current while typing, but only persist (and
+        // schedule a save) when the field is committed via change/blur.
+        textInput.addEventListener("input", () => syncSubtitleOverrideValue(edit, track, field, textInput.value));
+        textInput.addEventListener("change", () => updateSubtitleOverride(edit, track, field, textInput.value, li.closest(".plan-card")));
         fieldLabel.append(textInput); fields.append(fieldLabel);
       });
       [["default_track", track.default_track], ["forced_track", track.forced_track]].forEach(([field, value]) => {
         const flag = element("label", "track-flag"); const checkbox = element("input"); checkbox.type = "checkbox"; checkbox.checked = Boolean(value);
-        checkbox.addEventListener("change", () => updateSubtitleOverride(edit, track, field, checkbox.checked));
+        checkbox.addEventListener("change", () => updateSubtitleOverride(edit, track, field, checkbox.checked, li.closest(".plan-card")));
         flag.append(checkbox, document.createTextNode(t(`plan.field.${field}`))); fields.append(flag);
       });
       details.append(fields); li.append(details);
@@ -1275,10 +1342,27 @@ function editableExternalBox(plan, kind) {
   box.append(list); return box;
 }
 
-function updateSubtitleOverride(edit, track, field, value) {
+function syncTrackOrderButtons(list, edit, selectedKey) {
+  const order = edit[selectedKey];
+  Array.from(list.children).forEach((li) => {
+    const path = li.dataset.trackPath; if (path === undefined) return;
+    const index = order.indexOf(path);
+    const up = li.querySelector(".track-order-up");
+    const down = li.querySelector(".track-order-down");
+    if (up) up.disabled = index <= 0;
+    if (down) down.disabled = index < 0 || index >= order.length - 1;
+  });
+}
+
+function syncSubtitleOverrideValue(edit, track, field, value) {
   let override = edit.subtitle_metadata_overrides.find((item) => item.path === track.path);
   if (!override) { override = { path: track.path }; edit.subtitle_metadata_overrides.push(override); }
-  override[field] = value; touchEdit(edit);
+  override[field] = value; delete edit.pristine;
+}
+
+function updateSubtitleOverride(edit, track, field, value, cardEl) {
+  syncSubtitleOverrideValue(edit, track, field, value);
+  touchEdit(edit, cardEl);
 }
 
 function renderSourceAudioTracks(plan) {
@@ -1293,7 +1377,7 @@ function renderSourceAudioTracks(plan) {
     input.checked = existingOverride ? existingOverride.included : track.included;
     input.addEventListener("change", () => {
       edit.source_track_overrides = edit.source_track_overrides.filter((item) => item.track_id !== track.id);
-      edit.source_track_overrides.push({ track_id: track.id, included: input.checked }); touchEdit(edit);
+      edit.source_track_overrides.push({ track_id: track.id, included: input.checked }); touchEdit(edit, row.closest(".plan-card"));
     }); keep.append(input, document.createTextNode(t("plan.keepTrack")));
     const preview = element("button", "ghost compact", t("plan.preview")); preview.type = "button";
     preview.disabled = !state.config?.ffmpeg?.available;
@@ -1331,7 +1415,7 @@ function renderAvailableAssignments(plan) {
         ? edit[field].filter((path) => path !== candidate.path)
         : [...edit[field], candidate.path];
       rebuildExternalOrder(edit);
-      touchEdit(edit); sync();
+      touchEdit(edit, row.closest(".plan-card")); sync();
     });
     sync(); row.append(copy, button); list.append(row);
   }));
@@ -1446,9 +1530,8 @@ function showToast(message, tone = "info", title = "", action = null, timeout = 
 function clearReports() { state.planReport = null; state.runReport = null; state.planEdits.clear(); renderPlans(null); renderResults(null); updateRunButton(); }
 function updateRunButton() {
   const busy = state.loading || Boolean(state.activeJobId); const hasPlan = Boolean(state.planReport?.plans?.length);
-  const hasUnappliedEdits = Array.from(state.planEdits.values()).some((edit) => !edit.pristine);
+  const hasUnappliedEdits = state.planSaving;
   $("run-btn").disabled = busy || !hasPlan || hasUnappliedEdits; $("plan-btn").disabled = busy; $("choose-dir-btn").disabled = busy;
-  if ($("apply-plan-edits-btn")) $("apply-plan-edits-btn").disabled = busy || !Array.from(state.planEdits.values()).some((edit) => !edit.pristine);
   $("save-settings-btn").disabled = busy || !state.settingsDirty;
   if ($("save-environment-btn")) $("save-environment-btn").disabled = busy || !state.environmentDirty;
   ["input-dir", "cleanup", "extra-dir", "output-dir", "output-suffix", "name-strategy", "name-template", "font-subset", "overwrite", "audio-filter-enabled", "audio-exclude-patterns", "audio-keep-languages", "keep-default-audio", "keep-unknown-audio", "allow-no-audio"].forEach((id) => {

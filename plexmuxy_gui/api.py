@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import logging
 import os
 import platform
@@ -552,9 +553,15 @@ class PlexMuxyApi:
                 float(payload.get("start_seconds", 60)),
                 float(payload.get("duration_seconds", 15)),
             )
+            # The GUI page is served over http://127.0.0.1 (pywebview http_server),
+            # and Chromium/WebView2 blocks loading file:// media from an http origin.
+            # Return the clip inline as a base64 data URI so the <audio> element can
+            # load it regardless of the page origin.
+            audio_bytes = preview.path.read_bytes()
+            data_uri = "data:audio/mp4;base64," + base64.b64encode(audio_bytes).decode("ascii")
             return self.ok({
                 "preview_id": preview.preview_id,
-                "uri": preview.uri,
+                "uri": data_uri,
                 "source_video": str(preview.source_video),
                 "track_id": preview.track_id,
                 "start_seconds": preview.start_seconds,
@@ -903,6 +910,9 @@ class PlexMuxyApi:
                 arguments: dict[str, Any] = {"dry_run": True, "yes": False}
                 if edits:
                     arguments["plan_edits"] = edits
+                # Fresh plans recompute from scratch; draft edits reuse the cached
+                # scan/fonts/catalog so re-planning is near-instant.
+                arguments["use_cache"] = edited
                 report = run_mux_job(input_dir, config, **arguments)
                 data = job_report_to_dict(report)
                 data["job_id"] = job.id

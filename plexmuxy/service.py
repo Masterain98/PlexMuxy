@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import replace
 from pathlib import Path
 
 from .cleanup import cleanup_successful_results
+from .config import config_to_dict
 from .errors import StalePlanError
 from .font import prepare_fonts
 from .font_cache import FontSubsetCache
@@ -25,6 +29,61 @@ from .track_policy import TrackPolicyError, decide_source_tracks
 
 ProgressCallback = Callable[[ProgressEvent], None]
 
+# Cache the expensive, edit-independent planning intermediates (filesystem scan,
+# font preparation, font catalog, and per-video source-track inspection) so that
+# repeated draft edits re-plan in milliseconds instead of re-scanning everything.
+_plan_cache: "OrderedDict[str, tuple[str, dict]]" = OrderedDict()
+_plan_cache_lock = threading.Lock()
+_PLAN_CACHE_LIMIT = 4
+
+
+def _config_signature(config: AppConfig) -> str:
+    try:
+        return hashlib.sha256(
+            json.dumps(config_to_dict(config), sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+    except Exception:  # noqa: BLE001 - fall back to a full recompute when signing fails.
+        return ""
+
+
+def _get_plan_intermediates(
+    input_dir: Path,
+    config: AppConfig,
+    use_cache: bool,
+    progress_callback: ProgressCallback | None,
+    exclusions: list[Path],
+) -> dict:
+    input_dir = input_dir.expanduser().resolve()
+    cache_key = str(input_dir)
+    signature = _config_signature(config)
+    if use_cache and signature:
+        with _plan_cache_lock:
+            cached = _plan_cache.get(cache_key)
+        if cached is not None and cached[0] == signature:
+            return cached[1]
+    emit(progress_callback, ProgressEvent("preparing_fonts"))
+    scan = scan_media_dir(input_dir, config.media, excluded_dirs=exclusions)
+    fonts = prepare_fonts(input_dir, config.media, config.font, extract_archives=False, preview_archives=True)
+    catalog = build_font_catalog(
+        fonts.fonts,
+        archives=scan.font_archives,
+        media_config=config.media,
+        font_config=config.font,
+    )
+    intermediates = {"scan": scan, "fonts": fonts, "catalog": catalog, "inspections": {}}
+    with _plan_cache_lock:
+        _plan_cache[cache_key] = (signature, intermediates)
+        _plan_cache.move_to_end(cache_key)
+        while len(_plan_cache) > _PLAN_CACHE_LIMIT:
+            _plan_cache.popitem(last=False)
+    return intermediates
+
+
+def clear_plan_cache() -> None:
+    """Drop all cached planning intermediates (e.g. when the source directory changes)."""
+    with _plan_cache_lock:
+        _plan_cache.clear()
+
 
 def build_job_plan(
     input_dir: Path,
@@ -32,6 +91,7 @@ def build_job_plan(
     progress_callback: ProgressCallback | None = None,
     source_track_overrides: Mapping[Path, Mapping[int, bool]] | None = None,
     plan_edits: Mapping[Path, PlanEdit] | None = None,
+    use_cache: bool = True,
 ) -> JobReport:
     started = time.perf_counter()
     input_dir = input_dir.expanduser().resolve()
@@ -46,15 +106,10 @@ def build_job_plan(
         output_path = output_dir if output_dir.is_absolute() else input_dir / output_dir
         if output_path.resolve() != input_dir:
             exclusions.append(output_path)
-    scan = scan_media_dir(input_dir, config.media, excluded_dirs=exclusions)
-    emit(progress_callback, ProgressEvent("preparing_fonts"))
-    fonts = prepare_fonts(input_dir, config.media, config.font, extract_archives=False, preview_archives=True)
-    catalog = build_font_catalog(
-        fonts.fonts,
-        archives=scan.font_archives,
-        media_config=config.media,
-        font_config=config.font,
-    )
+    intermediates = _get_plan_intermediates(input_dir, config, use_cache, progress_callback, exclusions)
+    scan = intermediates["scan"]
+    fonts = intermediates["fonts"]
+    catalog = intermediates["catalog"]
     plan_result = build_mux_plans(
         scan,
         config,
@@ -101,6 +156,17 @@ def build_job_plan(
             error="mkvmerge is required to inspect source tracks when audio filtering is enabled",
         )
     if mkvmerge:
+        inspections = intermediates["inspections"]
+
+        def inspect(video: Path) -> list:
+            key = Path(video).expanduser().resolve()
+            cached = inspections.get(key)
+            if cached is not None:
+                return cached
+            result = inspect_source_tracks(key, mkvmerge)
+            inspections[key] = result
+            return result
+
         normalized_overrides = {
             path.expanduser().resolve(): dict(values)
             for path, values in (source_track_overrides or {}).items()
@@ -109,7 +175,7 @@ def build_job_plan(
             normalized_overrides.setdefault(path, {}).update(values)
         try:
             for plan in plan_result.plans:
-                inspected = inspect_source_tracks(plan.source_video, mkvmerge)
+                inspected = inspect(plan.source_video)
                 if config.tracks.audio_filter_enabled and not inspected:
                     return JobReport(
                         input_dir=input_dir,
@@ -128,7 +194,7 @@ def build_job_plan(
                     replace(
                         track,
                         expected_track_count=sum(
-                            item.type == "audio" for item in inspect_source_tracks(track.path, mkvmerge)
+                            item.type == "audio" for item in inspect(track.path)
                         ) or 1,
                     )
                     for track in plan.audio_tracks
@@ -395,6 +461,7 @@ def run_mux_job(
     cancellation_event: threading.Event | None = None,
     source_track_overrides: Mapping[Path, Mapping[int, bool]] | None = None,
     plan_edits: Mapping[Path, PlanEdit] | None = None,
+    use_cache: bool = True,
 ) -> JobReport:
     emit(progress_callback, ProgressEvent("planning"))
     report = build_job_plan(
@@ -403,6 +470,7 @@ def run_mux_job(
         progress_callback=progress_callback,
         source_track_overrides=source_track_overrides,
         plan_edits=plan_edits,
+        use_cache=use_cache,
     )
     if dry_run or report.snapshot is None or report.error is not None:
         return report

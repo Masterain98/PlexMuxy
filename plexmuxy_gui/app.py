@@ -83,6 +83,7 @@ EXPOSED_API_METHODS = (
     "save_settings",
     "start_job",
     "test_notification",
+    "update_plan_draft",
     "toggle_maximize_window",
 )
 

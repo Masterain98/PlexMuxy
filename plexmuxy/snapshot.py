@@ -94,12 +94,16 @@ def validate_plan_snapshot(snapshot: MuxPlanSnapshot, config: AppConfig) -> None
     )
     if snapshot.schema_version < PLAN_SCHEMA_VERSION and audio_filter_enabled:
         raise StalePlanError("Plan schema_version 3 is required for source audio filtering; regenerate the plan")
-    if calculate_config_hash(snapshot.config) != snapshot.config_hash:
-        raise StalePlanError("Saved plan configuration hash is invalid")
     try:
         normalized_saved_config = config_to_dict(parse_config(snapshot.config))
     except Exception as exc:  # ConfigError is intentionally converted to a stale-plan result.
         raise StalePlanError(f"Saved plan configuration is invalid: {exc}") from exc
+    # Hash the normalized config: the snapshot.config survives a JSON round-trip
+    # through the UI bridge, where whole-number floats (e.g. 1.0) collapse to ints
+    # (1); re-deriving via parse_config restores the canonical float form so the
+    # hash stays stable across that round-trip.
+    if calculate_config_hash(normalized_saved_config) != snapshot.config_hash:
+        raise StalePlanError("Saved plan configuration hash is invalid")
     if normalized_saved_config != config_to_dict(config):
         raise StalePlanError("Configuration has changed since the plan was created")
     if not snapshot.input_dir.is_dir():
@@ -119,7 +123,12 @@ def validate_plan_snapshot(snapshot: MuxPlanSnapshot, config: AppConfig) -> None
         ):
             raise StalePlanError(f"Planned content-sensitive input has no digest: {file_snapshot.path}")
         stat = file_snapshot.path.stat()
-        if stat.st_size != file_snapshot.size or stat.st_mtime_ns != file_snapshot.modified_time_ns:
+        # Allow a small tolerance on mtime: modified_time_ns (~1.7e18) exceeds the
+        # 53-bit precision of the JS Number type used by the UI bridge, so it can
+        # shift by a few hundred nanoseconds on the snapshot round-trip. The sha256
+        # digest (when present) is the authoritative content check.
+        mtime_drift = abs(stat.st_mtime_ns - file_snapshot.modified_time_ns)
+        if stat.st_size != file_snapshot.size or mtime_drift > 1000:
             raise StalePlanError(f"Planned input changed: {file_snapshot.path}")
         if (
             file_snapshot.sha256 is not None

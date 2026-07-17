@@ -1281,6 +1281,18 @@ p {
   display: none;
 }
 
+.plan-save-status {
+  min-height: 18px;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+}
+
+.plan-save-status[data-status="saving"] { color: var(--color-text-secondary); }
+.plan-save-status[data-status="saved"] { color: var(--color-success); }
+.plan-save-status[data-status="error"] { color: var(--color-danger-text); }
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -1373,7 +1385,16 @@ p {
 .plan-enabled { flex-wrap: wrap; justify-content: flex-end; }
 .editable-track, .source-track-row { display: grid; gap: 9px; }
 .track-check { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
-.track-check > input { margin-top: 3px; accent-color: var(--color-brand); }
+/* Override the global input sizing so plan checkboxes stay compact. */
+.track-check > input,
+.plan-enabled > input,
+.track-flag > input,
+.source-track-row > label > input,
+.card-title > label > input {
+  width: 16px; height: 16px; min-height: 0; min-width: 0;
+  flex: none; margin: 0; padding: 0; accent-color: var(--color-brand);
+}
+.track-check > input { margin-top: 3px; }
 .track-editor { margin-left: 22px; }
 .track-editor summary, .source-track-panel summary { color: var(--color-text-secondary); font-size: 12px; cursor: pointer; }
 .track-editor-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding-top: 10px; }
