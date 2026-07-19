@@ -10,7 +10,7 @@ from fontTools import subset
 from fontTools.ttLib import TTFont
 
 from .font_catalog import normalize_font_name
-from .models import FontFaceRef
+from .models import FontFaceRef, FontMimeMode, font_mime_type_for_outline
 
 SUBSET_PROFILE_VERSION = 1
 UNSAFE_GLYPH_TABLES = frozenset({"Silf", "Sill", "Glat", "Gloc", "morx", "mort", "kerx", "ankr"})
@@ -47,6 +47,8 @@ def subset_font_face(
     codepoints: set[int] | tuple[int, ...] | list[int],
     alias_family: str,
     output_path: Path,
+    *,
+    mime_mode: FontMimeMode = "legacy",
 ) -> FontSubsetResult:
     """Create and validate one deterministic, independently attachable face."""
 
@@ -132,7 +134,7 @@ def subset_font_face(
         path=output,
         alias_family=alias_family,
         subfamily=style_name(face),
-        mime_type=font_mime_type(face),
+        mime_type=font_mime_type(face, mime_mode=mime_mode),
         sha256=_sha256_path(output),
         source_size=source.stat().st_size,
         output_size=output.stat().st_size,
@@ -235,8 +237,8 @@ def output_extension(face: FontFaceRef) -> str:
     return ".ttf" if face.outline_type == "truetype" else ".otf"
 
 
-def font_mime_type(face: FontFaceRef) -> str:
-    return "application/x-truetype-font" if face.outline_type == "truetype" else "application/vnd.ms-opentype"
+def font_mime_type(face: FontFaceRef, *, mime_mode: FontMimeMode = "legacy") -> str:
+    return font_mime_type_for_outline(face.outline_type, mode=mime_mode)
 
 
 def _sha256_path(path: Path) -> str:

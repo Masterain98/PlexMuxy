@@ -27,6 +27,7 @@ from .models import (
     AttachmentPlan,
     FontConfig,
     FontFaceRef,
+    FontMimeMode,
     FontSubsetGroupIntent,
     FontSubsetIntent,
     FontSubsetIssue,
@@ -35,6 +36,8 @@ from .models import (
     MuxPlan,
     PreparedMuxPlan,
     SubtitleTrackPlan,
+    font_mime_type_for_outline,
+    font_mime_type_for_suffix,
 )
 
 ANALYZER_VERSION = 1
@@ -299,6 +302,7 @@ def prepare_subset_plan(
                     codepoints,
                     group.alias_family,
                     workspace,
+                    mime_mode=config.mime_mode,
                 )
                 group_attachments.append(attachment)
         except (FontPreparationError, FontSubsetError, OSError, ValueError) as exc:
@@ -343,6 +347,8 @@ def _cached_subset_attachment(
     codepoints: set[int],
     alias_family: str,
     workspace: SubsetWorkspace,
+    *,
+    mime_mode: FontMimeMode = "legacy",
 ) -> AttachmentPlan:
     ranges = compress_codepoints(codepoints)
     cache_digest = hashlib.sha256()
@@ -358,7 +364,13 @@ def _cached_subset_attachment(
     cache_key = cache_digest.hexdigest()
     cached = workspace.subset_cache.get(cache_key)
     if cached is not None and cached.path.is_file():
-        return cached
+        # The cached font bytes are MIME-agnostic; derive the MIME type from the
+        # active mode so a mode change takes effect without invalidating the cache.
+        return AttachmentPlan(
+            cached.path,
+            expected_name=cached.expected_name,
+            expected_mime_type=font_mime_type_for_outline(face.outline_type, mode=mime_mode),
+        )
 
     extension = output_extension(face)
     output = workspace.require_path("fonts") / f"{cache_key}{extension}"
@@ -367,18 +379,16 @@ def _cached_subset_attachment(
             face,
             codepoints,
             alias_family,
-            lambda destination: subset_font_face(face, source, codepoints, alias_family, destination),
+            lambda destination: subset_font_face(
+                face, source, codepoints, alias_family, destination, mime_mode=mime_mode,
+            ),
         )
         temporary = output.with_name(f".{output.name}.{os.getpid()}.cache-copy")
         shutil.copy2(entry.path, temporary)
         os.replace(temporary, output)
-        mime_type = (
-            "application/x-truetype-font"
-            if extension == ".ttf"
-            else "application/vnd.ms-opentype"
-        )
+        mime_type = font_mime_type_for_outline(face.outline_type, mode=mime_mode)
     else:
-        result = subset_font_face(face, source, codepoints, alias_family, output)
+        result = subset_font_face(face, source, codepoints, alias_family, output, mime_mode=mime_mode)
         mime_type = result.mime_type
     style = style_name(face).replace(" ", "")
     expected_name = f"{alias_family}-{style}-{face.source_digest[:8]}{extension}"
@@ -411,7 +421,7 @@ def _full_font_attachments(
         result.append(AttachmentPlan(
             path,
             expected_name=original_name,
-            expected_mime_type=_full_font_mime(path),
+            expected_mime_type=_full_font_mime(path, mime_mode=config.mime_mode),
         ))
     return result
 
@@ -464,13 +474,8 @@ def _extend_unique_attachments(target: list[AttachmentPlan], additions: list[Att
             identities.add(identity)
 
 
-def _full_font_mime(path: Path) -> str:
-    suffix = path.suffix.casefold()
-    if suffix == ".ttf":
-        return "application/x-truetype-font"
-    if suffix in {".otf", ".ttc", ".otc"}:
-        return "application/vnd.ms-opentype"
-    return "application/octet-stream"
+def _full_font_mime(path: Path, *, mime_mode: FontMimeMode = "legacy") -> str:
+    return font_mime_type_for_suffix(path.suffix, mode=mime_mode)
 
 
 def _check_cancelled(event: threading.Event | None) -> None:

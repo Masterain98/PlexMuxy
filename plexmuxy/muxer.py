@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-import mimetypes
 import os
+import re
 import subprocess
 import threading
 import uuid
@@ -15,11 +15,13 @@ from .dependencies import resolve_mkvmerge
 from .models import (
     AppConfig,
     AttachmentPlan,
+    FontMimeMode,
     MuxPlan,
     MuxResult,
     PreparedMuxPlan,
     SourceTrackInfo,
     VerificationResult,
+    font_mime_type_for_suffix,
 )
 
 
@@ -80,7 +82,9 @@ def _execute_runtime_plan(
     partial = runtime_plan.output_path.with_name(
         f".{runtime_plan.output_path.name}.{uuid.uuid4().hex}.plexmuxy-part"
     )
-    command = build_mkvmerge_command(runtime_plan, partial, mkvmerge_path)
+    command = build_mkvmerge_command(
+        runtime_plan, partial, mkvmerge_path, mime_mode=config.font.mime_mode,
+    )
     try:
         process = subprocess.Popen(
             command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
@@ -104,7 +108,7 @@ def _execute_runtime_plan(
         handle_failed_output(partial, runtime_plan.output_path, config.task.failed_output_action)
         return runtime_failure("MUX_EXECUTION_FAILED", (stderr or stdout or "mkvmerge failed").strip())
 
-    verification = verify_mux_output(runtime_plan, partial, mkvmerge_path)
+    verification = verify_mux_output(runtime_plan, partial, mkvmerge_path, mime_mode=config.font.mime_mode)
     if not verification.success:
         handled = handle_failed_output(partial, runtime_plan.output_path, config.task.failed_output_action)
         warnings = [f"Failed output retained as: {handled}"] if handled else []
@@ -127,11 +131,27 @@ def _execute_runtime_plan(
     )
 
 
-def build_mkvmerge_command(plan: MuxPlan, output_path: Path, mkvmerge_path: str) -> list[str]:
+def build_mkvmerge_command(
+    plan: MuxPlan,
+    output_path: Path,
+    mkvmerge_path: str,
+    *,
+    mime_mode: FontMimeMode = "legacy",
+) -> list[str]:
     command = [mkvmerge_path, "--output", str(output_path)]
     # Keep mkvmerge from rewriting our explicit IETF language tags.
     command.append("--normalize-language-ietf")
     command.append("off")
+    # In legacy mode the plan declares the old font MIME types
+    # (application/x-truetype-font, application/vnd.ms-opentype). mkvmerge v66+
+    # rewrites font attachment MIME types to the modern `font/ttf` / `font/otf`
+    # scheme when writing, so ask it to keep the legacy scheme to match the plan.
+    # In modern mode the plan declares the modern types and mkvmerge already
+    # writes them by default, so no flag is needed. Older mkvmerge already used
+    # the legacy types by default, hence the version gate (don't pass an unknown
+    # flag to old builds).
+    if mime_mode == "legacy" and mkvmerge_supports_legacy_font_mime_types(mkvmerge_path):
+        command.append("--enable-legacy-font-mime-types")
     source_audio = [track for track in plan.source_tracks if track.type == "audio"]
     included_audio_ids = [track.id for track in source_audio if track.included]
     if source_audio and not included_audio_ids:
@@ -173,7 +193,13 @@ def build_mkvmerge_command(plan: MuxPlan, output_path: Path, mkvmerge_path: str)
     return command
 
 
-def verify_mux_output(plan: MuxPlan, output_path: Path, mkvmerge_path: str) -> VerificationResult:
+def verify_mux_output(
+    plan: MuxPlan,
+    output_path: Path,
+    mkvmerge_path: str,
+    *,
+    mime_mode: FontMimeMode = "legacy",
+) -> VerificationResult:
     basic_error = verify_output(output_path)
     if basic_error:
         code = "OUTPUT_NOT_CREATED" if not output_path.exists() else "OUTPUT_EMPTY"
@@ -236,7 +262,7 @@ def verify_mux_output(plan: MuxPlan, output_path: Path, mkvmerge_path: str) -> V
     if any(actual_names[name] < count for name, count in expected_names.items()):
         return VerificationResult(False, "ATTACHMENT_COUNT_MISMATCH", "Planned font attachments are missing", data)
     expected_properties = Counter(
-        (item.name.casefold(), attachment_mime_type(item).casefold())
+        (item.name.casefold(), attachment_mime_type(item, mime_mode=mime_mode).casefold())
         for item in plan.attachments
     )
     actual_properties = Counter(
@@ -322,16 +348,52 @@ def resolve_mkvmerge_path(config: AppConfig) -> str | None:
     return resolve_mkvmerge(config.mkvmerge.path).resolved_path
 
 
-def attachment_mime_type(attachment: AttachmentPlan) -> str:
+_MKVMERGE_VERSION_CACHE: dict[str, tuple[int, ...] | None] = {}
+
+
+def _parse_mkvmerge_version(text: str) -> tuple[int, ...] | None:
+    match = re.search(r"\bmkvmerge\s+v?(\d+(?:\.\d+)*)", text, re.IGNORECASE)
+    if not match:
+        return None
+    parts: list[int] = []
+    for part in match.group(1).split("."):
+        try:
+            parts.append(int(part))
+        except ValueError:
+            break
+    return tuple(parts)
+
+
+def mkvmerge_supports_legacy_font_mime_types(mkvmerge_path: str) -> bool:
+    """Return True when this mkvmerge build honors --enable-legacy-font-mime-types.
+
+    The option was introduced in MKVToolNix v66. Earlier versions already stored
+    the legacy font MIME types by default, so the flag is unnecessary (and would
+    be rejected as unknown) for them.
+    """
+    if mkvmerge_path in _MKVMERGE_VERSION_CACHE:
+        version = _MKVMERGE_VERSION_CACHE[mkvmerge_path]
+    else:
+        try:
+            completed = subprocess.run(
+                [mkvmerge_path, "--version"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=5.0, shell=False, creationflags=windows_no_window_flag(),
+            )
+            version = _parse_mkvmerge_version(completed.stdout + completed.stderr)
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            # Any failure to probe (missing tool, unexpected output, sandbox
+            # restrictions) means we cannot confirm support, so stay safe and
+            # omit the flag. Old mkvmerge already used legacy MIME types.
+            version = None
+        _MKVMERGE_VERSION_CACHE[mkvmerge_path] = version
+    return version is not None and version >= (66,)
+
+
+def attachment_mime_type(attachment: AttachmentPlan, *, mime_mode: FontMimeMode = "legacy") -> str:
     if attachment.expected_mime_type:
         return attachment.expected_mime_type
-    mime = mimetypes.guess_type(attachment.name)[0]
-    suffix = Path(attachment.name).suffix.casefold()
-    if suffix == ".ttf":
-        return "application/x-truetype-font"
-    if suffix in {".otf", ".ttc", ".otc"}:
-        return "application/vnd.ms-opentype"
-    return mime or "application/octet-stream"
+    return font_mime_type_for_suffix(attachment.name, mode=mime_mode)
 
 
 def verify_output(output_path: Path, started_at: float | None = None) -> str | None:

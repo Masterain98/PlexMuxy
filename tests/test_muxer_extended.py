@@ -53,6 +53,57 @@ def test_mkvmerge_command_uses_planned_attachment_name_and_mime(tmp_path):
     ]
 
 
+def test_mkvmerge_command_omits_legacy_font_mime_flag_by_default(tmp_path):
+    font = tmp_path / "cache-key.ttf"
+    plan = MuxPlan(
+        tmp_path / "source.mkv",
+        tmp_path / "output.mkv",
+        attachments=[AttachmentPlan(
+            font,
+            expected_name="PMX_DEMO-Regular.ttf",
+            expected_mime_type="application/x-truetype-font",
+        )],
+    )
+
+    command = build_mkvmerge_command(plan, plan.output_path, "mkvmerge")
+    assert "--enable-legacy-font-mime-types" not in command
+
+
+def test_mkvmerge_command_uses_legacy_font_mime_flag_in_legacy_mode(monkeypatch, tmp_path):
+    font = tmp_path / "cache-key.ttf"
+    plan = MuxPlan(
+        tmp_path / "source.mkv",
+        tmp_path / "output.mkv",
+        attachments=[AttachmentPlan(
+            font,
+            expected_name="PMX_DEMO-Regular.ttf",
+            expected_mime_type="application/x-truetype-font",
+        )],
+    )
+    monkeypatch.setattr(
+        "plexmuxy.muxer.mkvmerge_supports_legacy_font_mime_types", lambda _: True,
+    )
+
+    command = build_mkvmerge_command(plan, plan.output_path, "mkvmerge", mime_mode="legacy")
+    assert "--enable-legacy-font-mime-types" in command
+
+
+def test_mkvmerge_command_omits_legacy_font_mime_flag_in_modern_mode(tmp_path):
+    font = tmp_path / "cache-key.ttf"
+    plan = MuxPlan(
+        tmp_path / "source.mkv",
+        tmp_path / "output.mkv",
+        attachments=[AttachmentPlan(
+            font,
+            expected_name="PMX_DEMO-Regular.ttf",
+            expected_mime_type="font/ttf",
+        )],
+    )
+
+    command = build_mkvmerge_command(plan, plan.output_path, "mkvmerge", mime_mode="modern")
+    assert "--enable-legacy-font-mime-types" not in command
+
+
 def test_mkvmerge_command_scopes_source_audio_filter_before_source_input(tmp_path):
     source = tmp_path / "source.mkv"
     plan = MuxPlan(
@@ -67,7 +118,11 @@ def test_mkvmerge_command_scopes_source_audio_filter_before_source_input(tmp_pat
 
     command = build_mkvmerge_command(plan, plan.output_path, "mkvmerge")
 
-    assert command[:6] == ["mkvmerge", "--output", str(plan.output_path), "--audio-tracks", "1", str(source)]
+    assert command[:8] == [
+        "mkvmerge", "--output", str(plan.output_path),
+        "--normalize-language-ietf", "off",
+        "--audio-tracks", "1", str(source),
+    ]
 
 
 def test_mkvmerge_command_uses_no_audio_only_for_source_input(tmp_path):
@@ -82,7 +137,11 @@ def test_mkvmerge_command_uses_no_audio_only_for_source_input(tmp_path):
 
     command = build_mkvmerge_command(plan, plan.output_path, "mkvmerge")
 
-    assert command[:5] == ["mkvmerge", "--output", str(plan.output_path), "--no-audio", str(source)]
+    assert command[:7] == [
+        "mkvmerge", "--output", str(plan.output_path),
+        "--normalize-language-ietf", "off",
+        "--no-audio", str(source),
+    ]
     assert command[-1] == str(external)
 
 
@@ -118,7 +177,7 @@ def test_execute_mux_plan_success_uses_verified_temp_then_replaces(monkeypatch, 
     config = default_config()
     monkeypatch.setattr("plexmuxy.muxer.resolve_mkvmerge_path", lambda config: "mkvmerge")
     monkeypatch.setattr("plexmuxy.muxer.subprocess.Popen", lambda command, **kwargs: FakeProcess(command))
-    monkeypatch.setattr("plexmuxy.muxer.verify_mux_output", lambda *args: VerificationResult(True))
+    monkeypatch.setattr("plexmuxy.muxer.verify_mux_output", lambda *args, **kwargs: VerificationResult(True))
     result = execute_mux_plan(plan, config)
     assert result.success and result.verified
     assert output.read_bytes() == b"partial"

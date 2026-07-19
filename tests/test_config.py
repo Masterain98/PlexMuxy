@@ -201,3 +201,23 @@ def test_v4_track_filter_fields_are_strictly_validated():
 
     with pytest.raises(ConfigError, match=r"tracks\.audio_filter_enabled"):
         parse_config({"config_version": 4, "tracks": {"audio_filter_enabled": "yes"}})
+
+
+def test_font_mime_mode_defaults_to_legacy_and_validates_choices():
+    config = parse_config({"config_version": 4})
+    assert config.font.mime_mode == "legacy"
+
+    legacy = parse_config({"config_version": 4, "font": {"mime_mode": "legacy"}})
+    assert legacy.font.mime_mode == "legacy"
+    modern = parse_config({"config_version": 4, "font": {"mime_mode": "modern"}})
+    assert modern.font.mime_mode == "modern"
+
+    with pytest.raises(ConfigError, match=r"font\.mime_mode"):
+        parse_config({"config_version": 4, "font": {"mime_mode": "fancy"}})
+
+
+def test_font_mime_mode_round_trips_through_serialization():
+    config = parse_config({"config_version": 4, "font": {"mime_mode": "modern"}})
+    restored = parse_config(config_to_dict(config))
+    assert restored.font.mime_mode == "modern"
+

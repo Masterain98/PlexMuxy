@@ -211,7 +211,7 @@ def parse_v2_config(data: dict[str, Any]) -> AppConfig:
     }, "matching")
     reject_unknown(subtitle_data, {"default_language", "show_author_in_track_name", "profiles"}, "subtitle")
     reject_unknown(font_data, {
-        "delete_fonts_after_mux", "unrar_path", "mode", "missing_font_action",
+        "delete_fonts_after_mux", "unrar_path", "mode", "mime_mode", "missing_font_action",
         "subset_failure_action", "archive_limits",
     }, "font")
     reject_unknown(font_cache_data, {"enabled", "max_size_mb", "max_age_days"}, "font_cache")
@@ -285,6 +285,7 @@ def parse_v2_config(data: dict[str, Any]) -> AppConfig:
         delete_fonts_after_mux=bool_value(font_data.get("delete_fonts_after_mux", False), "font.delete_fonts_after_mux"),
         unrar_path=str(font_data.get("unrar_path", "")),
         mode=choice(font_data.get("mode", "all"), {"all", "referenced", "subset"}, "font.mode"),
+        mime_mode=choice(font_data.get("mime_mode", "legacy"), {"legacy", "modern"}, "font.mime_mode"),
         missing_font_action=choice(font_data.get("missing_font_action", "warn"), {"warn", "skip-video", "fail-job", "fallback-all"}, "font.missing_font_action"),
         subset_failure_action=choice(
             font_data.get("subset_failure_action", "fallback-full"),

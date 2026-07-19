@@ -10,11 +10,49 @@ NameStrategy = Literal["suffix", "same-name", "template"]
 FailedOutputAction = Literal["keep", "delete", "rename"]
 AmbiguousAction = Literal["skip"]
 FontMode = Literal["all", "referenced", "subset"]
+FontMimeMode = Literal["legacy", "modern"]
 MissingFontAction = Literal["warn", "skip-video", "fail-job", "fallback-all"]
 SubsetFailureAction = Literal["fallback-full", "skip-video", "fail-job"]
 FontOutlineType = Literal["truetype", "cff", "cff2", "unknown"]
 TrackDecisionSource = Literal["default", "rule", "manual"]
 PLAN_SCHEMA_VERSION = 3
+
+# Mapping of font file suffixes to the MIME type mkvmerge stores for the
+# attachment. Legacy types are what MKVToolNix used before v66; the modern
+# `font/...` scheme is written by default since MKVToolNix v66 unless
+# --enable-legacy-font-mime-types is passed.
+_LEGACY_FONT_MIME_TYPES: dict[str, str] = {
+    ".ttf": "application/x-truetype-font",
+    ".otf": "application/vnd.ms-opentype",
+    ".ttc": "application/vnd.ms-opentype",
+    ".otc": "application/vnd.ms-opentype",
+}
+_MODERN_FONT_MIME_TYPES: dict[str, str] = {
+    ".ttf": "font/ttf",
+    ".otf": "font/otf",
+    ".ttc": "font/collection",
+    ".otc": "font/collection",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".sfnt": "font/sfnt",
+}
+
+
+def font_mime_type_for_suffix(suffix: str, *, mode: FontMimeMode = "legacy") -> str:
+    """Return the MIME type to declare for a font attachment of the given path suffix."""
+    suffix = Path(suffix).suffix if not suffix.startswith(".") else suffix
+    suffix = suffix.casefold()
+    if mode == "modern":
+        return _MODERN_FONT_MIME_TYPES.get(suffix, "font/sfnt")
+    return _LEGACY_FONT_MIME_TYPES.get(suffix, "application/octet-stream")
+
+
+def font_mime_type_for_outline(outline_type: str, *, mode: FontMimeMode = "legacy") -> str:
+    """Return the MIME type for a (subset) font of the given outline type."""
+    if mode == "modern":
+        return "font/otf" if outline_type in ("cff", "cff2") else "font/ttf"
+    return "application/vnd.ms-opentype" if outline_type in ("cff", "cff2") else "application/x-truetype-font"
+
 PLAN_DIGEST_SCHEMA_VERSION = 2
 
 
@@ -94,6 +132,7 @@ class FontConfig:
     delete_fonts_after_mux: bool = False
     unrar_path: str = ""
     mode: FontMode = "all"
+    mime_mode: FontMimeMode = "legacy"
     missing_font_action: MissingFontAction = "warn"
     subset_failure_action: SubsetFailureAction = "fallback-full"
     archive_limits: ArchiveLimits = field(default_factory=ArchiveLimits)
