@@ -227,8 +227,8 @@ def test_gui_replaces_native_selects_with_accessible_listboxes():
     css = (static_dir / "app.css").read_text(encoding="utf-8")
 
     assert "<select" not in html
-    assert html.count('role="combobox"') == 2
-    assert html.count('role="listbox"') == 2
+    assert html.count('role="combobox"') == 3
+    assert html.count('role="listbox"') == 3
     assert 'aria-haspopup="listbox"' in html
     for behavior in (
         "handleSelectTriggerKey",

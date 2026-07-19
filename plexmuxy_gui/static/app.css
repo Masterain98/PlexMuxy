@@ -2615,6 +2615,13 @@ progress::-moz-progress-bar {
   text-align: left;
 }
 
+.select-listbox [role="option"]:disabled,
+.select-listbox [role="option"][aria-disabled="true"],
+.select-listbox [role="option"].is-unavailable {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .select-listbox [role="option"][aria-selected="true"] {
   background: var(--color-selected);
   color: var(--color-accent-ink);

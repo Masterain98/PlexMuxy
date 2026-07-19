@@ -335,9 +335,14 @@ function handleOutsideSelectPointer(event) {
 }
 
 function selectCustomOption(root, option, emitChange, restoreFocus = true) {
+  if (isCustomOptionDisabled(option)) { closeCustomSelect(root, restoreFocus); return; }
   const trigger = root.querySelector('[role="combobox"]');
   setCustomSelectValue(trigger.id, option.dataset.value, emitChange);
   closeCustomSelect(root, restoreFocus);
+}
+
+function isCustomOptionDisabled(option) {
+  return Boolean(option?.disabled) || option?.getAttribute("aria-disabled") === "true";
 }
 
 function setCustomSelectValue(id, value, emitChange = false) {
@@ -952,6 +957,7 @@ function buildPayload() {
     name_strategy: getCustomSelectValue("name-strategy"), name_template: $("name-template").value.trim(),
     overwrite: $("overwrite").checked,
     font_mode: $("font-subset").checked ? "subset" : state.lastNonSubsetFontMode,
+    mime_mode: getCustomSelectValue("font-mime-mode"),
     audio_filter_enabled: $("audio-filter-enabled").checked,
     exclude_audio_title_patterns: commaValues($("audio-exclude-patterns").value),
     keep_audio_languages: commaValues($("audio-keep-languages").value),
@@ -1193,6 +1199,7 @@ function applyConfigDefaults() {
   const fontMode = state.config?.font?.mode || "all";
   if (fontMode !== "subset") state.lastNonSubsetFontMode = fontMode;
   $("font-subset").checked = fontMode === "subset";
+  setCustomSelectValue("font-mime-mode", state.config?.font?.mime_mode || "legacy");
   const tracks = state.config?.tracks || {};
   $("audio-filter-enabled").checked = Boolean(tracks.audio_filter_enabled);
   $("audio-exclude-patterns").value = (tracks.exclude_audio_title_patterns || []).join(", ");
@@ -1213,6 +1220,36 @@ function updateOptionAvailability() {
   document.querySelectorAll(".audio-filter-option input").forEach((control) => {
     control.disabled = !filterEnabled;
     control.setAttribute("aria-disabled", String(!filterEnabled));
+  });
+  applyCompatibility();
+}
+
+// Enable/disable settings based on the environment compatibility report
+// (state.config.compatibility) produced by the backend. Every element carrying a
+// data-compat="<setting id>" attribute is toggled according to whether its
+// declared tool-version requirements are satisfied.
+function applyCompatibility() {
+  const report = state.config?.compatibility || {};
+  document.querySelectorAll("[data-compat]").forEach((element) => {
+    const info = report[element.dataset.compat];
+    const blocked = Boolean(info) && info.satisfied === false;
+    const isOption = element.getAttribute("role") === "option";
+    const control = isOption ? element : element.querySelector('[role="combobox"]') || element;
+    if ("disabled" in control) control.disabled = blocked;
+    element.setAttribute("aria-disabled", String(blocked));
+    element.classList.toggle("is-unavailable", blocked);
+    if (blocked) {
+      const requirement = (info.unmet_describe || info.unmet || []).join(", ");
+      element.title = requirement ? t("compatibility.requires", { requirement }) : "";
+    } else {
+      element.removeAttribute("title");
+    }
+    if (blocked && isOption && element.getAttribute("aria-selected") === "true") {
+      const root = element.closest("[data-custom-select]");
+      const trigger = root?.querySelector('[role="combobox"]');
+      const fallback = customSelectOptions(root).find((option) => !isCustomOptionDisabled(option));
+      if (trigger && fallback) setCustomSelectValue(trigger.id, fallback.dataset.value, false);
+    }
   });
 }
 

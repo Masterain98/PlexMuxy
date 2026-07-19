@@ -16,6 +16,7 @@ from typing import Any
 
 from plexmuxy import __version__
 from plexmuxy.audio_preview import AudioPreviewManager
+from plexmuxy.compatibility import evaluate_compatibility
 from plexmuxy.config import (
     ConfigError,
     config_to_dict,
@@ -465,6 +466,8 @@ class PlexMuxyApi:
                     task[key] = payload[key] or None
             if "font_mode" in payload:
                 data["font"]["mode"] = payload["font_mode"]
+            if "mime_mode" in payload:
+                data["font"]["mime_mode"] = payload["mime_mode"]
             tracks = data["tracks"]
             for key in (
                 "audio_filter_enabled",
@@ -1062,6 +1065,13 @@ def config_summary(config, notifier: NativeNotifier | None = None) -> dict[str, 
         "mkvmerge": {**dependency_inspection_to_dict(mkvmerge), "required": True},
         "ffmpeg": {**dependency_inspection_to_dict(ffmpeg), "required": False},
         "unrar": {**dependency_inspection_to_dict(unrar), "required": False},
+        "compatibility": evaluate_compatibility(
+            {
+                "mkvmerge": mkvmerge.version,
+                "ffmpeg": ffmpeg.version,
+                "unrar": unrar.version,
+            }
+        ),
         "notifications": {
             "enabled": config.notifications.enabled,
             "available": capability.available,
@@ -1092,6 +1102,7 @@ def config_summary(config, notifier: NativeNotifier | None = None) -> dict[str, 
             "delete_fonts_after_mux": config.font.delete_fonts_after_mux,
             "unrar_path": config.font.unrar_path,
             "mode": config.font.mode,
+            "mime_mode": config.font.mime_mode,
             "subset_failure_action": config.font.subset_failure_action,
         },
         "updates": {

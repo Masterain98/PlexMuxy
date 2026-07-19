@@ -349,6 +349,19 @@
                     <span class="toggle-label" data-i18n="options.fontSubset.enable">Enable font subsetting</span>
                   </span>
                 </label>
+                <div class="setting-row">
+                  <label class="setting-copy" for="font-mime-mode"><strong data-i18n="options.fontMimeMode.label">Font MIME type</strong><span data-i18n="options.fontMimeMode.help">Choose the MIME type scheme for font attachments written into the MKV. Modern uses the font/ttf, font/otf, font/collection scheme and requires mkvmerge v66+. Legacy uses the older application/x-truetype-font and application/vnd.ms-opentype types.</span></label>
+                  <div class="control-wrap custom-select" data-custom-select>
+                    <button id="font-mime-mode" class="select-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="font-mime-mode-listbox" data-value="legacy">
+                      <span data-select-label data-i18n="options.fontMimeMode.legacy">Legacy</span>
+                      <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"></use></svg>
+                    </button>
+                    <div id="font-mime-mode-listbox" class="select-listbox" role="listbox" aria-labelledby="font-mime-mode" hidden>
+                      <button type="button" role="option" aria-selected="true" tabindex="-1" data-value="legacy" data-i18n="options.fontMimeMode.legacy">Legacy</button>
+                      <button type="button" role="option" aria-selected="false" tabindex="-1" data-value="modern" data-compat="font.mime_mode.modern" data-i18n="options.fontMimeMode.modern">Modern</button>
+                    </div>
+                  </div>
+                </div>
                 <label class="setting-row setting-row-toggle" for="audio-filter-enabled">
                   <span class="setting-copy"><strong data-i18n="options.audioFilter.label">Filter source audio tracks</strong><span data-i18n="options.audioFilter.help">Opt in to conservative source-audio rules. Unknown language remains preserved.</span></span>
                   <span class="toggle-row">
