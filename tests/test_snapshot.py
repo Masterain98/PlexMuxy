@@ -1,12 +1,14 @@
 import hashlib
 import json
 import os
+import zipfile
 
 import pytest
 
 from plexmuxy.config import config_to_dict, default_config, parse_config
 from plexmuxy.errors import StalePlanError
 from plexmuxy.models import (
+    AttachmentPlan,
     FileSnapshot,
     FontFaceRef,
     FontSubsetGroupIntent,
@@ -216,6 +218,48 @@ def test_schema3_tracks_archive_not_future_extraction_path(tmp_path):
     archive.write_bytes(b"archive-two")
     os.utime(archive, ns=(original_stat.st_atime_ns, archive_snapshot.modified_time_ns))
     with pytest.raises(StalePlanError, match="digest changed"):
+        validate_plan_snapshot(snapshot, config)
+
+
+def test_subset_snapshot_accepts_future_attachment_previewed_from_tracked_archive(tmp_path):
+    video = tmp_path / "Example.mkv"
+    archive = tmp_path / "Fonts.zip"
+    future_font = tmp_path / "Fonts" / "Demo.otf"
+    video.write_bytes(b"video")
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("Demo.otf", b"font payload")
+    config = default_config()
+    config.font.mode = "subset"
+    plan = MuxPlan(
+        video,
+        tmp_path / "Example_Plex.mkv",
+        attachments=[AttachmentPlan(future_font)],
+        font_subset_intent=FontSubsetIntent(1, 1, (), ()),
+    )
+    snapshot = create_plan_snapshot(tmp_path, [plan], config, extra_inputs=[archive])
+
+    assert future_font.resolve() not in {item.path for item in snapshot.files}
+    validate_plan_snapshot(snapshot, config)
+
+
+def test_subset_snapshot_rejects_untracked_font_not_in_archive_preview(tmp_path):
+    video = tmp_path / "Example.mkv"
+    archive = tmp_path / "Fonts.zip"
+    untrusted_font = tmp_path / "Fonts" / "Injected.otf"
+    video.write_bytes(b"video")
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("Demo.otf", b"font payload")
+    config = default_config()
+    config.font.mode = "subset"
+    plan = MuxPlan(
+        video,
+        tmp_path / "Example_Plex.mkv",
+        attachments=[AttachmentPlan(untrusted_font)],
+        font_subset_intent=FontSubsetIntent(1, 1, (), ()),
+    )
+    snapshot = create_plan_snapshot(tmp_path, [plan], config, extra_inputs=[archive])
+
+    with pytest.raises(StalePlanError, match="Untrusted attachment path"):
         validate_plan_snapshot(snapshot, config)
 
 

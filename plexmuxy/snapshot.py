@@ -161,6 +161,44 @@ def validate_plan_snapshot(snapshot: MuxPlanSnapshot, config: AppConfig) -> None
     existed = {path.resolve() for path in snapshot.outputs_existing}
     from .planner import build_output_path
 
+    # Archive previews deliberately put future extraction paths in a plan before
+    # those font files exist, so they cannot be present in ``snapshot.files``.
+    # Recompute the paths from the digest-validated archives instead of broadly
+    # trusting every untracked path below Fonts. This is especially important in
+    # subset mode, where a planning-time fallback may retain all previewed fonts.
+    previewed_archive_fonts: set[Path] = set()
+    fonts_root = (snapshot.input_dir / "Fonts").resolve()
+    archive_extensions = set(config.media.font_archive_extensions)
+    untracked_attachments = {
+        attachment.path.resolve()
+        for plan in snapshot.plans
+        for attachment in plan.attachments
+        if attachment.path.resolve() not in tracked
+    }
+    archive_snapshots = [
+        item
+        for item in snapshot.files
+        if item.path.suffix.casefold() in archive_extensions
+    ]
+    if untracked_attachments and archive_snapshots:
+        from .font import preview_font_archive
+
+        for archive_snapshot in archive_snapshots:
+            try:
+                previewed_archive_fonts.update(
+                    path.resolve()
+                    for path in preview_font_archive(
+                        archive_snapshot.path,
+                        fonts_root,
+                        config.media,
+                        config.font,
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001 - archive readers expose library-specific errors.
+                raise StalePlanError(
+                    f"Planned font archive can no longer be inspected: {archive_snapshot.path}: {exc}"
+                ) from exc
+
     for plan in snapshot.plans:
         output = plan.output_path.resolve()
         if plan.source_video.resolve() not in tracked:
@@ -184,13 +222,14 @@ def validate_plan_snapshot(snapshot: MuxPlanSnapshot, config: AppConfig) -> None
         expected_output = build_output_path(plan.source_video, snapshot.input_dir, config).resolve()
         if output != expected_output:
             raise StalePlanError(f"Plan output does not match the saved configuration: {output}")
-        fonts_root = (snapshot.input_dir / "Fonts").resolve()
         for attachment in plan.attachments:
             attachment_path = attachment.path.resolve()
             if attachment_path in tracked:
                 attachment_snapshot = tracked_snapshots[attachment_path]
                 if snapshot.schema_version >= 2 and attachment_snapshot.sha256 is None:
                     raise StalePlanError(f"Planned attachment has no digest: {attachment.path}")
+            elif attachment_path in previewed_archive_fonts:
+                continue
             elif font_mode == "subset" or fonts_root not in attachment_path.parents:
                 raise StalePlanError(f"Untrusted attachment path in plan: {attachment.path}")
         intent = plan.font_subset_intent

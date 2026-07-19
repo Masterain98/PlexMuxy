@@ -129,6 +129,9 @@ def _execute_runtime_plan(
 
 def build_mkvmerge_command(plan: MuxPlan, output_path: Path, mkvmerge_path: str) -> list[str]:
     command = [mkvmerge_path, "--output", str(output_path)]
+    # Keep mkvmerge from rewriting our explicit IETF language tags.
+    command.append("--normalize-language-ietf")
+    command.append("off")
     source_audio = [track for track in plan.source_tracks if track.type == "audio"]
     included_audio_ids = [track.id for track in source_audio if track.included]
     if source_audio and not included_audio_ids:
@@ -151,8 +154,10 @@ def build_mkvmerge_command(plan: MuxPlan, output_path: Path, mkvmerge_path: str)
             track = subtitle_by_path[path]
             command.extend([
                 "--track-name", f"0:{track.track_name}",
-                "--language", f"0:{track.mkv_language}",
-                "--language-ietf", f"0:{track.ietf_language}",
+                # mkvmerge's --language option accepts IETF BCP 47 tags and
+                # writes both LanguageIETF and the compatible legacy Language
+                # element. There is no separate --language-ietf input option.
+                "--language", f"0:{track.ietf_language}",
                 "--default-track-flag", f"0:{'yes' if track.default_track else 'no'}",
                 "--forced-display-flag", f"0:{'yes' if track.forced_track else 'no'}",
                 str(track.path),

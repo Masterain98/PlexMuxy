@@ -2,7 +2,14 @@ import json
 from types import SimpleNamespace
 
 from plexmuxy.config import default_config
-from plexmuxy.models import AttachmentPlan, AudioTrackPlan, MuxPlan, SourceTrackInfo, VerificationResult
+from plexmuxy.models import (
+    AttachmentPlan,
+    AudioTrackPlan,
+    MuxPlan,
+    SourceTrackInfo,
+    SubtitleTrackPlan,
+    VerificationResult,
+)
 from plexmuxy.muxer import build_mkvmerge_command, execute_mux_plan, inspect_source_tracks, verify_mux_output
 
 
@@ -77,6 +84,30 @@ def test_mkvmerge_command_uses_no_audio_only_for_source_input(tmp_path):
 
     assert command[:5] == ["mkvmerge", "--output", str(plan.output_path), "--no-audio", str(source)]
     assert command[-1] == str(external)
+
+
+def test_mkvmerge_command_sets_subtitle_bcp47_language_with_supported_option(tmp_path):
+    subtitle = tmp_path / "Example.JPSC.ass"
+    plan = MuxPlan(
+        tmp_path / "source.mkv",
+        tmp_path / "output.mkv",
+        subtitle_tracks=[SubtitleTrackPlan(
+            subtitle,
+            "jp_sc Studio",
+            "chi",
+            "zh-Hans",
+            True,
+            False,
+            "exact",
+        )],
+    )
+
+    command = build_mkvmerge_command(plan, plan.output_path, "mkvmerge")
+
+    assert "--language-ietf" not in command
+    language_index = command.index("--language")
+    assert command[language_index + 1] == "0:zh-Hans"
+    assert command[-1] == str(subtitle)
 
 
 def test_execute_mux_plan_success_uses_verified_temp_then_replaces(monkeypatch, tmp_path):
