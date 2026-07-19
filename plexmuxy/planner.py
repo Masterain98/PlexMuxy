@@ -198,7 +198,33 @@ def plan_font_subsets(
         progress_callback("matching_font_faces")
     intent = build_subset_intent(subtitles, usages, catalog)
     if not intent.issues:
-        return [], intent, warnings, None
+        # The real attachments are materialized later from ``intent.groups`` (as
+        # subsets), so the planner's ``attachments`` would otherwise be empty and
+        # the plan preview would show zero fonts. Return the distinct source font
+        # paths that will be subset-attached so the preview can list them. These
+        # paths are display-only here; the muxer ignores them in the subset-success
+        # path and only uses ``plan.attachments`` for the fallback-full policy.
+        return _subset_preview_fonts(intent), intent, warnings, None
+
+
+def _subset_preview_fonts(intent: FontSubsetIntent) -> list[Path]:
+    """Distinct source font paths that a successful subset plan will attach.
+
+    Used only to populate the planner's attachment list for the plan preview; the
+    actual mux inputs are produced from ``intent.groups`` at execution time.
+    """
+    paths: list[Path] = []
+    seen: set[Path] = set()
+    for group in intent.groups:
+        for face in group.faces:
+            if face.source_path is None:
+                continue
+            resolved = face.source_path.resolve()
+            if resolved not in seen:
+                seen.add(resolved)
+                paths.append(resolved)
+    return paths
+
     warnings.extend(f"{issue.code}:{issue.message}" for issue in intent.issues)
     # Subset failures are governed by subset_failure_action (default "fallback-full"),
     # NOT missing_font_action (which only applies to the "referenced" font mode). Using

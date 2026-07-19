@@ -2,6 +2,7 @@ from pathlib import Path
 
 from plexmuxy.config import default_config
 from plexmuxy.font import prepare_fonts
+from plexmuxy.models import FontFaceRef, FontSubsetGroupIntent, FontSubsetIntent
 from plexmuxy.planner import build_mux_plans, build_output_path
 from plexmuxy.scanner import scan_media_dir
 
@@ -145,3 +146,52 @@ def test_existing_output_is_skipped_without_overwrite(tmp_path):
     result = build_mux_plans(scan, config)
     assert not result.plans
     assert any(item.reason == "output_exists" for item in result.skipped_files)
+
+
+def _make_face(source_path: Path, family: str, face_index: int = 0) -> FontFaceRef:
+    return FontFaceRef(
+        source_path=source_path,
+        face_index=face_index,
+        source_digest="d" * 64,
+        family_names=(family,),
+        typographic_family_names=(),
+        subfamily_names=("Regular",),
+        full_names=(f"{family} Regular",),
+        postscript_names=(family.replace(" ", ""),),
+        weight=400,
+        width=100,
+        italic=False,
+        unicode_codepoints=(0x41, 0x42),
+    )
+
+
+def test_subset_preview_fonts_deduplicates_source_paths(tmp_path):
+    from plexmuxy.planner import _subset_preview_fonts
+
+    yahei = tmp_path / "msyh.ttc"
+    simhei = tmp_path / "simhei.ttf"
+    # Two faces from the SAME font file plus one from a different file.
+    group_a = FontSubsetGroupIntent(
+        requested_names=("Microsoft YaHei",),
+        alias_family="PMX_AAAAAAAA",
+        faces=(_make_face(yahei, "Microsoft YaHei", 0), _make_face(yahei, "Microsoft YaHei", 1)),
+        codepoint_ranges=((0x41, 0x42),),
+    )
+    group_b = FontSubsetGroupIntent(
+        requested_names=("SimHei",),
+        alias_family="PMX_BBBBBBBB",
+        faces=(_make_face(simhei, "SimHei"),),
+        codepoint_ranges=((0x42, 0x43),),
+    )
+    intent = FontSubsetIntent(
+        analyzer_version=1,
+        subset_profile_version=1,
+        groups=(group_a, group_b),
+        subtitle_digests=(),
+    )
+
+    fonts = _subset_preview_fonts(intent)
+    # The two YaHei faces share one source file, so only two distinct paths.
+    assert len(fonts) == 2
+    assert yahei.resolve() in {p.resolve() for p in fonts}
+    assert simhei.resolve() in {p.resolve() for p in fonts}
