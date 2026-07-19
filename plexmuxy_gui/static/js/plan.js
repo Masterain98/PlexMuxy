@@ -152,6 +152,7 @@ function buildPayload() {
     overwrite: $("overwrite").checked,
     font_mode: $("font-subset").checked ? "subset" : state.lastNonSubsetFontMode,
     mime_mode: getCustomSelectValue("font-mime-mode"),
+    embed_scheme: getCustomSelectValue("font-embed-scheme"),
     audio_filter_enabled: $("audio-filter-enabled").checked,
     exclude_audio_title_patterns: commaValues($("audio-exclude-patterns").value),
     keep_audio_languages: commaValues($("audio-keep-languages").value),

@@ -45,7 +45,6 @@ from plexmuxy.diagnostics import (
 from plexmuxy.diagnostics import (
     export_diagnostics as write_diagnostics,
 )
-from plexmuxy.font_cache import FontSubsetCache
 from plexmuxy.integrations.plex import refresh_paths
 from plexmuxy.job_store import JobStore, platform_state_path
 from plexmuxy.jobs import JobRecord
@@ -479,11 +478,6 @@ class PlexMuxyApi:
             ):
                 if key in payload:
                     tracks[key] = payload[key]
-            cache = data["font_cache"]
-            for key in ("enabled", "max_size_mb", "max_age_days"):
-                payload_key = f"font_cache_{key}"
-                if payload_key in payload:
-                    cache[key] = payload[payload_key]
             task["cleanup_overridden"] = False
             config = parse_config(data)
             path = persist_config(config, config.source_path or resolve_config_path())
@@ -530,12 +524,6 @@ class PlexMuxyApi:
                 data["notifications"]["enabled"] = enabled
             if "updates_enabled" in payload:
                 data["updates"]["enabled"] = bool_setting(payload["updates_enabled"], "updates_enabled")
-            if "font_cache_enabled" in payload:
-                data["font_cache"]["enabled"] = bool_setting(payload["font_cache_enabled"], "font_cache_enabled")
-            for key in ("max_size_mb", "max_age_days"):
-                payload_key = f"font_cache_{key}"
-                if payload_key in payload:
-                    data["font_cache"][key] = payload[payload_key]
             if "plex_enabled" in payload:
                 data["plex"]["enabled"] = bool_setting(payload["plex_enabled"], "plex_enabled")
             for payload_key, config_key in (
@@ -659,27 +647,6 @@ class PlexMuxyApi:
 
     def delete_audio_preview(self, preview_id: str) -> dict[str, Any]:
         return self.guarded(lambda: self.ok({"deleted": self._preview.delete(str(preview_id))}))
-
-    def get_font_cache(self) -> dict[str, Any]:
-        def run() -> dict[str, Any]:
-            config = load_or_default_config()
-            cache = FontSubsetCache(config.font_cache)
-            return self.ok({**asdict(cache.stats()), "enabled": config.font_cache.enabled})
-        return self.guarded(run)
-
-    def clear_font_cache(self) -> dict[str, Any]:
-        def run() -> dict[str, Any]:
-            config = load_or_default_config()
-            return self.ok(asdict(FontSubsetCache(config.font_cache).clear()))
-        return self.guarded(run)
-
-    def open_font_cache_location(self) -> dict[str, Any]:
-        def run() -> dict[str, Any]:
-            config = load_or_default_config()
-            path = FontSubsetCache(config.font_cache).root
-            open_path(path)
-            return self.ok({"path": str(path)})
-        return self.guarded(run)
 
     def get_job_report(self, job_id: str) -> dict[str, Any]:
         def run() -> dict[str, Any]:
@@ -1120,11 +1087,6 @@ def config_summary(config, notifier: NativeNotifier | None = None) -> dict[str, 
                 for mapping in config.plex.path_mappings
             ],
             "token_available": bool(os.environ.get(config.plex.token_env, "")),
-        },
-        "font_cache": {
-            "enabled": config.font_cache.enabled,
-            "max_size_mb": config.font_cache.max_size_mb,
-            "max_age_days": config.font_cache.max_age_days,
         },
         "tracks": {
             "audio_filter_enabled": config.tracks.audio_filter_enabled,

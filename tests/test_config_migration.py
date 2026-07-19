@@ -55,7 +55,6 @@ def test_migrate_config_creates_backup(tmp_path):
     assert migrated["config_version"] == 4
     assert migrated["ffmpeg"] == {"path": ""}
     assert migrated["notifications"] == {"enabled": False}
-    assert migrated["font_cache"] == {"enabled": True, "max_size_mb": 2048, "max_age_days": 90}
     assert migrated["updates"] == {"enabled": False, "interval_hours": 24, "timeout_seconds": 3.0}
     assert migrated["plex"] == {
         "enabled": False,

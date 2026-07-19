@@ -40,6 +40,26 @@ def test_apply_job_overrides_updates_task_fields_without_mutating_original(tmp_p
     assert updated.task.overwrite is True
 
 
+def test_embed_scheme_override_reaches_font_config():
+    config = default_config()
+    assert config.font.embed_scheme == "attachment"
+
+    updated = apply_job_overrides(
+        config,
+        overrides_from_payload({"embed_scheme": "ass"}),
+    )
+
+    assert updated.font.embed_scheme == "ass"
+    # Not persisted back onto the original config.
+    assert config.font.embed_scheme == "attachment"
+
+
+def test_embed_scheme_override_validated_like_persisted_config():
+    config = default_config()
+    with pytest.raises(ConfigError):
+        apply_job_overrides(config, overrides_from_payload({"embed_scheme": "bogus"}))
+
+
 def test_empty_string_overrides_do_not_pollute_optional_fields():
     config = default_config()
     config.task.extra_dir = "Extra"

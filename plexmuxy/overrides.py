@@ -19,6 +19,7 @@ class JobOverrides:
     name_template: str | None = None
     font_mode: FontMode | None = None
     mime_mode: FontMimeMode | None = None
+    embed_scheme: str | None = None
     overwrite: bool = False
 
 
@@ -41,6 +42,8 @@ def apply_job_overrides(config: AppConfig, overrides: JobOverrides) -> AppConfig
         updated.font.mode = overrides.font_mode
     if overrides.mime_mode is not None:
         updated.font.mime_mode = overrides.mime_mode
+    if overrides.embed_scheme is not None:
+        updated.font.embed_scheme = overrides.embed_scheme
     if overrides.overwrite:
         updated.task.overwrite = True
     # Reuse the same validation path as persisted configuration so malformed
@@ -62,6 +65,7 @@ def overrides_from_namespace(args: Namespace) -> JobOverrides:
         name_template=getattr(args, "name_template", None),
         font_mode=cast(FontMode | None, getattr(args, "font_mode", None)),
         mime_mode=cast(FontMimeMode | None, getattr(args, "mime_mode", None)),
+        embed_scheme=optional_str(getattr(args, "embed_scheme", None)),
         overwrite=bool(getattr(args, "overwrite", False)),
     )
 
@@ -76,6 +80,7 @@ def overrides_from_payload(payload: dict[str, Any]) -> JobOverrides:
         name_template=optional_str(payload.get("name_template")),
         font_mode=cast(FontMode | None, optional_str(payload.get("font_mode"))),
         mime_mode=cast(FontMimeMode | None, optional_str(payload.get("mime_mode"))),
+        embed_scheme=optional_str(payload.get("embed_scheme")),
         overwrite=bool(payload.get("overwrite", False)),
     )
 

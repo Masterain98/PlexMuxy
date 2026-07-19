@@ -70,7 +70,7 @@ function handleLocaleChange() {
   else if (!window.pywebview) renderOfflineShell();
   renderPlans(state.planReport);
   renderResults(state.runReport);
-  renderJobs(); renderFontCache();
+  renderJobs();
   if (state.lastJobStatus) renderProgress(state.lastJobStatus);
   if (state.loading) setText("loading-text", t(state.loadingMessageKey));
   if (state.activeJobId) setRuntimeStatus(t("status.jobRunning"));

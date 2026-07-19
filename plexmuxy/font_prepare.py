@@ -12,7 +12,6 @@ from pathlib import Path
 
 from .ass_rewrite import AssRewriteError, rewrite_ass_file
 from .font import extract_rar, safe_destination, seven_zip_members, validate_archive_file, validate_members
-from .font_cache import FontSubsetCache
 from .font_catalog import normalize_font_name
 from .font_matching import match_font_usages
 from .font_subset import (
@@ -65,7 +64,6 @@ class SubsetWorkspace:
         self,
         plan_id: str,
         root: Path | None = None,
-        persistent_cache: FontSubsetCache | None = None,
     ) -> None:
         self.plan_id = plan_id
         self.root = Path(root) if root else None
@@ -76,7 +74,6 @@ class SubsetWorkspace:
         self.manifests: Path | None = None
         self._temporary: tempfile.TemporaryDirectory[str] | None = None
         self.subset_cache: dict[str, AttachmentPlan] = {}
-        self.persistent_cache = persistent_cache
 
     def __enter__(self) -> SubsetWorkspace:
         safe_plan_id = "".join(character for character in self.plan_id if character.isalnum())[:12] or "plan"
@@ -315,9 +312,10 @@ def prepare_subset_plan(
         _emit_preparation(progress_callback, "validating_subsets", total_groups, completed + 1, current)
 
     _check_cancelled(cancellation_event)
-    # Subset fonts keep their ORIGINAL family name (see font_subset.rewrite_font_names),
-    # so the subtitle already references them by that name and must NOT be rewritten to an
-    # opaque alias. Rewriting would break player-side font matching.
+    # Subset fonts preserve their ORIGINAL name table verbatim (see
+    # font_subset.subset_font_face), so the subtitle already references them by
+    # that name and must NOT be rewritten to an opaque alias. Rewriting would
+    # break player-side font matching.
     subtitle_tracks = _rewrite_subtitle_tracks(plan, {}, workspace, cancellation_event)
     generated_files.extend(
         track.path for original, track in zip(plan.subtitle_tracks, subtitle_tracks, strict=True)
@@ -374,22 +372,8 @@ def _cached_subset_attachment(
 
     extension = output_extension(face)
     output = workspace.require_path("fonts") / f"{cache_key}{extension}"
-    if workspace.persistent_cache is not None:
-        entry = workspace.persistent_cache.get_or_create(
-            face,
-            codepoints,
-            alias_family,
-            lambda destination: subset_font_face(
-                face, source, codepoints, alias_family, destination, mime_mode=mime_mode,
-            ),
-        )
-        temporary = output.with_name(f".{output.name}.{os.getpid()}.cache-copy")
-        shutil.copy2(entry.path, temporary)
-        os.replace(temporary, output)
-        mime_type = font_mime_type_for_outline(face.outline_type, mode=mime_mode)
-    else:
-        result = subset_font_face(face, source, codepoints, alias_family, output, mime_mode=mime_mode)
-        mime_type = result.mime_type
+    result = subset_font_face(face, source, codepoints, alias_family, output, mime_mode=mime_mode)
+    mime_type = result.mime_type
     style = style_name(face).replace(" ", "")
     expected_name = f"{alias_family}-{style}-{face.source_digest[:8]}{extension}"
     attachment = AttachmentPlan(

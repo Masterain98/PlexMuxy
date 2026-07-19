@@ -103,9 +103,6 @@ def test_default_config_v4_contains_environment_subset_and_track_contracts():
     assert config.config_version == 4
     assert config.media.font_extensions == [".ttf", ".otf", ".ttc", ".otc"]
     assert config.font.subset_failure_action == "fallback-full"
-    assert config.font_cache.enabled is True
-    assert config.font_cache.max_size_mb == 2048
-    assert config.font_cache.max_age_days == 90
     assert config.ffmpeg.path == ""
     assert config.notifications.enabled is False
     assert config.tracks.audio_filter_enabled is False
@@ -113,7 +110,7 @@ def test_default_config_v4_contains_environment_subset_and_track_contracts():
     assert config.tracks.allow_no_audio is False
     assert config.updates.enabled is False
     assert config.plex.enabled is False
-    assert set(config_to_dict(config)) >= {"ffmpeg", "notifications", "font_cache", "updates", "plex"}
+    assert set(config_to_dict(config)) >= {"ffmpeg", "notifications", "updates", "plex"}
 
 
 def test_update_and_plex_config_are_strict_and_safe_by_default():

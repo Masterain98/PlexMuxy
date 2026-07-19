@@ -12,7 +12,14 @@ from fontTools.ttLib import TTFont
 from .font_catalog import is_optional_codepoint
 from .models import FontFaceRef, FontMimeMode, font_mime_type_for_outline
 
-SUBSET_PROFILE_VERSION = 1
+# Bump whenever the produced subset bytes can change for identical inputs.
+# v2: stopped rewriting/collapsing the font name table -- the original name
+# records (including GDI-packed weight families such as "HYXuanSong 65S" or
+# "FOT-TsukuMin Pr6N E") are now preserved verbatim. This version bump forces
+# every stale persistent-cache entry AND every previously stored plan intent to
+# be regenerated, so a re-run cannot silently reuse the old name-collapsed
+# subsets that broke libass font matching.
+SUBSET_PROFILE_VERSION = 2
 UNSAFE_GLYPH_TABLES = frozenset({"Silf", "Sill", "Glat", "Gloc", "morx", "mort", "kerx", "ankr"})
 
 
@@ -119,10 +126,16 @@ def subset_font_face(
         subsetter = subset.Subsetter(options=options)
         subsetter.populate(unicodes=requested)
         subsetter.subset(font)
-        # Write the ORIGINAL family name back into the subset so players match
-        # it the same way they match a full embedded font. The deterministic
-        # ``alias_family`` remains only an opaque cache/attachment identifier.
-        rewrite_font_names(font, face)
+        # Preserve the ORIGINAL name table verbatim (the subsetter keeps every
+        # record via ``name_IDs=["*"]``). Players/libass match embedded fonts by
+        # the name records baked into the file, so the subset must expose the
+        # exact same family names as the source -- including GDI-packed weight
+        # variants such as "FOT-TsukuMin Pr6N E", "HYXuanSong 65S" or
+        # "Hiragino Mincho StdN W7". Rewriting/collapsing these names to a single
+        # normalized family made styles that reference the packed name fail to
+        # match, so the renderer silently fell back to a default font.
+        # The deterministic ``alias_family`` remains only an opaque
+        # cache/attachment identifier and is never written into the font.
         if "head" in font:
             font["head"].modified = original_modified
         font.recalcTimestamp = False
@@ -154,44 +167,6 @@ def subset_font_face(
         output_size=output.stat().st_size,
         codepoint_count=len(requested),
     )
-
-
-def rewrite_font_names(font: TTFont, face: FontFaceRef) -> None:
-    """Rewrite the subset's name table so its family name matches the original font.
-
-    The subset keeps the ORIGINAL family name (``face.family_names[0]``) rather than
-    an opaque alias. Players match embedded MKV fonts by family name, so preserving
-    the original name lets the subset load exactly like a full embedded font would.
-    """
-
-    table = font.get("name")
-    if table is None:
-        raise FontSubsetError("Font has no name table")
-    target_family = face.family_names[0]
-    subfamily = style_name(face)
-    full_name = f"{target_family} {subfamily}"
-    unique_id = f"PlexMuxy;{target_family};{face.source_digest[:16]};{face.face_index}"
-    replacements = {
-        1: target_family,
-        2: subfamily,
-        3: unique_id,
-        4: full_name,
-        6: f"{target_family}{subfamily}",
-        16: target_family,
-        17: subfamily,
-        21: target_family,
-        22: subfamily,
-    }
-    existing_keys: set[tuple[int, int, int, int]] = set()
-    for record in list(table.names):
-        name_id = int(record.nameID)
-        existing_keys.add((name_id, int(record.platformID), int(record.platEncID), int(record.langID)))
-        value = replacements.get(name_id)
-        if value is not None:
-            table.setName(value, name_id, record.platformID, record.platEncID, record.langID)
-    for name_id in (1, 2, 3, 4, 6, 16, 17):
-        if not any(key[0] == name_id for key in existing_keys):
-            table.setName(replacements[name_id], name_id, 3, 1, 0x0409)
 
 
 def validate_subset_font(

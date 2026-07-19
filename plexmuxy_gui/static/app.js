@@ -25,7 +25,7 @@ async function initialize() {
   try {
     state.appInfo = await callApi("get_app_info"); state.config = await callApi("load_config");
     renderAppInfo(); renderConfigSummary(); renderRuntimeStatus(); applyConfigDefaults(); renderEnvironmentSettings();
-    await Promise.all([loadJobs(), renderFontCache()]);
+    await Promise.all([loadJobs()]);
     if (state.appInfo.activation_job_id) {
       await openSavedJob(state.appInfo.activation_job_id);
       if (state.appInfo.activation_action === "output") {

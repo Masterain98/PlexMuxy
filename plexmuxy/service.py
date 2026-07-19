@@ -15,7 +15,6 @@ from .cleanup import cleanup_successful_results
 from .config import config_to_dict
 from .errors import StalePlanError
 from .font import prepare_fonts
-from .font_cache import FontSubsetCache
 from .font_catalog import build_font_catalog
 from .font_prepare import FontPreparationError, SubsetWorkspace, prepare_subset_plan
 from .integrations.plex import PlexIntegrationError, refresh_paths
@@ -277,8 +276,7 @@ def execute_plan_snapshot(
         return report
 
     total = len(snapshot.plans)
-    persistent_font_cache = FontSubsetCache(config.font_cache) if config.font_cache.enabled else None
-    with SubsetWorkspace(snapshot.plan_id, persistent_cache=persistent_font_cache) as workspace:
+    with SubsetWorkspace(snapshot.plan_id) as workspace:
         prepared_plans: list[PreparedMuxPlan] = []
         for index, plan in enumerate(snapshot.plans):
             if cancel.is_set():

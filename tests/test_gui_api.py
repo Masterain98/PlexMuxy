@@ -414,9 +414,6 @@ def test_save_environment_settings_persists_opt_in_integrations_and_cache(monkey
     api._notifier = FakeNotifier()
     response = api.save_environment_settings({
         "updates_enabled": True,
-        "font_cache_enabled": False,
-        "font_cache_max_size_mb": 512,
-        "font_cache_max_age_days": 30,
         "plex_enabled": True,
         "plex_server_url": "https://plex.example.test",
         "plex_section_id": "2",
@@ -425,7 +422,6 @@ def test_save_environment_settings_persists_opt_in_integrations_and_cache(monkey
     })
     assert response["ok"] is True
     assert response["data"]["updates"]["enabled"] is True
-    assert response["data"]["font_cache"]["enabled"] is False
     assert response["data"]["plex"]["token_env"] == "MY_PLEX_TOKEN"
 
 

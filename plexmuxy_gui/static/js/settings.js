@@ -65,9 +65,6 @@ async function saveEnvironmentSettings() {
       ffmpeg_path: dependencyPathForSave("ffmpeg"),
       unrar_path: dependencyPathForSave("unrar"),
       notifications_enabled: $("notifications-enabled").checked,
-      font_cache_enabled: $("font-cache-enabled").checked,
-      font_cache_max_size_mb: Number($("font-cache-max-size").value),
-      font_cache_max_age_days: Number($("font-cache-max-age").value),
       updates_enabled: $("updates-enabled").checked,
       plex_enabled: $("plex-enabled").checked,
       plex_server_url: $("plex-server-url").value.trim(),
@@ -203,11 +200,7 @@ function renderEnvironmentSettings(resetDirty = true) {
   if (notifications.reason) capability.dataset.tooltip = notifications.reason;
   else delete capability.dataset.tooltip;
   capability.removeAttribute("title");
-  const cache = state.config.font_cache || {};
   if (resetDirty) {
-    $("font-cache-enabled").checked = cache.enabled !== false;
-    $("font-cache-max-size").value = cache.max_size_mb || 2048;
-    $("font-cache-max-age").value = cache.max_age_days || 90;
     $("updates-enabled").checked = Boolean(state.config.updates?.enabled);
     $("plex-enabled").checked = Boolean(state.config.plex?.enabled);
     $("plex-server-url").value = state.config.plex?.server_url || "";
@@ -314,6 +307,7 @@ function applyConfigDefaults() {
   if (fontMode !== "subset") state.lastNonSubsetFontMode = fontMode;
   $("font-subset").checked = fontMode === "subset";
   setCustomSelectValue("font-mime-mode", state.config?.font?.mime_mode || "legacy");
+  setCustomSelectValue("font-embed-scheme", state.config?.font?.embed_scheme || "attachment");
   const tracks = state.config?.tracks || {};
   $("audio-filter-enabled").checked = Boolean(tracks.audio_filter_enabled);
   $("audio-exclude-patterns").value = (tracks.exclude_audio_title_patterns || []).join(", ");

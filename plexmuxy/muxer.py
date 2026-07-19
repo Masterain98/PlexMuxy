@@ -9,8 +9,11 @@ import uuid
 from collections import Counter
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
+import logging
+
+from .ass_font_embedder import embed_fonts_into_ass
 from .dependencies import resolve_mkvmerge
 from .models import (
     AppConfig,
@@ -20,9 +23,13 @@ from .models import (
     MuxResult,
     PreparedMuxPlan,
     SourceTrackInfo,
+    SubtitleTrackPlan,
     VerificationResult,
     font_mime_type_for_suffix,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def execute_mux_plan(
@@ -30,7 +37,61 @@ def execute_mux_plan(
     config: AppConfig,
     cancellation_event: threading.Event | None = None,
 ) -> MuxResult:
-    return _execute_runtime_plan(plan, plan, config, cancellation_event)
+    scheme = config.font.embed_scheme
+    embedded: list[str] = []
+    if scheme in ("ass", "both"):
+        embedded = _embed_ass_subtitles(
+            plan.output_path, plan.subtitle_tracks, plan.attachments
+        )
+    if scheme == "ass" and embedded:
+        # Fonts now live inside the subtitle file, so mux that self-contained
+        # track and drop the separate MKV font attachments.
+        subtitle_tracks = [
+            replace(track, path=Path(embedded[i]))
+            for i, track in enumerate(plan.subtitle_tracks)
+        ]
+        runtime = replace(plan, subtitle_tracks=subtitle_tracks, attachments=[])
+    else:
+        # "attachment" keeps the MKV font attachments; "both" keeps them and
+        # additionally writes the self-contained .ass next to the output.
+        runtime = plan
+    result = _execute_runtime_plan(plan, runtime, config, cancellation_event)
+    if embedded:
+        result = replace(result, embedded_subtitles=embedded)
+    return result
+
+
+def _embed_ass_subtitles(
+    output_path: Path,
+    subtitle_tracks: list[SubtitleTrackPlan],
+    attachments: list[AttachmentPlan],
+) -> list[Path]:
+    """EXPERIMENTAL: emit self-contained .ass files with their fonts embedded.
+
+    Complements (or, in "ass" mode, replaces) MKV font attachments so the
+    subtitle can be played standalone. Fonts are embedded in a ``[Fonts]``
+    section using the Aegisub/libass uuencode scheme.
+    """
+    font_paths = [a.path for a in attachments if a.path.suffix.lower() in _FONT_ATTACHMENT_SUFFIXES]
+    if not font_paths or not subtitle_tracks:
+        return []
+    produced: list[str] = []
+    parent = output_path.parent
+    stem = output_path.stem
+    multi = len(subtitle_tracks) > 1
+    for index, track in enumerate(subtitle_tracks):
+        if not track.path or not track.path.exists():
+            continue
+        suffix = f".embedded.{index}.ass" if multi else ".embedded.ass"
+        out = parent / f"{stem}{suffix}"
+        try:
+            embed_fonts_into_ass(track.path, font_paths, out)
+            produced.append(str(out))
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.warning("Failed to emit embedded ASS %s: %s", out, exc)
+    if produced:
+        logger.info("Emitted %d self-contained subtitle file(s) with embedded fonts", len(produced))
+    return produced
 
 
 def execute_prepared_mux_plan(
@@ -38,18 +99,46 @@ def execute_prepared_mux_plan(
     config: AppConfig,
     cancellation_event: threading.Event | None = None,
 ) -> MuxResult:
-    runtime = replace(
-        prepared.original_plan,
-        subtitle_tracks=list(prepared.subtitle_tracks),
-        attachments=list(prepared.attachments),
-    )
-    return _execute_runtime_plan(
+    scheme = config.font.embed_scheme
+    embedded: list[str] = []
+    if scheme in ("ass", "both"):
+        embedded = _embed_ass_subtitles(
+            prepared.original_plan.output_path, prepared.subtitle_tracks, prepared.attachments
+        )
+    if scheme == "ass" and embedded:
+        # Fonts now live inside the subtitle file, so mux that self-contained
+        # track and drop the separate MKV font attachments.
+        subtitle_tracks = [
+            replace(track, path=Path(embedded[i]))
+            for i, track in enumerate(prepared.subtitle_tracks)
+        ]
+        runtime = replace(
+            prepared.original_plan,
+            subtitle_tracks=subtitle_tracks,
+            attachments=[],
+        )
+    else:
+        runtime = replace(
+            prepared.original_plan,
+            subtitle_tracks=list(prepared.subtitle_tracks),
+            attachments=list(prepared.attachments),
+        )
+    result = _execute_runtime_plan(
         prepared.original_plan,
         runtime,
         config,
         cancellation_event,
         prepared.subset_warnings,
+        prepared,
     )
+    if embedded:
+        result = replace(result, embedded_subtitles=embedded)
+    return result
+
+
+_FONT_ATTACHMENT_SUFFIXES = frozenset({
+    ".ttf", ".otf", ".ttc", ".otc", ".woff", ".woff2",
+})
 
 
 def _execute_runtime_plan(
@@ -58,6 +147,7 @@ def _execute_runtime_plan(
     config: AppConfig,
     cancellation_event: threading.Event | None,
     preparation_warnings: list[str] | None = None,
+    prepared: PreparedMuxPlan | None = None,
 ) -> MuxResult:
     def runtime_failure(
         code: str,

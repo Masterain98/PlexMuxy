@@ -168,34 +168,11 @@ async function toggleQueue() {
 
 
 
-async function renderFontCache() {
-  if (!window.pywebview?.api?.get_font_cache || !$("font-cache-summary")) return;
-  try {
-    const cache = await callApi("get_font_cache");
-    renderSummary($("font-cache-summary"), [
-      [t("environment.cache.status"), cache.enabled ? t("summary.available") : t("summary.unavailable")],
-      [t("environment.cache.entries"), String(cache.entries)],
-      [t("environment.cache.size"), formatBytes(cache.size_bytes)],
-      [t("environment.cache.limit"), formatBytes(cache.max_size_bytes)],
-      [t("environment.cache.path"), cache.path],
-    ]);
-  } catch (error) { showToast(error.message, "error", t("environment.cache.title")); }
-}
 
 
 
-async function clearFontCache() {
-  try { await callApi("clear_font_cache"); await renderFontCache(); showToast(t("environment.cache.cleared"), "success", t("environment.cache.title")); }
-  catch (error) { showToast(error.message, "error", t("environment.cache.title")); }
-}
 
 
-
-function formatBytes(value) {
-  const bytes = Number(value || 0); if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
-}
 
 
 

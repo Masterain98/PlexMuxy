@@ -5,11 +5,9 @@ import json
 import statistics
 import time
 import tracemalloc
-from dataclasses import asdict
 from pathlib import Path
 
 from plexmuxy.config import load_config
-from plexmuxy.font_cache import FontSubsetCache
 from plexmuxy.service import build_job_plan
 
 
@@ -52,7 +50,6 @@ def main() -> None:
         "iterations": len(samples),
         "median_duration_ms": round(statistics.median(item["duration_ms"] for item in samples), 2),
         "samples": samples,
-        "font_cache": asdict(FontSubsetCache(config.font_cache).stats()),
         "notes": "Planning-only benchmark; no mux subprocess or cleanup is executed.",
     }
     text = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"

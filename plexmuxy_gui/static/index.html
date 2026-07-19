@@ -362,6 +362,20 @@
                     </div>
                   </div>
                 </div>
+                <div class="setting-row">
+                  <label class="setting-copy" for="font-embed-scheme"><strong data-i18n="options.fontEmbedScheme.label">Font delivery</strong><span data-i18n="options.fontEmbedScheme.help">How subsetted fonts reach the player. Attachment embeds them in the MKV. ASS instead writes a self-contained .ass with the fonts embedded. Both keeps the MKV attachment and also writes the self-contained .ass.</span></label>
+                  <div class="control-wrap custom-select" data-custom-select>
+                    <button id="font-embed-scheme" class="select-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="font-embed-scheme-listbox" data-value="attachment">
+                      <span data-select-label data-i18n="options.fontEmbedScheme.attachment">MKV attachment</span>
+                      <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"></use></svg>
+                    </button>
+                    <div id="font-embed-scheme-listbox" class="select-listbox" role="listbox" aria-labelledby="font-embed-scheme" hidden>
+                      <button type="button" role="option" aria-selected="true" tabindex="-1" data-value="attachment" data-i18n="options.fontEmbedScheme.attachment">MKV attachment</button>
+                      <button type="button" role="option" aria-selected="false" tabindex="-1" data-value="ass" data-i18n="options.fontEmbedScheme.ass">Self-contained .ass</button>
+                      <button type="button" role="option" aria-selected="false" tabindex="-1" data-value="both" data-i18n="options.fontEmbedScheme.both">Both</button>
+                    </div>
+                  </div>
+                </div>
                 <label class="setting-row setting-row-toggle" for="audio-filter-enabled">
                   <span class="setting-copy"><strong data-i18n="options.audioFilter.label">Filter source audio tracks</strong><span data-i18n="options.audioFilter.help">Opt in to conservative source-audio rules. Unknown language remains preserved.</span></span>
                   <span class="toggle-row">
@@ -585,18 +599,8 @@
                 </div>
               </section>
 
-              <section class="panel" aria-labelledby="font-cache-title">
-                <div class="panel-header"><div class="section-heading"><span class="section-number" aria-hidden="true">04</span><div><p class="eyebrow" data-i18n="environment.cache.eyebrow">Performance</p><h3 id="font-cache-title" data-i18n="environment.cache.title">Persistent font subset cache</h3><p class="section-description" data-i18n="environment.cache.description">Validated subsets can be reused across tasks and are isolated by tool and schema versions.</p></div></div><div class="button-row"><button id="open-font-cache-btn" class="ghost" type="button" data-i18n="environment.cache.open">Open cache</button><button id="clear-font-cache-btn" class="secondary" type="button" data-i18n="environment.cache.clear">Clear cache</button></div></div>
-                <div class="settings-list compact-settings">
-                  <label class="setting-row setting-row-toggle" for="font-cache-enabled"><span class="setting-copy"><strong data-i18n="environment.cache.enable">Enable persistent cache</strong><span data-i18n="environment.cache.enableHelp">Disable to generate subsets only in the active task workspace.</span></span><span class="toggle-row"><input id="font-cache-enabled" class="visually-hidden" type="checkbox" /><span class="toggle-control" aria-hidden="true"></span></span></label>
-                  <div class="setting-row"><label class="setting-copy" for="font-cache-max-size"><strong data-i18n="environment.cache.maxSize">Maximum size (MiB)</strong></label><input id="font-cache-max-size" type="number" min="1" max="1048576" /></div>
-                  <div class="setting-row"><label class="setting-copy" for="font-cache-max-age"><strong data-i18n="environment.cache.maxAge">Maximum age (days)</strong></label><input id="font-cache-max-age" type="number" min="1" max="3650" /></div>
-                </div>
-                <div id="font-cache-summary" class="summary-list"></div>
-              </section>
-
               <section class="panel" aria-labelledby="integrations-title">
-                <div class="panel-header"><div class="section-heading"><span class="section-number" aria-hidden="true">05</span><div><p class="eyebrow" data-i18n="environment.integrations.eyebrow">Optional network features</p><h3 id="integrations-title" data-i18n="environment.integrations.title">Updates and Plex</h3><p class="section-description" data-i18n="environment.integrations.description">Both features are opt-in. Plex tokens are read from an environment variable and never saved here.</p></div></div><button id="check-updates-btn" class="secondary" type="button" data-i18n="environment.updates.check">Check now</button></div>
+                <div class="panel-header"><div class="section-heading"><span class="section-number" aria-hidden="true">04</span><div><p class="eyebrow" data-i18n="environment.integrations.eyebrow">Optional network features</p><h3 id="integrations-title" data-i18n="environment.integrations.title">Updates and Plex</h3><p class="section-description" data-i18n="environment.integrations.description">Both features are opt-in. Plex tokens are read from an environment variable and never saved here.</p></div></div><button id="check-updates-btn" class="secondary" type="button" data-i18n="environment.updates.check">Check now</button></div>
                 <div class="settings-list compact-settings">
                   <label class="setting-row setting-row-toggle" for="updates-enabled"><span class="setting-copy"><strong data-i18n="environment.updates.enable">Enable cached update checks</strong><span id="update-check-status" data-i18n="environment.updates.disabled">Disabled; PlexMuxy will stay offline.</span></span><span class="toggle-row"><input id="updates-enabled" class="visually-hidden" type="checkbox" /><span class="toggle-control" aria-hidden="true"></span></span></label>
                   <label class="setting-row setting-row-toggle" for="plex-enabled"><span class="setting-copy"><strong data-i18n="environment.plex.enable">Refresh Plex after verified jobs</strong><span id="plex-token-status" data-i18n="environment.plex.tokenMissing">Token environment variable not detected.</span></span><span class="toggle-row"><input id="plex-enabled" class="visually-hidden" type="checkbox" /><span class="toggle-control" aria-hidden="true"></span></span></label>

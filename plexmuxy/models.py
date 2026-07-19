@@ -10,6 +10,12 @@ NameStrategy = Literal["suffix", "same-name", "template"]
 FailedOutputAction = Literal["keep", "delete", "rename"]
 AmbiguousAction = Literal["skip"]
 FontMode = Literal["all", "referenced", "subset"]
+# How subsetted fonts are delivered to the player.
+#  - "attachment": embed fonts as MKV attachments (current behaviour).
+#  - "ass": instead of MKV attachments, emit a self-contained .ass with the
+#    fonts embedded in a [Fonts] section (assfonts-style).
+#  - "both": keep MKV attachments AND also emit the self-contained .ass.
+EmbedScheme = Literal["attachment", "ass", "both"]
 FontMimeMode = Literal["legacy", "modern"]
 MissingFontAction = Literal["warn", "skip-video", "fail-job", "fallback-all"]
 SubsetFailureAction = Literal["fallback-full", "skip-video", "fail-job"]
@@ -133,16 +139,10 @@ class FontConfig:
     unrar_path: str = ""
     mode: FontMode = "all"
     mime_mode: FontMimeMode = "legacy"
+    embed_scheme: EmbedScheme = "attachment"
     missing_font_action: MissingFontAction = "warn"
     subset_failure_action: SubsetFailureAction = "fallback-full"
     archive_limits: ArchiveLimits = field(default_factory=ArchiveLimits)
-
-
-@dataclass
-class FontCacheConfig:
-    enabled: bool = True
-    max_size_mb: int = 2048
-    max_age_days: int = 90
 
 
 @dataclass
@@ -210,7 +210,6 @@ class AppConfig:
     matching: MatchingConfig = field(default_factory=MatchingConfig)
     subtitle: SubtitleConfig = field(default_factory=SubtitleConfig)
     font: FontConfig = field(default_factory=FontConfig)
-    font_cache: FontCacheConfig = field(default_factory=FontCacheConfig)
     mkvmerge: MkvMergeConfig = field(default_factory=MkvMergeConfig)
     ffmpeg: FfmpegConfig = field(default_factory=FfmpegConfig)
     notifications: NotificationConfig = field(default_factory=NotificationConfig)
@@ -558,6 +557,7 @@ class MuxResult:
     warnings: list[str] = field(default_factory=list)
     verified: bool = False
     verification: VerificationResult | None = None
+    embedded_subtitles: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

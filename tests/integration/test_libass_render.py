@@ -44,7 +44,7 @@ def test_libass_renders_subset_identically_to_source(
 
     original_ass = tmp_path / "original.ass"
     subset_ass = tmp_path / "subset.ass"
-    # The subset keeps the ORIGINAL family name (see font_subset.rewrite_font_names), and the
+    # The subset preserves the ORIGINAL name table (see font_subset.subset_font_face), and the
     # subtitle references that same name -- exactly how a player matches a full embedded font.
     original_ass.write_text(_ass("PlexMuxy Render Source", ass_bold, ass_italic), encoding="utf-8")
     subset_ass.write_text(_ass("PlexMuxy Render Source", ass_bold, ass_italic), encoding="utf-8")

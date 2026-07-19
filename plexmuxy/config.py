@@ -17,7 +17,6 @@ from .models import (
     ArchiveLimits,
     ConcurrencyConfig,
     FfmpegConfig,
-    FontCacheConfig,
     FontConfig,
     LanguageProfile,
     MatchingConfig,
@@ -188,7 +187,6 @@ def parse_v2_config(data: dict[str, Any]) -> AppConfig:
     matching_data = require_mapping(data, "matching", default={})
     subtitle_data = require_mapping(data, "subtitle", default={})
     font_data = require_mapping(data, "font", default={})
-    font_cache_data = require_mapping(data, "font_cache", default={})
     limit_data = require_mapping(font_data, "archive_limits", default={})
     mkvmerge_data = require_mapping(data, "mkvmerge", default={})
     ffmpeg_data = require_mapping(data, "ffmpeg", default={})
@@ -211,10 +209,10 @@ def parse_v2_config(data: dict[str, Any]) -> AppConfig:
     }, "matching")
     reject_unknown(subtitle_data, {"default_language", "show_author_in_track_name", "profiles"}, "subtitle")
     reject_unknown(font_data, {
-        "delete_fonts_after_mux", "unrar_path", "mode", "mime_mode", "missing_font_action",
+        "delete_fonts_after_mux", "unrar_path", "mode", "mime_mode", "embed_scheme",
+        "missing_font_action",
         "subset_failure_action", "archive_limits",
     }, "font")
-    reject_unknown(font_cache_data, {"enabled", "max_size_mb", "max_age_days"}, "font_cache")
     reject_unknown(limit_data, {
         "max_archive_size", "max_files", "max_total_size", "max_file_size", "max_depth",
         "allow_uninspected_archives",
@@ -286,6 +284,11 @@ def parse_v2_config(data: dict[str, Any]) -> AppConfig:
         unrar_path=str(font_data.get("unrar_path", "")),
         mode=choice(font_data.get("mode", "all"), {"all", "referenced", "subset"}, "font.mode"),
         mime_mode=choice(font_data.get("mime_mode", "legacy"), {"legacy", "modern"}, "font.mime_mode"),
+        embed_scheme=choice(
+            font_data.get("embed_scheme", "attachment"),
+            {"attachment", "ass", "both"},
+            "font.embed_scheme",
+        ),
         missing_font_action=choice(font_data.get("missing_font_action", "warn"), {"warn", "skip-video", "fail-job", "fallback-all"}, "font.missing_font_action"),
         subset_failure_action=choice(
             font_data.get("subset_failure_action", "fallback-full"),
@@ -293,11 +296,6 @@ def parse_v2_config(data: dict[str, Any]) -> AppConfig:
             "font.subset_failure_action",
         ),
         archive_limits=limits,
-    )
-    font_cache = FontCacheConfig(
-        enabled=bool_value(font_cache_data.get("enabled", True), "font_cache.enabled"),
-        max_size_mb=positive_int(font_cache_data.get("max_size_mb", 2048), "font_cache.max_size_mb"),
-        max_age_days=positive_int(font_cache_data.get("max_age_days", 90), "font_cache.max_age_days"),
     )
     using_legacy_thread_count = "max_parallel_mux_jobs" not in concurrency_data and "thread_count" in concurrency_data
     raw_parallel = concurrency_data.get("max_parallel_mux_jobs", concurrency_data.get("thread_count", 1))
@@ -335,7 +333,7 @@ def parse_v2_config(data: dict[str, Any]) -> AppConfig:
         path_mappings.append(PlexPathMapping(local_root=local_root, server_root=server_root))
     return AppConfig(
         config_version=CURRENT_CONFIG_VERSION, media=media, task=task, matching=matching,
-        subtitle=subtitle, font=font, font_cache=font_cache,
+        subtitle=subtitle, font=font,
         mkvmerge=MkvMergeConfig(path=str(mkvmerge_data.get("path", ""))),
         ffmpeg=FfmpegConfig(path=str(ffmpeg_data.get("path", ""))),
         notifications=NotificationConfig(
