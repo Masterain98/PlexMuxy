@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import subprocess
@@ -9,9 +10,7 @@ import uuid
 from collections import Counter
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Iterable
-
-import logging
+from typing import Any
 
 from .ass_font_embedder import embed_fonts_into_ass
 from .dependencies import resolve_mkvmerge
@@ -27,7 +26,6 @@ from .models import (
     VerificationResult,
     font_mime_type_for_suffix,
 )
-
 
 logger = logging.getLogger(__name__)
 

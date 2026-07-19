@@ -16,6 +16,7 @@ from .models import (
     AttachmentPlan,
     AudioTrackPlan,
     FontResult,
+    FontSubsetIntent,
     FontUsage,
     MuxPlan,
     PlanBuildResult,
@@ -205,6 +206,15 @@ def plan_font_subsets(
         # paths are display-only here; the muxer ignores them in the subset-success
         # path and only uses ``plan.attachments`` for the fallback-full policy.
         return _subset_preview_fonts(intent), intent, warnings, None
+    # Subset failures are governed by subset_failure_action (default "fallback-full"),
+    # NOT missing_font_action (which only applies to the "referenced" font mode). Using
+    # the wrong field here meant subsetting always skipped the video instead of falling
+    # back to the full fonts, even with the default fallback policy.
+    warnings.extend(f"{issue.code}:{issue.message}" for issue in intent.issues)
+    if config.font.subset_failure_action == "fallback-full":
+        return fonts, intent, [*warnings, "font_subset_fallback_all"], None
+    reason = "font_subset_blocked"
+    return [], intent, warnings, reason
 
 
 def _subset_preview_fonts(intent: FontSubsetIntent) -> list[Path]:
@@ -224,16 +234,6 @@ def _subset_preview_fonts(intent: FontSubsetIntent) -> list[Path]:
                 seen.add(resolved)
                 paths.append(resolved)
     return paths
-
-    warnings.extend(f"{issue.code}:{issue.message}" for issue in intent.issues)
-    # Subset failures are governed by subset_failure_action (default "fallback-full"),
-    # NOT missing_font_action (which only applies to the "referenced" font mode). Using
-    # the wrong field here meant subsetting always skipped the video instead of falling
-    # back to the full fonts, even with the default fallback policy.
-    if config.font.subset_failure_action == "fallback-full":
-        return fonts, intent, [*warnings, "font_subset_fallback_all"], None
-    reason = "font_subset_blocked"
-    return [], intent, warnings, reason
 
 
 def build_output_path(video: Path, input_dir: Path, config: AppConfig) -> Path:

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import re
-
-from fontTools.ttLib import TTFont
 from pathlib import Path
 
-from plexmuxy.ass_font_embedder import embed_fonts_into_ass
+from fontTools.ttLib import TTFont
 
+from plexmuxy.ass_font_embedder import embed_fonts_into_ass
 from tests.font_test_utils import build_test_ttf
 
 

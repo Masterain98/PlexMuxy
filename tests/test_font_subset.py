@@ -7,7 +7,7 @@ import pytest
 from fontTools.ttLib import TTCollection, TTFont
 
 from plexmuxy.font_catalog import build_font_catalog
-from plexmuxy.font_subset import FontSubsetError, validate_subset_font, subset_font_face
+from plexmuxy.font_subset import FontSubsetError, subset_font_face, validate_subset_font
 from tests.font_test_utils import build_test_ttf
 
 

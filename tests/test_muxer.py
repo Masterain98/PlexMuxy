@@ -1,9 +1,8 @@
 from pathlib import Path
 
 from plexmuxy.config import default_config
-from plexmuxy.models import AttachmentPlan, MuxPlan, MuxResult, SubtitleTrackPlan
+from plexmuxy.models import AttachmentPlan, MuxPlan, MuxResult, PreparedMuxPlan, SubtitleTrackPlan
 from plexmuxy.muxer import execute_mux_plan, execute_prepared_mux_plan
-from plexmuxy.models import PreparedMuxPlan
 from tests.font_test_utils import build_test_ttf
 
 
