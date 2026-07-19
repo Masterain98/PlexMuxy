@@ -45,19 +45,34 @@ def _extract_media_root(job_context: dict | None) -> Path | None:
 
     Must run *before* path redaction: the job context is otherwise scrubbed to
     ``<PATH>/name`` so troubleshooting agents can no longer resolve the original
-    media resources. Prefers ``report.input_dir`` over ``job.input_dir``.
+    media resources.
+
+    Candidates are collected from both ``report.input_dir`` and
+    ``job.input_dir``; the persisted job record reflects the directory the user
+    actually selected for the task, while the report reflects what was actually
+    processed. An absolute path is always preferred so a relative or stale value
+    can never be silently resolved against the process working directory (which
+    would surface the application's own runtime path in the diagnostics).
     """
     if not isinstance(job_context, dict):
         return None
+    candidates: list[Path] = []
     for key in ("report", "job"):
         candidate = job_context.get(key)
         if isinstance(candidate, dict):
             root = candidate.get("input_dir")
             if isinstance(root, (str, Path)) and str(root).strip():
                 try:
-                    return Path(root).expanduser().resolve()
+                    candidates.append(Path(root).expanduser())
                 except (OSError, RuntimeError):
-                    return Path(root)
+                    candidates.append(Path(str(root)))
+    absolute = [candidate for candidate in candidates if candidate.is_absolute()]
+    if absolute:
+        return absolute[0]
+    if candidates:
+        # Only relative values remain; resolve against the working directory as
+        # a last resort rather than reporting a bare relative fragment.
+        return candidates[-1].resolve()
     return None
 
 

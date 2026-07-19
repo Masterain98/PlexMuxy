@@ -20,7 +20,49 @@ function renderResultCard(result) {
   const heading = itemNode(result.output_name, result.output_path); heading.firstChild && (heading.firstChild.className = "");
   title.append(heading, badge(result.success ? t("result.success") : t("result.failed"), result.success ? "ok" : "danger")); card.append(title);
   const counts = element("div", "count-row"); counts.append(badge(result.verified ? t("result.verified") : t("result.notVerified"), result.verified ? "ok" : "warn"), badge(countText(result.warnings.length, "count.warning.one", "count.warning.other"), result.warnings.length ? "warn" : "info")); card.append(counts);
+  const warnNode = renderWarnings(result.warnings);
+  if (warnNode) card.append(warnNode);
   if (result.error) card.append(element("div", "inline-error", `${result.error_code ? `[${result.error_code}] ` : ""}${result.error}`)); return card;
+}
+
+// Render a collapsible, human-readable list of job warnings. Previously the UI
+// only showed the warning *count*, so users could not tell what the warnings
+// actually meant.
+function renderWarnings(warnings) {
+  if (!warnings || !warnings.length) return null;
+  const details = element("details", "result-warnings");
+  details.append(element("summary", "", t("result.warnings")));
+  const list = element("ul", "warning-list");
+  for (const warning of warnings) {
+    list.append(element("li", "warning-item", humanizeWarning(warning)));
+  }
+  details.append(list);
+  return details;
+}
+
+// Turn machine-readable warning codes (e.g. "font_codepoints_missing:...")
+// into text a user can understand.
+function humanizeWarning(text) {
+  if (!text) return "";
+  const idx = text.indexOf(":");
+  const code = idx === -1 ? text.trim() : text.slice(0, idx);
+  const rest = idx === -1 ? "" : text.slice(idx + 1).trim();
+  switch (code) {
+    case "font_codepoints_missing": {
+      const m = rest.match(/:\s*(.+)$/);
+      return t("warning.fontCodepointsMissing", { font: m ? m[1].trim() : rest });
+    }
+    case "font_subset_fallback_all":
+      return t("warning.fontSubsetFallbackAll");
+    case "subset_fallback_full_font":
+      return t("warning.subsetFallbackFullFont", { detail: rest });
+    case "font_family_missing":
+      return t("warning.fontFamilyMissing", { family: rest });
+    case "font_match_ambiguous":
+      return t("warning.fontMatchAmbiguous", { family: rest });
+    default:
+      return text;
+  }
 }
 
 

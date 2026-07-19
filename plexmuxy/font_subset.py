@@ -9,7 +9,7 @@ from pathlib import Path
 from fontTools import subset
 from fontTools.ttLib import TTFont
 
-from .font_catalog import normalize_font_name
+from .font_catalog import is_optional_codepoint, normalize_font_name
 from .models import FontFaceRef, FontMimeMode, font_mime_type_for_outline
 
 SUBSET_PROFILE_VERSION = 1
@@ -79,10 +79,21 @@ def subset_font_face(
     font = TTFont(source, fontNumber=face.face_index, lazy=False, recalcTimestamp=False)
     original_modified = int(getattr(font.get("head"), "modified", 0) or 0)
     available = set((font.getBestCmap() or {}).keys())
-    missing = sorted(requested - available)
+    missing = requested - available
     if missing:
+        mandatory_missing = sorted(cp for cp in missing if not is_optional_codepoint(cp))
+        if mandatory_missing:
+            font.close()
+            raise FontSubsetError(
+                f"Source font is missing requested codepoints: {_format_codepoints(mandatory_missing)}"
+            )
+        # The only absentees are whitespace/format codepoints the renderer
+        # substitutes (e.g. NBSP). Drop them from the request so the family can
+        # still be subset instead of falling back to the full source font.
+        requested -= missing
+    if not requested:
         font.close()
-        raise FontSubsetError(f"Source font is missing requested codepoints: {_format_codepoints(missing)}")
+        raise FontSubsetError("Cannot create an empty font subset")
 
     options = subset.Options()
     options.layout_features = ["*"]

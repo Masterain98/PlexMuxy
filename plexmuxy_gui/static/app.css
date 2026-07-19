@@ -1459,6 +1459,34 @@ button.plan-save-fab:hover:not(:disabled) { background: var(--color-brand); filt
   contain-intrinsic-size: auto 240px;
 }
 
+/* Collapsible, human-readable warning list on a finished job card. The UI used
+   to show only a warning *count*; now the actual messages are revealed here. */
+.result-warnings {
+  border: 1px solid color-mix(in srgb, var(--color-warn, #b7791f) 45%, var(--color-border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-warn, #b7791f) 10%, var(--color-canvas));
+  padding: 8px 12px;
+}
+.result-warnings > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-fg-strong, #1a202c);
+  list-style: none;
+}
+.result-warnings > summary::-webkit-details-marker { display: none; }
+.result-warnings > summary::before {
+  content: "▸ ";
+  color: var(--color-warn, #b7791f);
+}
+.result-warnings[open] > summary::before { content: "▾ "; }
+.result-warnings .warning-list {
+  margin: 8px 0 2px;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+.result-warnings .warning-item { font-size: 13px; line-height: 1.5; color: var(--color-fg); }
+
 .plan-card.has-edits { border-color: color-mix(in srgb, var(--color-brand) 55%, var(--color-border)); }
 .plan-enabled { flex-wrap: wrap; justify-content: flex-end; }
 

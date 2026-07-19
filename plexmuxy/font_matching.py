@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from .font_catalog import normalize_font_name
+from .font_catalog import is_optional_codepoint, normalize_font_name
 from .models import FontFaceRef, FontUsage
 
 FontMatchStatus = Literal["matched", "missing", "ambiguous", "missing-glyphs"]
@@ -53,9 +53,13 @@ def match_font_usage(usage: FontUsage, catalog: list[FontFaceRef]) -> FontMatchR
         )
     face = next(iter(unique.values()))
     available = set(face.unicode_codepoints)
-    missing = tuple(sorted(set(usage.codepoints) - available))
-    if missing:
-        return FontMatchResult(usage, "missing-glyphs", face=face, missing_codepoints=missing)
+    missing = set(usage.codepoints) - available
+    # Whitespace/format codepoints the renderer substitutes (e.g. NBSP) must not
+    # count as missing glyphs; otherwise a single ``\h`` would fail the match and
+    # force the whole family to a full-font fallback instead of subsetting.
+    mandatory_missing = tuple(sorted(cp for cp in missing if not is_optional_codepoint(cp)))
+    if mandatory_missing:
+        return FontMatchResult(usage, "missing-glyphs", face=face, missing_codepoints=mandatory_missing)
     return FontMatchResult(usage, "matched", face=face)
 
 

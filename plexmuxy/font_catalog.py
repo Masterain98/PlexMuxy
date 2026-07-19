@@ -36,6 +36,37 @@ def normalize_font_name(value: str) -> str:
     return " ".join(value.split()).casefold()
 
 
+# Whitespace/format codepoints a renderer resolves without a dedicated glyph
+# (e.g. libass draws a NO-BREAK SPACE using the regular space advance). Many CJK
+# fonts omit these from their cmap even though the glyph is effectively present.
+# Treating a missing entry here as a fatal "missing glyph" would force an entire
+# family back to a full-font attachment, defeating font subsetting for scripts
+# that merely contain a ``\h`` (U+00A0).
+_RENDERER_SUBSTITUTED_CODEPOINTS = frozenset({
+    0x00A0,  # NO-BREAK SPACE (ASS \h)
+    0x2007,  # FIGURE SPACE
+    0x202F,  # NARROW NO-BREAK SPACE
+    0x2060,  # WORD JOINER
+    0xFEFF,  # ZERO WIDTH NO-BREAK SPACE / BOM
+})
+
+
+def is_optional_codepoint(codepoint: int) -> bool:
+    """Return True when a font need not provide a glyph for ``codepoint``.
+
+    Whitespace separators, control and format characters are rendered via
+    substitution rather than an outline, so their absence must never block font
+    matching or subsetting.
+    """
+    if codepoint in _RENDERER_SUBSTITUTED_CODEPOINTS:
+        return True
+    try:
+        category = unicodedata.category(chr(codepoint))
+    except (ValueError, OverflowError):
+        return False
+    return category in {"Zs", "Zl", "Zp", "Cc", "Cf"}
+
+
 def build_font_catalog(
     font_paths: Iterable[Path],
     *,
