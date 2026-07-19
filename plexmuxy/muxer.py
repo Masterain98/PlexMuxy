@@ -63,7 +63,7 @@ def _embed_ass_subtitles(
     output_path: Path,
     subtitle_tracks: list[SubtitleTrackPlan],
     attachments: list[AttachmentPlan],
-) -> list[Path]:
+) -> list[str]:
     """EXPERIMENTAL: emit self-contained .ass files with their fonts embedded.
 
     Complements (or, in "ass" mode, replaces) MKV font attachments so the

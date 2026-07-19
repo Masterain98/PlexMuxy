@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from .models import AppConfig, CleanupMode, FontMimeMode, FontMode, NameStrategy
+from .models import AppConfig, CleanupMode, EmbedScheme, FontMimeMode, FontMode, NameStrategy
 
 
 @dataclass
@@ -43,7 +43,7 @@ def apply_job_overrides(config: AppConfig, overrides: JobOverrides) -> AppConfig
     if overrides.mime_mode is not None:
         updated.font.mime_mode = overrides.mime_mode
     if overrides.embed_scheme is not None:
-        updated.font.embed_scheme = overrides.embed_scheme
+        updated.font.embed_scheme = cast(EmbedScheme, overrides.embed_scheme)
     if overrides.overwrite:
         updated.task.overwrite = True
     # Reuse the same validation path as persisted configuration so malformed
