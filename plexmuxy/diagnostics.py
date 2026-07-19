@@ -22,7 +22,11 @@ def export_diagnostics(config: AppConfig, output: Path, job_context: dict | None
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("system.json", json.dumps(payload, indent=2, ensure_ascii=False))
         archive.writestr("config.redacted.json", json.dumps(config_data, indent=2, ensure_ascii=False))
-        archive.writestr("README.txt", "No media files or full home-directory paths are included.\n")
+        archive.writestr(
+            "README.txt",
+            "No media file contents are included and configuration is redacted. "
+            "Job diagnostics additionally include the media root path to help troubleshooting agents locate the original resources.\n",
+        )
         if job_context is not None:
             archive.writestr(
                 "job.redacted.json",
@@ -36,8 +40,30 @@ def export_diagnostics(config: AppConfig, output: Path, job_context: dict | None
     return output
 
 
+def _extract_media_root(job_context: dict | None) -> Path | None:
+    """Best-effort full path to the media/project root a job operated on.
+
+    Must run *before* path redaction: the job context is otherwise scrubbed to
+    ``<PATH>/name`` so troubleshooting agents can no longer resolve the original
+    media resources. Prefers ``report.input_dir`` over ``job.input_dir``.
+    """
+    if not isinstance(job_context, dict):
+        return None
+    for key in ("report", "job"):
+        candidate = job_context.get(key)
+        if isinstance(candidate, dict):
+            root = candidate.get("input_dir")
+            if isinstance(root, (str, Path)) and str(root).strip():
+                try:
+                    return Path(root).expanduser().resolve()
+                except (OSError, RuntimeError):
+                    return Path(root)
+    return None
+
+
 def collect_diagnostic_payload(config: AppConfig, job_context: dict | None = None) -> dict:
     config_data = redact_config(config_to_dict(config))
+    media_root = _extract_media_root(job_context)
     payload: dict = {
         "plexmuxy_version": __version__,
         "python_version": sys.version,
@@ -48,6 +74,8 @@ def collect_diagnostic_payload(config: AppConfig, job_context: dict | None = Non
     }
     if job_context is not None:
         payload["job"] = redact_paths(job_context)
+    if media_root is not None:
+        payload["media_root"] = str(media_root)
     return payload
 
 
@@ -64,6 +92,9 @@ def format_diagnostic_payload(payload: dict) -> str:
     mkvmerge = payload.get("mkvmerge") or {}
     if mkvmerge.get("version"):
         lines.append(f"mkvmerge: {mkvmerge.get('version')}")
+    media_root = payload.get("media_root")
+    if media_root:
+        lines.append(f"Media root: {media_root}")
     lines.append("")
     config = payload.get("config")
     if config is not None:
