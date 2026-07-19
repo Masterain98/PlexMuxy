@@ -4,9 +4,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
 
+STATIC_DIR = ROOT / "plexmuxy_gui" / "static"
+
+
+def all_javascript():
+    """Concatenate every frontend script (split modules + bootstrap) for assertions."""
+    chunks = [p.read_text(encoding="utf-8") for p in sorted((STATIC_DIR / "js").glob("*.js"))]
+    chunks.append((STATIC_DIR / "app.js").read_text(encoding="utf-8"))
+    return "\n".join(chunks)
+
 
 def test_gui_dynamic_rendering_does_not_use_inner_html():
-    javascript = (ROOT / "plexmuxy_gui" / "static" / "app.js").read_text(encoding="utf-8")
+    javascript = all_javascript()
     i18n_javascript = (ROOT / "plexmuxy_gui" / "static" / "i18n.js").read_text(encoding="utf-8")
     assert "innerHTML" not in javascript
     assert "innerHTML" not in i18n_javascript
@@ -22,7 +31,7 @@ def test_gui_exposes_live_status_and_cancel_control():
 
 def test_gui_provides_custom_frameless_window_controls():
     html = (ROOT / "plexmuxy_gui" / "static" / "index.html").read_text(encoding="utf-8")
-    javascript = (ROOT / "plexmuxy_gui" / "static" / "app.js").read_text(encoding="utf-8")
+    javascript = all_javascript()
 
     assert 'class="window-drag-region pywebview-drag-region"' in html
     assert 'id="window-minimize-btn"' in html
@@ -79,7 +88,7 @@ def test_windows_binaries_and_readmes_use_approved_brand_assets():
 def test_gui_implements_product_themes_and_desktop_navigation():
     html = (ROOT / "plexmuxy_gui" / "static" / "index.html").read_text(encoding="utf-8")
     css = (ROOT / "plexmuxy_gui" / "static" / "app.css").read_text(encoding="utf-8")
-    javascript = (ROOT / "plexmuxy_gui" / "static" / "app.js").read_text(encoding="utf-8")
+    javascript = all_javascript()
 
     assert 'data-theme-mode="system"' in html
     assert 'data-theme-mode="light"' in html
@@ -95,7 +104,7 @@ def test_gui_implements_product_themes_and_desktop_navigation():
 def test_gui_includes_localized_about_page_and_safe_project_links():
     static_dir = ROOT / "plexmuxy_gui" / "static"
     html = (static_dir / "index.html").read_text(encoding="utf-8")
-    javascript = (static_dir / "app.js").read_text(encoding="utf-8")
+    javascript = all_javascript()
     english = json.loads((static_dir / "locales" / "en.json").read_text(encoding="utf-8"))
     chinese = json.loads((static_dir / "locales" / "zh-CN.json").read_text(encoding="utf-8"))
 
@@ -128,7 +137,7 @@ def test_gui_includes_localized_about_page_and_safe_project_links():
 def test_gui_uses_inline_feedback_and_accessible_confirmation():
     html = (ROOT / "plexmuxy_gui" / "static" / "index.html").read_text(encoding="utf-8")
     css = (ROOT / "plexmuxy_gui" / "static" / "app.css").read_text(encoding="utf-8")
-    javascript = (ROOT / "plexmuxy_gui" / "static" / "app.js").read_text(encoding="utf-8")
+    javascript = all_javascript()
 
     assert 'class="activity-banner hidden"' in html
     assert 'id="confirm-dialog"' in html
@@ -140,7 +149,7 @@ def test_gui_uses_inline_feedback_and_accessible_confirmation():
 
 
 def test_gui_locks_clicked_navigation_during_programmatic_scroll():
-    javascript = (ROOT / "plexmuxy_gui" / "static" / "app.js").read_text(encoding="utf-8")
+    javascript = all_javascript()
 
     assert "navigationTarget" in javascript
     assert "navigationScrollCleanup" in javascript
@@ -150,7 +159,7 @@ def test_gui_locks_clicked_navigation_during_programmatic_scroll():
 
 def test_gui_provides_extensible_i18n_with_simplified_chinese():
     html = (ROOT / "plexmuxy_gui" / "static" / "index.html").read_text(encoding="utf-8")
-    javascript = (ROOT / "plexmuxy_gui" / "static" / "app.js").read_text(encoding="utf-8")
+    javascript = all_javascript()
     i18n_javascript = (ROOT / "plexmuxy_gui" / "static" / "i18n.js").read_text(encoding="utf-8")
     package_config = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     crowdin_config = (ROOT / "crowdin.yml").read_text(encoding="utf-8")
@@ -196,7 +205,7 @@ def test_gui_locale_catalogs_have_matching_keys_and_placeholders():
 def test_gui_source_catalog_covers_static_and_dynamic_translation_keys():
     static_dir = ROOT / "plexmuxy_gui" / "static"
     html = (static_dir / "index.html").read_text(encoding="utf-8")
-    javascript = (static_dir / "app.js").read_text(encoding="utf-8")
+    javascript = all_javascript()
     english = json.loads((static_dir / "locales" / "en.json").read_text(encoding="utf-8"))
 
     used_keys = set(re.findall(r'data-i18n(?:-[\w-]+)?="([\w.-]+)"', html))
@@ -209,7 +218,7 @@ def test_gui_source_catalog_covers_static_and_dynamic_translation_keys():
 def test_gui_separates_workspace_and_persistent_environment_routes():
     static_dir = ROOT / "plexmuxy_gui" / "static"
     html = (static_dir / "index.html").read_text(encoding="utf-8")
-    javascript = (static_dir / "app.js").read_text(encoding="utf-8")
+    javascript = all_javascript()
 
     assert 'id="workspace-view"' in html
     assert 'id="environment-view"' in html
@@ -223,7 +232,7 @@ def test_gui_separates_workspace_and_persistent_environment_routes():
 def test_gui_replaces_native_selects_with_accessible_listboxes():
     static_dir = ROOT / "plexmuxy_gui" / "static"
     html = (static_dir / "index.html").read_text(encoding="utf-8")
-    javascript = (static_dir / "app.js").read_text(encoding="utf-8")
+    javascript = all_javascript()
     css = (static_dir / "app.css").read_text(encoding="utf-8")
 
     assert "<select" not in html
@@ -244,7 +253,7 @@ def test_gui_replaces_native_selects_with_accessible_listboxes():
 def test_gui_uses_toasts_for_transient_results_and_custom_close_confirmation():
     static_dir = ROOT / "plexmuxy_gui" / "static"
     html = (static_dir / "index.html").read_text(encoding="utf-8")
-    javascript = (static_dir / "app.js").read_text(encoding="utf-8")
+    javascript = all_javascript()
 
     assert 'id="toast-region"' in html
     assert 'id="close-dialog"' in html
@@ -258,7 +267,7 @@ def test_gui_uses_toasts_for_transient_results_and_custom_close_confirmation():
 def test_gui_exposes_persistent_dependency_paths_notifications_and_font_subsetting():
     static_dir = ROOT / "plexmuxy_gui" / "static"
     html = (static_dir / "index.html").read_text(encoding="utf-8")
-    javascript = (static_dir / "app.js").read_text(encoding="utf-8")
+    javascript = all_javascript()
 
     for identifier in (
         "mkvmerge-path",
@@ -282,7 +291,7 @@ def test_gui_exposes_persistent_dependency_paths_notifications_and_font_subsetti
 def test_environment_dependencies_use_verified_draft_workflow():
     static_dir = ROOT / "plexmuxy_gui" / "static"
     html = (static_dir / "index.html").read_text(encoding="utf-8")
-    javascript = (static_dir / "app.js").read_text(encoding="utf-8")
+    javascript = all_javascript()
     chinese = (static_dir / "locales" / "zh-CN.json").read_text(encoding="utf-8")
 
     assert "恢复自动检测" not in html + javascript + chinese
@@ -295,7 +304,7 @@ def test_environment_dependencies_use_verified_draft_workflow():
 
 
 def test_gui_disables_every_workflow_input_while_busy():
-    javascript = (ROOT / "plexmuxy_gui" / "static" / "app.js").read_text(encoding="utf-8")
+    javascript = all_javascript()
 
     assert '"input-dir", "cleanup", "extra-dir", "output-dir", "output-suffix"' in javascript
     assert '"name-strategy", "name-template", "font-subset", "overwrite"' in javascript
@@ -304,7 +313,7 @@ def test_gui_disables_every_workflow_input_while_busy():
 
 
 def test_gui_exposes_independent_plex_refresh_retry():
-    javascript = (ROOT / "plexmuxy_gui" / "static" / "app.js").read_text(encoding="utf-8")
+    javascript = all_javascript()
 
     assert 'callApi("retry_plex_refresh", job.id)' in javascript
     assert 'state.config?.plex?.enabled' in javascript
