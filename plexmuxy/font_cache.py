@@ -116,7 +116,7 @@ class FontSubsetCache:
             font_path = temp_dir / f"font{extension}"
             try:
                 generator(font_path)
-                validate_subset_font(font_path, face, alias_family, codepoints)
+                validate_subset_font(font_path, face, face.family_names[0], codepoints)
                 checksum = _sha256(font_path)
                 now = datetime.now(timezone.utc).isoformat()
                 metadata = {
@@ -161,7 +161,7 @@ class FontSubsetCache:
             checksum = metadata["checksum"]
             if not font_path.is_file() or _sha256(font_path) != checksum:
                 return None
-            validate_subset_font(font_path, face, alias_family, codepoints)
+            validate_subset_font(font_path, face, face.family_names[0], codepoints)
             metadata["last_accessed"] = datetime.now(timezone.utc).isoformat()
             _write_json(metadata_path, metadata)
             return FontCacheEntry(key, font_path, checksum, font_path.stat().st_size, True)

@@ -279,7 +279,6 @@ def prepare_subset_plan(
         raise FontPreparationError(f"Subset intent contains unresolved font issues: {details}")
 
     total_groups = len(intent.groups)
-    aliases: dict[str, str] = {}
     attachments: list[AttachmentPlan] = []
     generated_files: list[Path] = []
     warnings: list[str] = []
@@ -311,19 +310,20 @@ def prepare_subset_plan(
             group_attachments = _full_font_attachments(group.faces, workspace, config)
             warnings.append(f"subset_fallback_full_font:{current}:{exc}")
         else:
-            for requested_name in group.requested_names:
-                aliases[requested_name] = group.alias_family
             generated_files.extend(item.path for item in group_attachments)
         _extend_unique_attachments(attachments, group_attachments)
         _emit_preparation(progress_callback, "validating_subsets", total_groups, completed + 1, current)
 
     _check_cancelled(cancellation_event)
-    subtitle_tracks = _rewrite_subtitle_tracks(plan, aliases, workspace, cancellation_event)
+    # Subset fonts keep their ORIGINAL family name (see font_subset.rewrite_font_names),
+    # so the subtitle already references them by that name and must NOT be rewritten to an
+    # opaque alias. Rewriting would break player-side font matching.
+    subtitle_tracks = _rewrite_subtitle_tracks(plan, {}, workspace, cancellation_event)
     generated_files.extend(
         track.path for original, track in zip(plan.subtitle_tracks, subtitle_tracks, strict=True)
         if track.path != original.path
     )
-    alias_targets = set(aliases.values())
+    alias_targets: set[str] = set()
     attached_aliases = {
         item.name.split("-", 1)[0]
         for item in attachments

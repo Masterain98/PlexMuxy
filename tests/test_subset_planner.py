@@ -50,9 +50,12 @@ def test_subset_mode_builds_real_intent_without_placeholder_warning(tmp_path: Pa
 
     assert len(result.plans) == 1
     plan = result.plans[0]
-    assert plan.attachments == []
+    # In subset mode the real attachments are produced from font_subset_intent at mux time, but
+    # the planner still lists the matched source fonts in the plan preview.
     assert plan.font_subset_intent is not None
     assert plan.font_subset_intent.issues == ()
+    assert len(plan.attachments) >= 1
+    assert plan.attachments[0].path == _font
     assert plan.font_subset_intent.summary.subtitle_count == 1
     assert plan.font_subset_intent.summary.requested_family_count == 1
     assert plan.font_subset_intent.summary.matched_face_count == 1

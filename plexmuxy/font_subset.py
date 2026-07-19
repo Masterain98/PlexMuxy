@@ -9,7 +9,7 @@ from pathlib import Path
 from fontTools import subset
 from fontTools.ttLib import TTFont
 
-from .font_catalog import is_optional_codepoint, normalize_font_name
+from .font_catalog import is_optional_codepoint
 from .models import FontFaceRef, FontMimeMode, font_mime_type_for_outline
 
 SUBSET_PROFILE_VERSION = 1
@@ -119,7 +119,10 @@ def subset_font_face(
         subsetter = subset.Subsetter(options=options)
         subsetter.populate(unicodes=requested)
         subsetter.subset(font)
-        rewrite_font_names(font, face, alias_family)
+        # Write the ORIGINAL family name back into the subset so players match
+        # it the same way they match a full embedded font. The deterministic
+        # ``alias_family`` remains only an opaque cache/attachment identifier.
+        rewrite_font_names(font, face)
         if "head" in font:
             font["head"].modified = original_modified
         font.recalcTimestamp = False
@@ -136,7 +139,7 @@ def subset_font_face(
         font.close()
 
     try:
-        validate_subset_font(temporary, face, alias_family, requested)
+        validate_subset_font(temporary, face, face.family_names[0], requested)
         os.replace(temporary, output)
     except Exception:
         temporary.unlink(missing_ok=True)
@@ -153,23 +156,30 @@ def subset_font_face(
     )
 
 
-def rewrite_font_names(font: TTFont, face: FontFaceRef, alias_family: str) -> None:
+def rewrite_font_names(font: TTFont, face: FontFaceRef) -> None:
+    """Rewrite the subset's name table so its family name matches the original font.
+
+    The subset keeps the ORIGINAL family name (``face.family_names[0]``) rather than
+    an opaque alias. Players match embedded MKV fonts by family name, so preserving
+    the original name lets the subset load exactly like a full embedded font would.
+    """
+
     table = font.get("name")
     if table is None:
         raise FontSubsetError("Font has no name table")
+    target_family = face.family_names[0]
     subfamily = style_name(face)
-    full_name = f"{alias_family} {subfamily}"
-    postscript_name = f"{alias_family}-{subfamily.replace(' ', '')}"
-    unique_id = f"PlexMuxy;{alias_family};{face.source_digest[:16]};{face.face_index}"
+    full_name = f"{target_family} {subfamily}"
+    unique_id = f"PlexMuxy;{target_family};{face.source_digest[:16]};{face.face_index}"
     replacements = {
-        1: alias_family,
+        1: target_family,
         2: subfamily,
         3: unique_id,
         4: full_name,
-        6: postscript_name,
-        16: alias_family,
+        6: f"{target_family}{subfamily}",
+        16: target_family,
         17: subfamily,
-        21: alias_family,
+        21: target_family,
         22: subfamily,
     }
     existing_keys: set[tuple[int, int, int, int]] = set()
@@ -187,7 +197,7 @@ def rewrite_font_names(font: TTFont, face: FontFaceRef, alias_family: str) -> No
 def validate_subset_font(
     path: Path,
     source_face: FontFaceRef,
-    alias_family: str,
+    target_family: str,
     requested_codepoints: set[int],
 ) -> None:
     if not path.is_file() or path.stat().st_size <= 0:
@@ -197,10 +207,25 @@ def validate_subset_font(
     except Exception as exc:
         raise FontSubsetError(f"Subset font cannot be reopened: {exc}") from exc
     try:
-        cmap = set((font.getBestCmap() or {}).keys())
-        missing = sorted(requested_codepoints - cmap)
+        cmap_table = font.get("cmap")
+        if cmap_table is None:
+            raise FontSubsetError("Subset font has no cmap table")
+        # Consider every cmap subtable, not just ``getBestCmap()``: that helper
+        # returns a single (legacy) subtable, so codepoints the subsetter placed
+        # only in another subtable (e.g. a format-12 full Unicode cmap) would be
+        # falsely reported missing.
+        present = set()
+        for subtable in cmap_table.tables:
+            present |= set(subtable.cmap.keys())
+        missing = sorted(requested_codepoints - present)
         if missing:
-            raise FontSubsetError(f"Subset cmap is missing codepoints: {_format_codepoints(missing)}")
+            # Renderer-substituted codepoints (NBSP, ZWSP, word joiners, etc.)
+            # need no dedicated glyph and may be dropped by the subsetter even
+            # when requested; the renderer substitutes them, so their absence
+            # never breaks rendering. Do not treat them as a subsetting failure.
+            missing = [cp for cp in missing if not is_optional_codepoint(cp)]
+            if missing:
+                raise FontSubsetError(f"Subset cmap is missing codepoints: {_format_codepoints(missing)}")
         names = font.get("name")
         if names is None:
             raise FontSubsetError("Subset font has no name table")
@@ -209,15 +234,10 @@ def validate_subset_font(
             for record in names.names
             if int(record.nameID) in {1, 16, 21}
         ]
-        if not family_records or any(value != alias_family for value in family_records):
-            raise FontSubsetError("Subset family name records are inconsistent")
-        forbidden = {
-            normalize_font_name(value)
-            for value in (*source_face.family_names, *source_face.typographic_family_names)
-            if normalize_font_name(value) != normalize_font_name(alias_family)
-        }
-        if any(normalize_font_name(value) in forbidden for value in family_records):
-            raise FontSubsetError("Subset still exposes the source family name")
+        if not family_records or target_family not in family_records:
+            raise FontSubsetError(
+                f"Subset family name was not set to {target_family!r}: found {sorted(set(family_records))}"
+            )
         os2 = font.get("OS/2")
         head = font.get("head")
         if os2 is not None:

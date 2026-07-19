@@ -71,7 +71,7 @@ def _subset_plan(tmp_path: Path) -> tuple[MuxPlan, Path]:
     return plan, font
 
 
-def test_prepare_subset_plan_rewrites_only_workspace_and_creates_valid_attachment(tmp_path: Path) -> None:
+def test_prepare_subset_plan_keeps_original_names_and_creates_valid_attachment(tmp_path: Path) -> None:
     plan, font = _subset_plan(tmp_path)
     original_subtitle = plan.subtitle_tracks[0].path.read_bytes()
     original_font = font.read_bytes()
@@ -81,15 +81,21 @@ def test_prepare_subset_plan_rewrites_only_workspace_and_creates_valid_attachmen
     with SubsetWorkspace("plan", root=workspace_root) as workspace:
         prepared = prepare_subset_plan(plan, default_config().font, workspace)
         assert prepared.original_plan is plan
-        assert prepared.subtitle_tracks[0].path != plan.subtitle_tracks[0].path
-        rewritten = prepared.subtitle_tracks[0].path.read_text(encoding="utf-8")
+        # The subtitle is NOT rewritten: it keeps referencing the original family name, and the
+        # subset font keeps that same name, so players match it like a full embedded font.
+        assert prepared.subtitle_tracks[0].path == plan.subtitle_tracks[0].path
+        subtitle_text = plan.subtitle_tracks[0].path.read_text(encoding="utf-8")
+        assert "Subset Family" in subtitle_text
         alias = plan.font_subset_intent.groups[0].alias_family  # type: ignore[union-attr]
-        assert f"Style: Default,{alias},0,0" in rewritten
+        assert alias not in subtitle_text
         assert len(prepared.attachments) == 1
         assert prepared.attachments[0].expected_mime_type == "application/x-truetype-font"
         subset = TTFont(prepared.attachments[0].path)
         try:
             assert {ord("A"), ord("B")}.issubset(subset.getBestCmap())
+            # The subset preserves the ORIGINAL family name (not the opaque alias).
+            families = {r.toUnicode() for r in subset["name"].names if int(r.nameID) in (1, 16, 21)}
+            assert families == {"Subset Family"}
         finally:
             subset.close()
 

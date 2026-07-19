@@ -7,11 +7,11 @@ import pytest
 from fontTools.ttLib import TTCollection, TTFont
 
 from plexmuxy.font_catalog import build_font_catalog
-from plexmuxy.font_subset import FontSubsetError, subset_font_face
+from plexmuxy.font_subset import FontSubsetError, validate_subset_font, subset_font_face
 from tests.font_test_utils import build_test_ttf
 
 
-def test_subset_font_keeps_requested_characters_and_rewrites_all_family_names(tmp_path: Path) -> None:
+def test_subset_font_keeps_requested_characters_and_preserves_original_family_name(tmp_path: Path) -> None:
     source = build_test_ttf(tmp_path / "source.ttf", family="Original Family", characters=" AB中")
     face = build_font_catalog([source]).faces[0]
     font = TTFont(source)
@@ -21,6 +21,9 @@ def test_subset_font_keeps_requested_characters_and_rewrites_all_family_names(tm
     face = build_font_catalog([source]).faces[0]
     output = tmp_path / "PMX_TEST-Regular.ttf"
 
+    # The 4th argument is now an opaque cache/attachment identifier, not the family name
+    # written into the font. The subset keeps the ORIGINAL family name so players match it
+    # like a full embedded font.
     result = subset_font_face(face, source, {ord(" "), ord("A"), ord("中")}, "PMX_TEST", output)
 
     assert result.path == output
@@ -28,7 +31,7 @@ def test_subset_font_keeps_requested_characters_and_rewrites_all_family_names(tm
     try:
         assert set(subset.getBestCmap()) == {ord(" "), ord("A"), ord("中")}
         families = {record.toUnicode() for record in subset["name"].names if record.nameID in {1, 16, 21}}
-        assert families == {"PMX_TEST"}
+        assert families == {face.family_names[0]}
         assert subset["OS/2"].usWeightClass == 400
     finally:
         subset.close()
@@ -76,3 +79,31 @@ def test_collection_face_is_saved_as_an_independent_font(tmp_path: Path) -> None
         assert output["OS/2"].usWeightClass == 700
     finally:
         output.close()
+
+
+def test_subset_validation_tolerates_renderer_substituted_codepoints_in_non_legacy_cmap(tmp_path: Path) -> None:
+    # Regression: U+00A0 (NBSP) is a renderer-substituted codepoint. Some CJK
+    # .ttf fonts only retain it in a non-legacy cmap subtable (e.g. a format-12
+    # full Unicode cmap), not in the legacy format-4 subtable that
+    # getBestCmap() returns. Validation must consider every cmap subtable and
+    # must not treat absent renderer-substituted codepoints as a failure.
+    source = build_test_ttf(tmp_path / "source.ttf", family="NBSP Demo", characters=" A\u00a0中")
+    face = build_font_catalog([source]).faces[0]
+    output = tmp_path / "PMX_NBSP-Regular.ttf"
+    requested = {ord(" "), ord("A"), 0x00A0, ord("中")}
+    result = subset_font_face(face, source, requested, "PMX_NBSP", output)
+
+    # Simulate a subsetter that placed U+00A0 only in the format-12 subtable
+    # by removing it from the legacy format-4 subtable.
+    font = TTFont(result.path)
+    try:
+        for subtable in font["cmap"].tables:
+            if (subtable.platformID, subtable.platEncID, subtable.format) == (3, 1, 4):
+                subtable.cmap.pop(0x00A0, None)
+        font.save(result.path)
+    finally:
+        font.close()
+
+    # Should not raise: U+00A0 is present in another subtable and is
+    # renderer-substituted regardless.
+    assert validate_subset_font(result.path, face, face.family_names[0], requested) is None
