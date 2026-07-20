@@ -32,7 +32,7 @@ class AuthenticodeResult:
     error: str | None = None
 
 
-def read_windows_file_metadata(path: Path) -> WindowsFileMetadata:
+def read_windows_file_metadata(path: Path) -> WindowsFileMetadata:  # pragma: no cover - Windows-only PE metadata reader.
     """Read common PE version-resource strings without third-party packages."""
 
     if os.name != "nt":
@@ -74,7 +74,7 @@ def read_windows_file_metadata(path: Path) -> WindowsFileMetadata:
         return WindowsFileMetadata()
 
 
-def _query_value(version, buffer, key: str, *, raw: bool = False):
+def _query_value(version, buffer, key: str, *, raw: bool = False):  # pragma: no cover - Windows-only helper.
     pointer = ctypes.c_void_p()
     length = ctypes.c_uint()
     if not version.VerQueryValueW(buffer, key, ctypes.byref(pointer), ctypes.byref(length)) or not pointer.value:
@@ -85,7 +85,7 @@ def _query_value(version, buffer, key: str, *, raw: bool = False):
     return value or None
 
 
-def verify_authenticode(path: Path, *, allowed_publishers: tuple[str, ...] = ()) -> AuthenticodeResult:
+def verify_authenticode(path: Path, *, allowed_publishers: tuple[str, ...] = ()) -> AuthenticodeResult:  # pragma: no cover - Windows-only signature check.
     """Verify a Windows Authenticode signature with the system trust provider."""
 
     if os.name != "nt":

@@ -154,7 +154,7 @@ def _truncate(value: str, limit: int) -> str:
     return text if len(text) <= limit else f"{text[: max(limit - 1, 0)]}…"
 
 
-def _toast_capability() -> NotificationCapability:
+def _toast_capability() -> NotificationCapability:  # pragma: no cover - Windows-only toast capability probe.
     if os.name != "nt" or not getattr(sys, "frozen", False):
         return NotificationCapability(False, "windows-toast", "Installed application identity is unavailable")
     powershell = shutil.which("powershell.exe") or shutil.which("powershell")
@@ -168,7 +168,7 @@ def _toast_capability() -> NotificationCapability:
     return NotificationCapability(True, "windows-toast")
 
 
-def _send_windows_toast(title: str, message: str, job_id: str | None) -> NotificationResult:
+def _send_windows_toast(title: str, message: str, job_id: str | None) -> NotificationResult:  # pragma: no cover - Windows-only toast sender.
     powershell = shutil.which("powershell.exe") or shutil.which("powershell")
     if not powershell:
         return NotificationResult(False, "windows-toast", "Windows PowerShell is unavailable")

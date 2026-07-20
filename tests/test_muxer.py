@@ -13,20 +13,16 @@ def test_execute_mux_plan_allows_in_place_output(monkeypatch, tmp_path):
     config.task.overwrite = True
     plan = MuxPlan(source_video=video, output_path=video)
 
-    captured = {}
-
-    def fake_runtime(original_plan, runtime_plan, cfg, cancellation_event, preparation_warnings=None, prepared=None):
-        # In-place muxing is supported: the muxer writes to a temp file and
-        # swaps it into place, so an output path equal to the source must not
-        # be refused (even with overwrite enabled).
-        captured["runtime_plan"] = runtime_plan
-        return MuxResult(plan=runtime_plan, success=True, output_path=runtime_plan.output_path)
-
-    monkeypatch.setattr("plexmuxy.muxer._execute_runtime_plan", fake_runtime)
+    # In-place muxing is supported: the muxer writes to a temp file and swaps
+    # it into place, so an output equal to the source must not be refused. We
+    # only stub the external mkvmerge lookup so the real runtime plan is built
+    # and the in-place check is exercised without invoking a real binary.
+    monkeypatch.setattr("plexmuxy.muxer.resolve_mkvmerge_path", lambda cfg: None)
     result = execute_mux_plan(plan, config)
 
-    assert result.success is True
-    assert captured["runtime_plan"].output_path.resolve() == video.resolve()
+    assert result.success is False
+    assert result.error_code == "MKVMERGE_NOT_FOUND"
+    assert "same as the source" not in result.error
 
 
 def test_embed_scheme_emits_self_contained_ass(monkeypatch, tmp_path):

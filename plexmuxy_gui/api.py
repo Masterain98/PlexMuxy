@@ -87,7 +87,7 @@ _HT_CODES = {
 }
 
 
-def _get_cached_hwnd() -> int | None:
+def _get_cached_hwnd() -> int | None:  # pragma: no cover - Windows-only HWND lookup.
     """Return the native HWND for the PlexMuxy top-level window (cached)."""
     global _HWND_CACHE
     if sys.platform != "win32" or _windll is None:
@@ -99,7 +99,7 @@ def _get_cached_hwnd() -> int | None:
     return _HWND_CACHE
 
 
-def _find_plexmuxy_hwnd() -> int | None:
+def _find_plexmuxy_hwnd() -> int | None:  # pragma: no cover - Windows-only HWND lookup.
     """Locate the top-level window by matching the process id and title."""
     if sys.platform != "win32" or _windll is None:
         return None
