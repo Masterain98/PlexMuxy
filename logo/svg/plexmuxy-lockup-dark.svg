@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 400" role="img" aria-labelledby="title desc">
+  <title id="title">PlexMuxy logo for dark backgrounds</title>
+  <desc id="desc">PlexMuxy color symbol and wordmark on charcoal.</desc>
+  <rect width="1600" height="400" fill="#1C1C1C"/>
+  <g transform="translate(70 72) scale(1)">
+    <path fill="#3776AB" d="M24 52h140c36 0 60 9 82 34l23 25c10 10 22 13 42 13h53v20h-55c-27 0-47-7-64-24l-24-26c-16-17-31-22-59-22H24z"/>
+    <path fill="#E5A00D" d="M24 118h352v20H24z"/>
+    <path fill="#F5F5F5" d="M24 184h140c28 0 43-5 59-22l24-26c17-17 37-24 64-24h53v20h-53c-20 0-32 3-42 13l-23 25c-22 25-46 34-82 34H24z"/>
+    <path fill="#E5A00D" d="m318 48 72 0 102 80-102 80h-72l54-80z"/>
+  </g>
+  <text x="650" y="248" fill="#F5F5F5" font-family="Arial, Helvetica, sans-serif" font-size="150" font-weight="600" letter-spacing="-6">Plex<tspan fill="#E5A00D">Muxy</tspan></text>
+</svg>

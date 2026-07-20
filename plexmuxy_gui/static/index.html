@@ -1,0 +1,797 @@
+<!doctype html>
+<html lang="en" data-theme="dark" data-theme-mode="system" data-locale="en" data-locale-mode="system">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="description" content="Prepare Matroska media with correctly identified tracks, subtitles, and font attachments for Plex." data-i18n-content="meta.description" />
+  <title>PlexMuxy · Mux workspace</title>
+  <link rel="icon" type="image/svg+xml" href="./assets/plexmuxy-app-icon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/plexmuxy-app-icon-32.png" />
+  <link rel="icon" type="image/png" sizes="64x64" href="./assets/plexmuxy-app-icon-64.png" />
+  <script>
+    (() => {
+      let mode = "system";
+      try {
+        const saved = localStorage.getItem("plexmuxy-theme");
+        if (["system", "light", "dark"].includes(saved)) mode = saved;
+      } catch (_) {
+        // Local storage can be unavailable in hardened webviews; system mode remains safe.
+      }
+      const prefersLight = window.matchMedia?.("(prefers-color-scheme: light)").matches;
+      document.documentElement.dataset.themeMode = mode;
+      document.documentElement.dataset.theme = mode === "system" ? (prefersLight ? "light" : "dark") : mode;
+      let localeMode = "system";
+      try {
+        const savedLocale = localStorage.getItem("plexmuxy-locale");
+        if (["system", "en", "zh-CN", "zh-TW", "ru"].includes(savedLocale)) localeMode = savedLocale;
+      } catch (_) {
+        // System language remains the safe fallback when storage is unavailable.
+      }
+      const browserLocale = navigator.languages?.[0] || navigator.language || "en";
+      const resolvedLocale = localeMode === "system" ? browserLocale : localeMode;
+      const isSimplifiedChinese = /^(zh$|zh-(CN|Hans|SG)(-|$))/i.test(resolvedLocale);
+      const isTraditionalChinese = /^(zh-(TW|Hant|HK|MO)(-|$))/i.test(resolvedLocale);
+      const isRussian = /^ru(-|$)/i.test(resolvedLocale);
+      document.documentElement.dataset.localeMode = localeMode;
+      document.documentElement.dataset.locale = isSimplifiedChinese ? "zh-CN" : (isTraditionalChinese ? "zh-TW" : (isRussian ? "ru" : "en"));
+      document.documentElement.lang = document.documentElement.dataset.locale;
+    })();
+  </script>
+  <link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+  <a id="skip-link" class="skip-link" href="#main-content" data-i18n="skip.workspace">Skip to main content</a>
+
+  <svg class="svg-sprite" aria-hidden="true">
+    <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></symbol>
+    <symbol id="icon-folder" viewBox="0 0 24 24"><path d="M3.5 7.5h6l2-2h9v13h-17z" /></symbol>
+    <symbol id="icon-sliders" viewBox="0 0 24 24"><path d="M4 7h7m4 0h5M4 17h3m4 0h9M11 4v6M7 14v6" /></symbol>
+    <symbol id="icon-plan" viewBox="0 0 24 24"><path d="M6 3.5h12v17H6zM9 8h6M9 12h6M9 16h3" /></symbol>
+    <symbol id="icon-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7z" /></symbol>
+    <symbol id="icon-activity" viewBox="0 0 24 24"><path d="M3 12h4l2.2-6 4.2 12 2.2-6H21" /></symbol>
+    <symbol id="icon-settings" viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" /><path d="m19 13.5 1.5 1-2 3.5-1.7-.7a7 7 0 0 1-2.3 1.3L14.2 21h-4.4l-.3-2.4a7 7 0 0 1-2.3-1.3l-1.7.7-2-3.5 1.5-1a7 7 0 0 1 0-3l-1.5-1 2-3.5 1.7.7a7 7 0 0 1 2.3-1.3L9.8 3h4.4l.3 2.4a7 7 0 0 1 2.3 1.3l1.7-.7 2 3.5-1.5 1a7 7 0 0 1 0 3z" /></symbol>
+    <symbol id="icon-monitor" viewBox="0 0 24 24"><path d="M3.5 4.5h17v12h-17zM8 20h8M12 16.5V20" /></symbol>
+    <symbol id="icon-language" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" /></symbol>
+    <symbol id="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5" /><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4" /></symbol>
+    <symbol id="icon-moon" viewBox="0 0 24 24"><path d="M19.5 15.5A8 8 0 0 1 8.5 4.5a8 8 0 1 0 11 11z" /></symbol>
+    <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m8 10 4 4 4-4" /></symbol>
+    <symbol id="icon-external" viewBox="0 0 24 24"><path d="M13 5h6v6M19 5l-8 8M18 14v5H5V6h5" /></symbol>
+    <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 20h16" /></symbol>
+    <symbol id="icon-save" viewBox="0 0 24 24"><path d="M5 3.5h12l2 2v15H5zM8 3.5v6h8v-6M8 20.5v-7h8v7" /></symbol>
+    <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7" /></symbol>
+    <symbol id="icon-question" viewBox="0 0 24 24"><path d="M8.5 9a3.5 3.5 0 1 1 5.7 2.7c-1.4 1.1-2.2 1.7-2.2 3.3M12 18.5v.1" /></symbol>
+    <symbol id="icon-spinner" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7" /></symbol>
+    <symbol id="icon-alert" viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4zM12 9v5M12 17.5v.1" /></symbol>
+    <symbol id="icon-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></symbol>
+  </svg>
+
+  <div class="window-frame">
+    <header class="window-titlebar">
+      <div id="window-drag-region" class="window-drag-region pywebview-drag-region" title="Double-click to maximize or restore" data-i18n-title="window.dragHint">
+        <img class="window-app-logo" src="./assets/plexmuxy-app-icon-64.png" width="19" height="19" alt="" aria-hidden="true" draggable="false" />
+        <span class="window-app-title">PlexMuxy</span>
+      </div>
+      <div class="window-controls" aria-label="Window controls" data-i18n-aria-label="window.controls">
+        <button id="window-minimize-btn" class="window-control" type="button" title="Minimize" aria-label="Minimize window" data-i18n-title="window.minimizeShort" data-i18n-aria-label="window.minimize">
+          <span class="window-icon window-icon-minimize" aria-hidden="true"></span>
+        </button>
+        <button id="window-maximize-btn" class="window-control" type="button" title="Maximize" aria-label="Maximize window" aria-pressed="false" data-i18n-title="window.maximizeShort" data-i18n-aria-label="window.maximize">
+          <span class="window-icon window-icon-maximize" aria-hidden="true"></span>
+          <span class="window-icon window-icon-restore" aria-hidden="true"></span>
+        </button>
+        <button id="window-close-btn" class="window-control window-control-close" type="button" title="Close" aria-label="Close window" data-i18n-title="window.closeShort" data-i18n-aria-label="window.close">
+          <span class="window-icon window-icon-close" aria-hidden="true"></span>
+        </button>
+      </div>
+    </header>
+
+    <div class="resize-handles" aria-hidden="true">
+      <div class="resize-handle resize-nw" data-resize="nw"></div>
+      <div class="resize-handle resize-n" data-resize="n"></div>
+      <div class="resize-handle resize-ne" data-resize="ne"></div>
+      <div class="resize-handle resize-w" data-resize="w"></div>
+      <div class="resize-handle resize-e" data-resize="e"></div>
+      <div class="resize-handle resize-sw" data-resize="sw"></div>
+      <div class="resize-handle resize-s" data-resize="s"></div>
+      <div class="resize-handle resize-se" data-resize="se"></div>
+    </div>
+
+    <div id="app-shell" class="app-shell">
+      <button id="sidebar-scrim" class="sidebar-scrim" type="button" tabindex="-1" aria-label="Close navigation" data-i18n-aria-label="sidebar.close"></button>
+
+      <aside id="sidebar" class="sidebar" aria-label="Mux workflow navigation" data-i18n-aria-label="sidebar.label">
+        <p class="sidebar-head" data-i18n="sidebar.workflow">Workflow</p>
+
+        <nav class="steps" aria-label="Workflow" data-i18n-aria-label="sidebar.workflow">
+          <a class="step active" href="#/workspace/directory-section" data-route="workspace" data-section="directory-section" aria-current="step" title="Source directory" data-i18n-title="sidebar.source.tooltip">
+            <svg class="icon" aria-hidden="true"><use href="#icon-folder"></use></svg>
+            <span class="step-copy"><strong data-i18n="sidebar.source.title">Source</strong><small data-i18n="sidebar.source.subtitle">Choose media</small></span>
+            <span class="step-index">01</span>
+          </a>
+          <a class="step" href="#/workspace/options-section" data-route="workspace" data-section="options-section" title="Session options" data-i18n-title="sidebar.options.tooltip">
+            <svg class="icon" aria-hidden="true"><use href="#icon-sliders"></use></svg>
+            <span class="step-copy"><strong data-i18n="sidebar.options.title">Options</strong><small data-i18n="sidebar.options.subtitle">Shape the output</small></span>
+            <span class="step-index">02</span>
+          </a>
+          <a class="step" href="#/workspace/plan-section" data-route="workspace" data-section="plan-section" title="Review mux plan" data-i18n-title="sidebar.plan.tooltip">
+            <svg class="icon" aria-hidden="true"><use href="#icon-plan"></use></svg>
+            <span class="step-copy"><strong data-i18n="sidebar.plan.title">Plan</strong><small data-i18n="sidebar.plan.subtitle">Review tracks</small></span>
+            <span class="step-index">03</span>
+          </a>
+          <a class="step" href="#/workspace/run-section" data-route="workspace" data-section="run-section" title="Run mux job" data-i18n-title="sidebar.run.tooltip">
+            <svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg>
+            <span class="step-copy"><strong data-i18n="sidebar.run.title">Run</strong><small data-i18n="sidebar.run.subtitle">Monitor results</small></span>
+            <span class="step-index">04</span>
+          </a>
+
+          <p class="nav-label nav-label-tools" data-i18n="sidebar.tools">Tools</p>
+          <a class="step utility-step" href="#/jobs" data-route="jobs" title="Queued and historical jobs" data-i18n-title="sidebar.jobs.tooltip">
+            <svg class="icon" aria-hidden="true"><use href="#icon-plan"></use></svg>
+            <span class="step-copy"><strong data-i18n="sidebar.jobs.title">Jobs</strong><small data-i18n="sidebar.jobs.subtitle">Queue and history</small></span>
+          </a>
+          <a class="step utility-step" href="#/environment" data-route="environment" title="Persistent dependency and notification settings" data-i18n-title="sidebar.environment.tooltip">
+            <svg class="icon" aria-hidden="true"><use href="#icon-activity"></use></svg>
+            <span class="step-copy"><strong data-i18n="sidebar.environment.title">Environment configuration</strong><small data-i18n="sidebar.environment.subtitle">Persistent system setup</small></span>
+          </a>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="sidebar-footer-heading">
+            <span class="sidebar-status-dot" aria-hidden="true"></span>
+            <span class="mini-label" data-i18n="sidebar.localConfig">Local configuration</span>
+          </div>
+          <div id="sidebar-config-path" class="mini-path" data-i18n="sidebar.loadingConfig">Loading configuration…</div>
+        </div>
+        <a class="step utility-step sidebar-about" href="#/about" data-route="about" title="About PlexMuxy" data-i18n-title="sidebar.about.tooltip">
+          <img class="nav-project-icon" src="assets/plexmuxy-app-icon.svg" width="20" height="20" alt="" aria-hidden="true" />
+          <span class="step-copy"><strong data-i18n="sidebar.about.title">About</strong><small data-i18n="sidebar.about.subtitle">Project and credits</small></span>
+        </a>
+      </aside>
+
+      <div class="main-column">
+        <header class="topbar">
+          <div class="topbar-leading">
+            <button id="sidebar-toggle" class="icon-button sidebar-toggle" type="button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false" data-i18n-aria-label="sidebar.open">
+              <svg class="icon" aria-hidden="true"><use href="#icon-menu"></use></svg>
+            </button>
+            <div class="topbar-title">
+              <span id="topbar-context" data-i18n="topbar.workspace">Workspace</span>
+              <strong id="topbar-page" data-i18n="topbar.newJob">New mux job</strong>
+            </div>
+          </div>
+
+          <div class="topbar-actions">
+            <div id="runtime-status" class="runtime-status" role="status" aria-live="polite">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span data-i18n="status.initializing">Initializing</span>
+            </div>
+
+            <details id="theme-menu" class="theme-menu">
+              <summary class="theme-summary" aria-label="Choose appearance" data-i18n-aria-label="appearance.choose">
+                <svg class="icon" aria-hidden="true"><use href="#icon-monitor"></use></svg>
+                <span id="theme-label">System</span>
+                <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"></use></svg>
+              </summary>
+              <div class="theme-popover" role="group" aria-label="Appearance" data-i18n-aria-label="appearance.group">
+                <div class="popover-heading">
+                  <strong data-i18n="appearance.title">Appearance</strong>
+                  <span id="theme-detail">Following the system theme</span>
+                </div>
+                <button class="theme-option" type="button" data-theme-mode="system" aria-pressed="true">
+                  <svg class="icon" aria-hidden="true"><use href="#icon-monitor"></use></svg>
+                  <span><strong data-i18n="appearance.system">System</strong><small data-i18n="appearance.systemDescription">Follow this device</small></span>
+                  <svg class="icon option-check" aria-hidden="true"><use href="#icon-check"></use></svg>
+                </button>
+                <button class="theme-option" type="button" data-theme-mode="light" aria-pressed="false">
+                  <svg class="icon" aria-hidden="true"><use href="#icon-sun"></use></svg>
+                  <span><strong data-i18n="appearance.light">Light</strong><small data-i18n="appearance.lightDescription">Media archive</small></span>
+                  <svg class="icon option-check" aria-hidden="true"><use href="#icon-check"></use></svg>
+                </button>
+                <button class="theme-option" type="button" data-theme-mode="dark" aria-pressed="false">
+                  <svg class="icon" aria-hidden="true"><use href="#icon-moon"></use></svg>
+                  <span><strong data-i18n="appearance.dark">Dark</strong><small data-i18n="appearance.darkDescription">Home theater</small></span>
+                  <svg class="icon option-check" aria-hidden="true"><use href="#icon-check"></use></svg>
+                </button>
+              </div>
+            </details>
+
+            <details id="language-menu" class="theme-menu language-menu">
+              <summary class="theme-summary" aria-label="Choose language" data-i18n-aria-label="language.choose">
+                <svg class="icon" aria-hidden="true"><use href="#icon-language"></use></svg>
+                <span id="language-label">English</span>
+                <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"></use></svg>
+              </summary>
+              <div class="theme-popover language-popover" role="group" aria-label="Language" data-i18n-aria-label="language.group">
+                <div class="popover-heading">
+                  <strong data-i18n="language.title">Language</strong>
+                  <span id="language-detail">Following the device language</span>
+                </div>
+                <button class="theme-option language-option" type="button" data-locale-mode="system" aria-pressed="true">
+                  <svg class="icon" aria-hidden="true"><use href="#icon-monitor"></use></svg>
+                  <span><strong data-i18n="language.system">System</strong><small data-i18n="language.systemDescription">Use the device language</small></span>
+                  <svg class="icon option-check" aria-hidden="true"><use href="#icon-check"></use></svg>
+                </button>
+                <button class="theme-option language-option" type="button" data-locale-mode="en" aria-pressed="false">
+                  <svg class="icon" aria-hidden="true"><use href="#icon-language"></use></svg>
+                  <span><strong>English</strong><small data-i18n="language.englishDescription">English interface</small></span>
+                  <svg class="icon option-check" aria-hidden="true"><use href="#icon-check"></use></svg>
+                </button>
+                <button class="theme-option language-option" type="button" data-locale-mode="zh-CN" aria-pressed="false">
+                  <svg class="icon" aria-hidden="true"><use href="#icon-language"></use></svg>
+                  <span><strong>简体中文</strong><small data-i18n="language.chineseDescription">Simplified Chinese interface</small></span>
+                  <svg class="icon option-check" aria-hidden="true"><use href="#icon-check"></use></svg>
+                </button>
+                <button class="theme-option language-option" type="button" data-locale-mode="zh-TW" aria-pressed="false">
+                  <svg class="icon" aria-hidden="true"><use href="#icon-language"></use></svg>
+                  <span><strong>繁體中文</strong><small data-i18n="language.traditionalChineseDescription">Traditional Chinese interface</small></span>
+                  <svg class="icon option-check" aria-hidden="true"><use href="#icon-check"></use></svg>
+                </button>
+                <button class="theme-option language-option" type="button" data-locale-mode="ru" aria-pressed="false">
+                  <svg class="icon" aria-hidden="true"><use href="#icon-language"></use></svg>
+                  <span><strong>Русский</strong><small data-i18n="language.russianDescription">Russian interface</small></span>
+                  <svg class="icon option-check" aria-hidden="true"><use href="#icon-check"></use></svg>
+                </button>
+              </div>
+            </details>
+
+            <span id="app-version" class="app-version">PlexMuxy</span>
+          </div>
+        </header>
+
+        <main id="main-content" class="main" tabindex="-1">
+          <div class="content">
+            <div id="workspace-view" class="view" data-view="workspace">
+            <header class="page-intro">
+              <p class="breadcrumb"><span data-i18n="page.breadcrumb">Media workflow</span> <span aria-hidden="true">/</span> <span data-i18n="topbar.newJob">New job</span></p>
+              <div class="page-intro-row">
+                <div>
+                  <h2 data-i18n="page.title">Prepare a mux job</h2>
+                  <p data-i18n="page.description">Choose a media folder, tune this session, then inspect the exact track plan before any files change.</p>
+                </div>
+              </div>
+            </header>
+
+            <div id="loading" class="activity-banner hidden" aria-live="polite" aria-busy="true">
+              <div class="activity-copy">
+                <svg class="icon" aria-hidden="true"><use href="#icon-activity"></use></svg>
+                <div><strong data-i18n="activity.title">Working on your request</strong><span id="loading-text" data-i18n="loading.initializing">Initializing…</span></div>
+              </div>
+              <div class="activity-progress" aria-hidden="true"><span></span></div>
+            </div>
+
+            <div id="alert" class="alert hidden" role="alert" tabindex="-1">
+              <svg class="icon alert-icon" aria-hidden="true"><use href="#icon-alert"></use></svg>
+              <div class="alert-copy"><strong data-i18n="alert.title">Action needed</strong><span id="alert-message"></span></div>
+              <button id="alert-close-btn" class="icon-button alert-close" type="button" aria-label="Dismiss error" data-i18n-aria-label="alert.dismiss">
+                <svg class="icon" aria-hidden="true"><use href="#icon-x"></use></svg>
+              </button>
+            </div>
+
+            <section id="directory-section" class="panel panel-source" aria-labelledby="input-dir-label">
+              <div class="panel-header">
+                <div class="section-heading">
+                  <span class="section-number" aria-hidden="true">01</span>
+                  <div>
+                    <p class="eyebrow" data-i18n="source.eyebrow">Source</p>
+                    <h3 id="input-dir-label" data-i18n="source.title">Select the media directory</h3>
+                    <p class="section-description" data-i18n="source.description">PlexMuxy scans this folder for video, audio, subtitle, and font candidates.</p>
+                  </div>
+                </div>
+                <button id="choose-dir-btn" class="primary" type="button">
+                  <svg class="icon" aria-hidden="true"><use href="#icon-folder"></use></svg>
+                  <span data-i18n="source.choose">Choose folder</span>
+                </button>
+              </div>
+              <label class="path-field" for="input-dir">
+                <svg class="icon" aria-hidden="true"><use href="#icon-folder"></use></svg>
+                <input id="input-dir" type="text" placeholder="No directory selected" autocomplete="off" data-i18n-placeholder="source.placeholder" />
+              </label>
+              <p class="field-help" data-i18n="source.help">You can also paste an absolute path. Changing the source clears the current plan.</p>
+            </section>
+
+            <section id="options-section" class="panel" aria-labelledby="options-title">
+              <div class="panel-header">
+                <div class="section-heading">
+                  <span class="section-number" aria-hidden="true">02</span>
+                  <div>
+                    <p class="eyebrow" data-i18n="options.eyebrow">Session options</p>
+                    <h3 id="options-title" data-i18n="options.title">Shape the output</h3>
+                    <p class="section-description" data-i18n="options.description">These values apply to the next plan and can be saved as your local defaults.</p>
+                  </div>
+                </div>
+                <button id="save-settings-btn" class="secondary" type="button" disabled>
+                  <svg class="icon" aria-hidden="true"><use href="#icon-save"></use></svg>
+                  <span data-i18n="options.save">Save settings</span>
+                </button>
+              </div>
+
+              <div class="settings-list">
+                <div class="setting-row">
+                  <label class="setting-copy" for="cleanup"><strong data-i18n="options.cleanup.label">Cleanup policy</strong><span data-i18n="options.cleanup.help">Keep sources, move them after success, or delete confirmed inputs.</span></label>
+                  <div class="control-wrap custom-select" data-custom-select>
+                    <button id="cleanup" class="select-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="cleanup-listbox" data-value="move">
+                      <span data-select-label data-i18n="options.cleanup.move">Move after mux</span>
+                      <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"></use></svg>
+                    </button>
+                    <div id="cleanup-listbox" class="select-listbox" role="listbox" aria-labelledby="cleanup" hidden>
+                      <button type="button" role="option" aria-selected="false" tabindex="-1" data-value="none" data-i18n="options.cleanup.none">Keep source files</button>
+                      <button type="button" role="option" aria-selected="true" tabindex="-1" data-value="move" data-i18n="options.cleanup.move">Move after mux</button>
+                      <button type="button" role="option" aria-selected="false" tabindex="-1" data-value="delete" data-i18n="options.cleanup.delete">Delete after mux</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="setting-row option-collapsible" id="extra-dir-row">
+                  <label class="setting-copy" for="extra-dir"><strong data-i18n="options.extraDir.label">Move target path</strong><span data-i18n="options.extraDir.help">Target move path when cleaning up task files.</span></label>
+                  <div class="input-with-button">
+                    <input id="extra-dir" type="text" placeholder="Optional absolute path" autocomplete="off" data-i18n-placeholder="options.extraDir.placeholder" />
+                    <div class="button-row compact">
+                      <button id="extra-dir-choose-btn" class="secondary compact" type="button" data-i18n="options.outputDir.choose">Choose directory</button>
+                      <button id="extra-dir-recommended-btn" class="secondary compact" type="button" data-i18n="options.recommended">Use recommended</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="setting-row">
+                  <label class="setting-copy" for="output-dir"><strong data-i18n="options.outputDir.label">Output directory</strong><span data-i18n="options.outputDir.help">Leave empty to write the muxed file beside its source video.</span></label>
+                  <div class="input-with-button">
+                    <input id="output-dir" type="text" placeholder="Use the source folder" autocomplete="off" data-i18n-placeholder="options.outputDir.placeholder" />
+                    <div class="button-row compact">
+                      <button id="output-dir-choose-btn" class="secondary compact" type="button" data-i18n="options.outputDir.choose">Choose directory</button>
+                      <button id="output-dir-recommended-btn" class="secondary compact" type="button" data-i18n="options.recommended">Use recommended</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="setting-row">
+                  <label class="setting-copy" for="name-strategy"><strong data-i18n="options.nameStrategy.label">Naming strategy</strong><span data-i18n="options.nameStrategy.help">Choose how PlexMuxy derives the final file name.</span></label>
+                  <div class="control-wrap custom-select" data-custom-select>
+                    <button id="name-strategy" class="select-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="name-strategy-listbox" data-value="suffix">
+                      <span data-select-label data-i18n="options.nameStrategy.suffix">Append suffix</span>
+                      <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"></use></svg>
+                    </button>
+                    <div id="name-strategy-listbox" class="select-listbox" role="listbox" aria-labelledby="name-strategy" hidden>
+                      <button type="button" role="option" aria-selected="true" tabindex="-1" data-value="suffix" data-i18n="options.nameStrategy.suffix">Append suffix</button>
+                      <button type="button" role="option" aria-selected="false" tabindex="-1" data-value="same-name" data-i18n="options.nameStrategy.same-name">Override original video file</button>
+                      <button type="button" role="option" aria-selected="false" tabindex="-1" data-value="template" data-i18n="options.nameStrategy.template">Use template</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="setting-row option-collapsible" id="output-suffix-row">
+                  <label class="setting-copy" for="output-suffix"><strong data-i18n="options.outputSuffix.label">Output suffix</strong><span data-i18n="options.outputSuffix.help">Added before the file extension when the suffix strategy is active.</span></label>
+                  <input id="output-suffix" type="text" placeholder=".plex" autocomplete="off" />
+                </div>
+                <div class="setting-row option-collapsible" id="name-template-row" style="display:none">
+                  <label class="setting-copy" for="name-template"><strong data-i18n="options.nameTemplate.label">Name template</strong><span data-i18n="options.nameTemplate.help">Available when the template strategy is selected.</span></label>
+                  <input id="name-template" type="text" placeholder="{stem}.plex.mkv" autocomplete="off" />
+                </div>
+                <label class="setting-row setting-row-toggle" for="font-subset">
+                  <span class="setting-copy"><strong data-i18n="options.fontSubset.label">Font subsetting</strong><span data-i18n="options.fontSubset.help">Attach only glyphs referenced by matched ASS/SSA subtitles. Turning this off restores your previous font mode.</span></span>
+                  <span class="toggle-row">
+                    <input id="font-subset" class="visually-hidden" type="checkbox" />
+                    <span class="toggle-control" aria-hidden="true"></span>
+                    <span class="toggle-label" data-i18n="options.fontSubset.enable">Enable font subsetting to reduce file size</span>
+                  </span>
+                </label>
+                <div class="setting-row">
+                  <label class="setting-copy" for="font-mime-mode"><strong data-i18n="options.fontMimeMode.label">Font MIME type</strong><span data-i18n="options.fontMimeMode.help">Choose the MIME type scheme for font attachments written into the MKV. Modern uses the font/ttf, font/otf, font/collection scheme and requires mkvmerge v66+. Legacy uses the older application/x-truetype-font and application/vnd.ms-opentype types.</span></label>
+                  <div class="control-wrap custom-select" data-custom-select>
+                    <button id="font-mime-mode" class="select-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="font-mime-mode-listbox" data-value="legacy">
+                      <span data-select-label data-i18n="options.fontMimeMode.legacy">Legacy</span>
+                      <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"></use></svg>
+                    </button>
+                    <div id="font-mime-mode-listbox" class="select-listbox" role="listbox" aria-labelledby="font-mime-mode" hidden>
+                      <button type="button" role="option" aria-selected="true" tabindex="-1" data-value="legacy" data-i18n="options.fontMimeMode.legacy">Legacy</button>
+                      <button type="button" role="option" aria-selected="false" tabindex="-1" data-value="modern" data-compat="font.mime_mode.modern" data-i18n="options.fontMimeMode.modern">Modern</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="setting-row">
+                  <label class="setting-copy" for="font-embed-scheme"><strong data-i18n="options.fontEmbedScheme.label">Font delivery</strong><span data-i18n="options.fontEmbedScheme.help">How subsetted fonts reach the player. Attachment embeds them in the MKV. ASS instead writes a self-contained .ass with the fonts embedded. Both keeps the MKV attachment and also writes the self-contained .ass.</span></label>
+                  <div class="control-wrap custom-select" data-custom-select>
+                    <button id="font-embed-scheme" class="select-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="font-embed-scheme-listbox" data-value="ass">
+                      <span data-select-label data-i18n="options.fontEmbedScheme.attachment">MKV attachment</span>
+                      <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"></use></svg>
+                    </button>
+                    <div id="font-embed-scheme-listbox" class="select-listbox" role="listbox" aria-labelledby="font-embed-scheme" hidden>
+                      <button type="button" role="option" aria-selected="false" tabindex="-1" data-value="attachment" data-i18n="options.fontEmbedScheme.attachment">MKV attachment</button>
+                      <button type="button" role="option" aria-selected="true" tabindex="-1" data-value="ass" data-i18n="options.fontEmbedScheme.ass">Self-contained .ass subtitle file with embedded fonts</button>
+                      <button type="button" role="option" aria-selected="false" tabindex="-1" data-value="both" data-i18n="options.fontEmbedScheme.both">Both</button>
+                    </div>
+                  </div>
+                </div>
+                <label class="setting-row setting-row-toggle" for="audio-filter-enabled">
+                  <span class="setting-copy"><strong data-i18n="options.audioFilter.label">Filter source audio tracks</strong><span data-i18n="options.audioFilter.help">Opt in to conservative source-audio rules. Unknown language remains preserved.</span></span>
+                  <span class="toggle-row">
+                    <input id="audio-filter-enabled" class="visually-hidden" type="checkbox" />
+                    <span class="toggle-control" aria-hidden="true"></span>
+                    <span class="toggle-label" data-i18n="options.audioFilter.enable">Enable audio filtering</span>
+                  </span>
+                </label>
+                <div class="setting-row audio-filter-option option-collapsible">
+                  <label class="setting-copy" for="audio-exclude-patterns"><strong data-i18n="options.audioPatterns.label">Excluded title patterns</strong><span data-i18n="options.audioPatterns.help">Comma-separated case-insensitive text or glob patterns, such as commentary or *descriptive*.</span></label>
+                  <input id="audio-exclude-patterns" type="text" placeholder="commentary, *descriptive*" autocomplete="off" />
+                </div>
+                <div class="setting-row audio-filter-option option-collapsible">
+                  <label class="setting-copy" for="audio-keep-languages"><strong data-i18n="options.audioLanguages.label">Kept languages</strong><span data-i18n="options.audioLanguages.help">Comma-separated MKV or IETF language codes. Leave empty to avoid language filtering.</span></label>
+                  <input id="audio-keep-languages" type="text" placeholder="jpn, eng" autocomplete="off" />
+                </div>
+                <label class="setting-row setting-row-toggle audio-filter-option option-collapsible" for="keep-default-audio">
+                  <span class="setting-copy"><strong data-i18n="options.keepDefaultAudio.label">Always keep default audio</strong><span data-i18n="options.keepDefaultAudio.help">Default source tracks take precedence over exclusion rules.</span></span>
+                  <span class="toggle-row"><input id="keep-default-audio" class="visually-hidden" type="checkbox" /><span class="toggle-control" aria-hidden="true"></span><span class="toggle-label" data-i18n="options.keepDefaultAudio.enable">Keep defaults</span></span>
+                </label>
+                <label class="setting-row setting-row-toggle audio-filter-option option-collapsible" for="keep-unknown-audio">
+                  <span class="setting-copy"><strong data-i18n="options.keepUnknownAudio.label">Keep unknown language</strong><span data-i18n="options.keepUnknownAudio.help">Prevents missing or unknown language metadata from causing deletion.</span></span>
+                  <span class="toggle-row"><input id="keep-unknown-audio" class="visually-hidden" type="checkbox" /><span class="toggle-control" aria-hidden="true"></span><span class="toggle-label" data-i18n="options.keepUnknownAudio.enable">Keep unknown</span></span>
+                </label>
+                <label class="setting-row setting-row-toggle audio-filter-option option-collapsible" for="allow-no-audio">
+                  <span class="setting-copy"><strong data-i18n="options.allowNoAudio.label">Allow output with no audio</strong><span data-i18n="options.allowNoAudio.help">Dangerous: permits manual rules to remove every source audio track.</span></span>
+                  <span class="toggle-row"><input id="allow-no-audio" class="visually-hidden" type="checkbox" /><span class="toggle-control" aria-hidden="true"></span><span class="toggle-label" data-i18n="options.allowNoAudio.enable">Allow silent output</span></span>
+                </label>
+                <label class="setting-row setting-row-toggle" for="overwrite">
+                  <span class="setting-copy"><strong data-i18n="options.overwrite.label">Overwrite existing outputs</strong><span data-i18n="options.overwrite.help">Requires confirmation before the job starts and can replace existing files.</span></span>
+                  <span class="toggle-row">
+                    <input id="overwrite" class="visually-hidden" type="checkbox" />
+                    <span class="toggle-control" aria-hidden="true"></span>
+                    <span class="toggle-label" data-i18n="options.overwrite.allow">Allow overwrite</span>
+                  </span>
+                </label>
+              </div>
+            </section>
+
+            <section id="plan-section" class="panel workflow-panel" aria-labelledby="plan-title">
+              <div class="panel-header">
+                <div class="section-heading">
+                  <span class="section-number" aria-hidden="true">03</span>
+                  <div>
+                    <p class="eyebrow" data-i18n="plan.eyebrow">Review</p>
+                    <h3 id="plan-title" data-i18n="plan.title">Inspect the mux plan</h3>
+                    <p class="section-description" data-i18n="plan.description">Nothing is written until you review the matched tracks and start the job.</p>
+                  </div>
+                </div>
+                <div class="button-row">
+                  <button id="plan-btn" class="primary" type="button">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-plan"></use></svg>
+                    <span data-i18n="plan.generate">Generate plan</span>
+                  </button>
+                </div>
+              </div>
+              <div id="plan-summary" class="count-row" aria-label="Plan summary" data-i18n-aria-label="plan.summary"></div>
+              <div id="plans" class="stack empty-state">
+                <span class="empty-icon" aria-hidden="true">03</span>
+                <h4 data-i18n="plan.empty.title">No plan yet</h4>
+                <p data-i18n="plan.empty.detail">Choose a source directory and generate a plan to review matched tracks.</p>
+              </div>
+            </section>
+
+            <section id="run-section" class="panel workflow-panel" aria-labelledby="run-title">
+              <div class="panel-header">
+                <div class="section-heading">
+                  <span class="section-number" aria-hidden="true">04</span>
+                  <div>
+                    <p class="eyebrow" data-i18n="run.eyebrow">Execute</p>
+                    <h3 id="run-title" data-i18n="run.title">Run and verify</h3>
+                    <p class="section-description" data-i18n="run.description">Monitor progress, verification, warnings, and cleanup results in one place.</p>
+                  </div>
+                </div>
+                <div class="button-row">
+                  <button id="cancel-btn" class="destructive hidden" type="button" disabled data-i18n="run.cancel">Cancel job</button>
+                  <button id="run-btn" class="primary" type="button" disabled>
+                    <svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg>
+                    <span data-i18n="run.start">Run mux</span>
+                  </button>
+                </div>
+              </div>
+              <div id="job-progress" class="job-progress" role="status" aria-live="polite"></div>
+              <div id="result-summary" class="count-row" aria-label="Result summary" data-i18n-aria-label="run.summary"></div>
+              <div id="results" class="stack empty-state">
+                <span class="empty-icon" aria-hidden="true">04</span>
+                <h4 data-i18n="run.empty.title">No run yet</h4>
+                <p data-i18n="run.empty.detail">Generate and review a plan before starting the mux job.</p>
+              </div>
+            </section>
+
+            <footer class="workspace-footer">
+              <span data-i18n="footer.review">Review destructive options before every run.</span>
+            </footer>
+            </div>
+
+            <div id="jobs-view" class="view hidden" data-view="jobs">
+              <div class="page-heading">
+                <div><p class="breadcrumb" data-i18n="jobs.breadcrumb">Task history</p><h2 data-i18n="jobs.title">Queue and history</h2><p data-i18n="jobs.description">Directory tasks run one at a time and remain visible after restart.</p></div>
+                <div class="button-row"><button id="queue-toggle-btn" class="secondary" type="button" data-i18n="jobs.pause">Pause queue</button><button id="delete-all-jobs-btn" class="ghost" type="button" data-i18n="jobs.deleteAll">Clear history</button><button id="refresh-jobs-btn" class="ghost" type="button" data-i18n="jobs.refresh">Refresh</button></div>
+              </div>
+              <section class="panel" aria-labelledby="jobs-list-title">
+                <div class="panel-header"><div><h3 id="jobs-list-title" data-i18n="jobs.listTitle">Tasks</h3><p class="section-description" data-i18n="jobs.listDescription">Review status, retry interrupted work, or reopen the output location.</p></div></div>
+                <div id="jobs-list" class="stack empty-state"><span class="empty-icon" aria-hidden="true">02</span><h4 data-i18n="jobs.empty.title">No task history</h4><p data-i18n="jobs.empty.detail">Generate a plan to create the first persistent task.</p></div>
+              </section>
+            </div>
+
+            <div id="environment-view" class="view hidden" data-view="environment">
+              <header class="page-intro">
+                <p class="breadcrumb"><span data-i18n="environment.breadcrumb">System setup</span> <span aria-hidden="true">/</span> <span data-i18n="sidebar.environment.title">Environment configuration</span></p>
+                <div class="page-intro-row">
+                  <div>
+                    <h2 data-i18n="environment.pageTitle">Configure system dependencies</h2>
+                    <p data-i18n="environment.pageDescription">These settings persist across mux jobs and are used whenever automatic dependency detection cannot find a tool.</p>
+                  </div>
+                  <span class="local-only-note"><span class="local-only-dot" aria-hidden="true"></span><span data-i18n="environment.persistent">Persistent on this device</span></span>
+                </div>
+              </header>
+
+              <section id="environment-section" class="panel" aria-labelledby="environment-title">
+                <div class="panel-header">
+                  <div class="section-heading">
+                    <span class="section-number" aria-hidden="true">01</span>
+                    <div>
+                      <p class="eyebrow" data-i18n="environment.eyebrow">Environment configuration</p>
+                      <h3 id="environment-title" data-i18n="environment.title">Dependency paths</h3>
+                      <p class="section-description" data-i18n="environment.description">Automatic detection remains the default. Choose an executable only when a dependency is not discoverable through system environment variables or PATH.</p>
+                    </div>
+                  </div>
+                  <button id="save-environment-btn" class="primary" type="button" disabled>
+                    <svg class="icon" aria-hidden="true"><use href="#icon-save"></use></svg>
+                    <span data-i18n="environment.save">Save environment</span>
+                  </button>
+                </div>
+
+                <div class="dependency-list">
+                  <article class="dependency-card" data-dependency="mkvmerge">
+                    <div class="dependency-heading"><div><h4>mkvmerge</h4><p data-i18n="environment.mkvmerge.help">Required mux engine. PlexMuxy cannot run a mux job without it.</p></div></div>
+                    <label for="mkvmerge-path" data-i18n="environment.executablePath">Executable path</label>
+                    <div class="dependency-selection">
+                      <span id="mkvmerge-status" class="dependency-state" role="status" aria-label="mkvmerge"><svg aria-hidden="true"><use href="#icon-spinner"></use></svg></span>
+                      <span id="mkvmerge-source" class="dependency-source">—</span>
+                      <input id="mkvmerge-path" type="text" readonly placeholder="Not detected" data-i18n-placeholder="environment.autoPlaceholder" />
+                    </div>
+                    <div class="dependency-actions"><button class="secondary dependency-browse" type="button" data-dependency="mkvmerge" data-i18n="environment.browse">Browse…</button><button class="ghost dependency-auto-detect" type="button" data-dependency="mkvmerge" data-i18n="environment.autoDetect">Auto-detect</button></div>
+                    <p id="mkvmerge-detail" class="field-help dependency-detail"></p><p id="mkvmerge-version" class="dependency-version"></p>
+                  </article>
+
+                  <article class="dependency-card" data-dependency="ffmpeg">
+                    <div class="dependency-heading"><div><h4>ffmpeg <span data-i18n="environment.optional">Optional</span></h4><p data-i18n="environment.ffmpeg.help">Optional verification and media testing tool; not required for normal mux output.</p></div></div>
+                    <label for="ffmpeg-path" data-i18n="environment.executablePath">Executable path</label>
+                    <div class="dependency-selection">
+                      <span id="ffmpeg-status" class="dependency-state" role="status" aria-label="ffmpeg"><svg aria-hidden="true"><use href="#icon-spinner"></use></svg></span>
+                      <span id="ffmpeg-source" class="dependency-source">—</span>
+                      <input id="ffmpeg-path" type="text" readonly placeholder="Not detected" data-i18n-placeholder="environment.autoPlaceholder" />
+                    </div>
+                    <div class="dependency-actions"><button class="secondary dependency-browse" type="button" data-dependency="ffmpeg" data-i18n="environment.browse">Browse…</button><button class="ghost dependency-auto-detect" type="button" data-dependency="ffmpeg" data-i18n="environment.autoDetect">Auto-detect</button></div>
+                    <p id="ffmpeg-detail" class="field-help dependency-detail"></p><p id="ffmpeg-version" class="dependency-version"></p>
+                  </article>
+
+                  <article class="dependency-card" data-dependency="unrar">
+                    <div class="dependency-heading"><div><h4>unrar <span data-i18n="environment.optional">Optional</span></h4><p data-i18n="environment.unrar.help">Optional extractor used only when font archives require the RAR format.</p></div></div>
+                    <label for="unrar-path" data-i18n="environment.executablePath">Executable path</label>
+                    <div class="dependency-selection">
+                      <span id="unrar-status" class="dependency-state" role="status" aria-label="unrar"><svg aria-hidden="true"><use href="#icon-spinner"></use></svg></span>
+                      <span id="unrar-source" class="dependency-source">—</span>
+                      <input id="unrar-path" type="text" readonly placeholder="Not detected" data-i18n-placeholder="environment.autoPlaceholder" />
+                    </div>
+                    <div class="dependency-actions"><button class="secondary dependency-browse" type="button" data-dependency="unrar" data-i18n="environment.browse">Browse…</button><button class="ghost dependency-auto-detect" type="button" data-dependency="unrar" data-i18n="environment.autoDetect">Auto-detect</button><button id="install-unrar-btn" class="ghost" type="button"><svg class="icon" aria-hidden="true"><use href="#icon-download"></use></svg><span data-i18n="environment.downloadUnrar">Get UnRAR from RARLAB</span></button></div>
+                    <p id="unrar-detail" class="field-help dependency-detail"></p><p id="unrar-version" class="dependency-version"></p>
+                  </article>
+                </div>
+              </section>
+
+              <section class="panel" aria-labelledby="notifications-title">
+                <div class="panel-header">
+                  <div class="section-heading">
+                    <span class="section-number" aria-hidden="true">02</span>
+                    <div>
+                      <p class="eyebrow" data-i18n="environment.notifications.eyebrow">Windows integration</p>
+                      <h3 id="notifications-title" data-i18n="environment.notifications.title">Native job notifications</h3>
+                      <p class="section-description" data-i18n="environment.notifications.description">When enabled, Windows receives a native notification after a mux job completes, fails, or is cancelled.</p>
+                    </div>
+                  </div>
+                  <button id="test-notification-btn" class="secondary" type="button" data-i18n="environment.notifications.test">Send test notification</button>
+                </div>
+                <label class="setting-row setting-row-toggle" for="notifications-enabled">
+                  <span class="setting-copy"><strong data-i18n="environment.notifications.enable">Enable Windows notifications</strong><span id="notification-capability" data-i18n="environment.notifications.checking">Checking native notification support…</span></span>
+                  <span class="toggle-row">
+                    <input id="notifications-enabled" class="visually-hidden" type="checkbox" />
+                    <span class="toggle-control" aria-hidden="true"></span>
+                    <span class="toggle-label" data-i18n="environment.notifications.jobTerminal">Notify at job completion</span>
+                  </span>
+                </label>
+              </section>
+
+              <section class="panel environment-tools" aria-labelledby="environment-tools-title">
+                <div class="panel-header">
+                  <div class="section-heading">
+                    <span class="section-number" aria-hidden="true">03</span>
+                    <div>
+                      <p class="eyebrow" data-i18n="environment.tools.eyebrow">Support</p>
+                      <h3 id="environment-tools-title" data-i18n="environment.tools.title">Configuration and diagnostics</h3>
+                      <p class="section-description" data-i18n="environment.tools.description">Review the active configuration or export a diagnostic archive for troubleshooting.</p>
+                    </div>
+                  </div>
+                  <div class="button-row">
+                    <button id="diagnostics-btn" class="secondary" type="button"><svg class="icon" aria-hidden="true"><use href="#icon-download"></use></svg><span data-i18n="environment.export">Export diagnostics</span></button>
+                    <button id="open-config-btn" class="ghost" type="button"><svg class="icon" aria-hidden="true"><use href="#icon-external"></use></svg><span data-i18n="environment.open">Open location</span></button>
+                  </div>
+                </div>
+                <div class="environment-grid">
+                  <article class="environment-group" aria-labelledby="config-summary-title">
+                    <div class="group-heading"><h4 id="config-summary-title" data-i18n="environment.configTitle">Active configuration</h4><span>Config</span></div>
+                    <div id="config-summary" class="summary-list"></div>
+                  </article>
+                  <article class="environment-group" aria-labelledby="mkvmerge-summary-title">
+                    <div class="group-heading"><h4 id="mkvmerge-summary-title" data-i18n="environment.engineTitle">Dependency overview</h4><span>Runtime</span></div>
+                    <div id="mkvmerge-summary" class="summary-list"></div>
+                  </article>
+                </div>
+              </section>
+
+              <section class="panel" aria-labelledby="integrations-title">
+                <div class="panel-header"><div class="section-heading"><span class="section-number" aria-hidden="true">04</span><div><p class="eyebrow" data-i18n="environment.integrations.eyebrow">Optional network features</p><h3 id="integrations-title" data-i18n="environment.integrations.title">Updates and Plex</h3><p class="section-description" data-i18n="environment.integrations.description">Both features are opt-in. Plex tokens are read from an environment variable and never saved here.</p></div></div><button id="check-updates-btn" class="secondary" type="button" data-i18n="environment.updates.check">Check now</button></div>
+                <div class="settings-list compact-settings">
+                  <label class="setting-row setting-row-toggle" for="updates-enabled"><span class="setting-copy"><strong data-i18n="environment.updates.enable">Enable cached update checks</strong><span id="update-check-status" data-i18n="environment.updates.disabled">Disabled; PlexMuxy will stay offline.</span></span><span class="toggle-row"><input id="updates-enabled" class="visually-hidden" type="checkbox" /><span class="toggle-control" aria-hidden="true"></span></span></label>
+                  <label class="setting-row setting-row-toggle" for="plex-enabled"><span class="setting-copy"><strong data-i18n="environment.plex.enable">Refresh Plex after verified jobs</strong><span id="plex-token-status" data-i18n="environment.plex.tokenMissing">Token environment variable not detected.</span></span><span class="toggle-row"><input id="plex-enabled" class="visually-hidden" type="checkbox" /><span class="toggle-control" aria-hidden="true"></span></span></label>
+                  <div class="setting-row"><label class="setting-copy" for="plex-server-url"><strong data-i18n="environment.plex.server">Plex server URL</strong></label><input id="plex-server-url" type="url" placeholder="https://plex.example:32400" /></div>
+                  <div class="setting-row"><label class="setting-copy" for="plex-section-id"><strong data-i18n="environment.plex.section">Library section ID</strong></label><input id="plex-section-id" inputmode="numeric" /></div>
+                  <div class="setting-row"><label class="setting-copy" for="plex-token-env"><strong data-i18n="environment.plex.tokenEnv">Token environment variable</strong></label><input id="plex-token-env" type="text" placeholder="PLEXMUXY_PLEX_TOKEN" /></div>
+                  <div class="setting-row"><label class="setting-copy" for="plex-path-mappings"><strong data-i18n="environment.plex.mappings">Path mappings</strong><span data-i18n="environment.plex.mappingsHelp">One per line: local absolute path = server-visible path</span></label><textarea id="plex-path-mappings" rows="3" placeholder="D:\Media = /media"></textarea></div>
+                </div>
+              </section>
+
+              <footer class="workspace-footer"><span data-i18n="environment.footer">Environment changes are validated before they are saved.</span></footer>
+            </div>
+
+            <div id="about-view" class="view hidden" data-view="about">
+              <header class="about-hero">
+                <img class="about-app-icon" src="assets/plexmuxy-app-icon.svg" width="104" height="104" alt="PlexMuxy app icon" data-i18n-alt="about.iconAlt" />
+                <div class="about-identity">
+                  <p class="breadcrumb" data-i18n="about.breadcrumb">Application information</p>
+                  <h2>PlexMuxy</h2>
+                  <p data-i18n="about.description">Prepares Matroska media around Plex Media Server's scanning, playback, and metadata expectations.</p>
+                  <div class="about-meta" aria-label="Application details" data-i18n-aria-label="about.detailsLabel">
+                    <span id="about-version" data-i18n="about.versionUnavailable">Version unavailable</span>
+                    <span data-i18n="about.licenseValue">MIT License</span>
+                  </div>
+                </div>
+              </header>
+
+              <section class="panel about-section" aria-labelledby="about-purpose-title">
+                <div class="about-section-heading">
+                  <p class="eyebrow" data-i18n="about.purpose.eyebrow">Purpose</p>
+                  <h3 id="about-purpose-title" data-i18n="about.purpose.title">Make added content work correctly in Plex</h3>
+                </div>
+                <p data-i18n="about.purpose.description">PlexMuxy matches external audio and subtitles, attaches subtitle fonts, and writes track languages, names, flags, and release-group details so Plex can load and present the added content correctly.</p>
+                <p class="about-note" data-i18n="about.disclaimer">PlexMuxy is an independent open-source project and is not affiliated with, endorsed by, or sponsored by Plex.</p>
+              </section>
+
+              <section class="panel about-section" aria-labelledby="about-formats-title">
+                <div class="about-section-heading">
+                  <p class="eyebrow" data-i18n="about.formats.eyebrow">Supported file types</p>
+                  <h3 id="about-formats-title" data-i18n="about.formats.title">What PlexMuxy can mux</h3>
+                </div>
+                <p data-i18n="about.formats.description">PlexMuxy reads the following source formats and always writes a single Matroska (.mkv) file:</p>
+                <dl class="format-list">
+                  <dt data-i18n="about.formats.video">Video containers</dt>
+                  <dd><code>.mkv</code> <code>.mp4</code> <code>.avi</code> <code>.flv</code></dd>
+                  <dt data-i18n="about.formats.subtitles">External subtitles</dt>
+                  <dd><code>.ass</code> <code>.ssa</code></dd>
+                  <dt data-i18n="about.formats.audio">External audio</dt>
+                  <dd><code>.mka</code></dd>
+                  <dt data-i18n="about.formats.fonts">Font attachments</dt>
+                  <dd><code>.ttf</code> <code>.otf</code> <code>.ttc</code> <code>.otc</code></dd>
+                  <dt data-i18n="about.formats.archives">Font archives</dt>
+                  <dd><code>.zip</code> <code>.7z</code> <code>.rar</code></dd>
+                  <dt data-i18n="about.formats.output">Output</dt>
+                  <dd><code>.mkv</code> (Matroska)</dd>
+                </dl>
+                <p class="about-note" data-i18n="about.formats.note">The video-container list is configurable in config.json under media.video_extensions (and the other media.*_extensions lists), so additional containers that mkvmerge can demux can be enabled.</p>
+              </section>
+
+              <section class="panel about-section" aria-labelledby="about-credits-title">
+                <div class="about-section-heading">
+                  <p class="eyebrow" data-i18n="about.credits.eyebrow">Credits</p>
+                  <h3 id="about-credits-title" data-i18n="about.credits.title">Open-source foundations</h3>
+                </div>
+                <div class="credit-list">
+                  <button class="credit-item credit-link" type="button" data-project-link="pywebview">
+                    <strong>pywebview</strong>
+                    <span data-i18n="about.credits.pywebview">Native webview window for the desktop interface</span>
+                    <svg class="icon" aria-hidden="true"><use href="#icon-external"></use></svg>
+                  </button>
+                  <button class="credit-item credit-link" type="button" data-project-link="ffmpeg">
+                    <strong>FFmpeg</strong>
+                    <span data-i18n="about.credits.ffmpeg">Optional media verification and audio previews</span>
+                    <svg class="icon" aria-hidden="true"><use href="#icon-external"></use></svg>
+                  </button>
+                  <button class="credit-item credit-link" type="button" data-project-link="mkvtoolnix">
+                    <strong>MKVToolNix</strong>
+                    <span data-i18n="about.credits.mkvtoolnix">Matroska media muxing tools</span>
+                    <svg class="icon" aria-hidden="true"><use href="#icon-external"></use></svg>
+                  </button>
+                </div>
+                <div class="button-row about-actions">
+                  <button class="primary" type="button" data-project-link="repository"><svg class="icon" aria-hidden="true"><use href="#icon-external"></use></svg><span data-i18n="about.repository">View source code</span></button>
+                  <button class="ghost" type="button" data-project-link="license"><svg class="icon" aria-hidden="true"><use href="#icon-external"></use></svg><span data-i18n="about.license">Read license</span></button>
+                </div>
+              </section>
+
+              <footer class="workspace-footer"><span data-i18n="about.footer">Thanks to the open-source projects that make PlexMuxy possible.</span></footer>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-region" class="toast-region" role="region" aria-label="Notifications" data-i18n-aria-label="toast.region" aria-live="polite" aria-relevant="additions"></div>
+
+  <div id="cursor-tooltip" class="cursor-tooltip" role="tooltip"></div>
+
+  <button id="plan-save-fab" class="plan-save-fab hidden" type="button" aria-live="polite">
+    <span class="fab-count" aria-hidden="true">0</span>
+    <span class="fab-spinner" aria-hidden="true"></span>
+    <svg class="icon fab-icon" aria-hidden="true"><use href="#icon-save"></use></svg>
+    <span class="fab-label" data-i18n="plan.save">Save</span>
+  </button>
+
+
+  <dialog id="confirm-dialog" class="confirm-dialog" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-body">
+    <form method="dialog">
+      <div class="dialog-mark" aria-hidden="true"><svg class="icon"><use href="#icon-alert"></use></svg></div>
+      <div class="dialog-copy">
+        <p class="eyebrow" data-i18n="confirm.eyebrow">Review required</p>
+        <h2 id="confirm-dialog-title" data-i18n="confirm.title">Start this mux job?</h2>
+        <p id="confirm-dialog-body"></p>
+      </div>
+      <div class="dialog-actions">
+        <button id="confirm-cancel-btn" class="secondary" type="submit" value="cancel" data-i18n="confirm.back">Go back</button>
+        <button id="confirm-confirm-btn" class="primary" type="submit" value="confirm" data-i18n="confirm.run">Run mux</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="close-dialog" class="confirm-dialog" aria-labelledby="close-dialog-title" aria-describedby="close-dialog-body">
+    <form method="dialog">
+      <div class="dialog-mark" aria-hidden="true"><svg class="icon"><use href="#icon-alert"></use></svg></div>
+      <div class="dialog-copy">
+        <p class="eyebrow" data-i18n="close.eyebrow">Close PlexMuxy</p>
+        <h2 id="close-dialog-title" data-i18n="close.title">Close this window?</h2>
+        <p id="close-dialog-body" data-i18n="close.description">Your saved environment configuration will remain. Any active job will stop when the application closes.</p>
+      </div>
+      <div class="dialog-actions">
+        <button class="secondary" type="submit" value="cancel" data-i18n="close.stay">Keep open</button>
+        <button class="destructive" type="submit" value="confirm" data-i18n="close.confirm">Close PlexMuxy</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="diagnostics-dialog" class="diagnostics-dialog" aria-labelledby="diagnostics-dialog-title" aria-describedby="diagnostics-dialog-body">
+    <form method="dialog">
+      <div class="dialog-copy">
+        <p class="eyebrow" data-i18n="jobs.diagnostics.eyebrow">Diagnostics</p>
+        <h2 id="diagnostics-dialog-title" data-i18n="jobs.diagnostics.title">Job diagnostics</h2>
+        <p id="diagnostics-dialog-body" data-i18n="jobs.diagnostics.description">Preview the information included in the exported archive, then export it if needed.</p>
+      </div>
+      <pre id="diagnostics-content" class="diagnostics-content" tabindex="0"></pre>
+      <div class="dialog-actions">
+        <button id="diagnostics-copy-btn" class="ghost" type="button" data-i18n="jobs.diagnostics.copy">Copy</button>
+        <button class="secondary" type="submit" value="close" data-i18n="jobs.diagnostics.close">Close</button>
+        <button id="diagnostics-export-btn" class="primary" type="button" data-i18n="jobs.diagnostics.export">Export archive</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="./i18n.js"></script>
+  <script src="./js/core.js"></script>
+  <script src="./js/dom-utils.js"></script>
+  <script src="./js/custom-select.js"></script>
+  <script src="./js/theme.js"></script>
+  <script src="./js/locale.js"></script>
+  <script src="./js/navigation.js"></script>
+  <script src="./js/window.js"></script>
+  <script src="./js/tooltip.js"></script>
+  <script src="./js/settings.js"></script>
+  <script src="./js/plan.js"></script>
+  <script src="./js/results.js"></script>
+  <script src="./js/jobs.js"></script>
+  <script src="./js/diagnostics.js"></script>
+  <script src="./js/bindings.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
