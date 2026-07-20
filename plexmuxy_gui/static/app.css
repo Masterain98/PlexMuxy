@@ -2624,41 +2624,38 @@ progress::-moz-progress-bar {
   min-width: 0;
 }
 
-[data-tooltip] {
-  position: relative;
-}
-
-[data-tooltip]::after {
-  position: absolute;
-  z-index: 500;
-  top: calc(100% + 7px);
-  left: 50%;
-  width: max-content;
-  max-width: min(280px, calc(100vw - 24px));
+/* Cursor-following tooltip. The element is positioned by JS (tooltip.js) so it
+   tracks the pointer and stays inside the viewport, instead of being pinned to
+   the centre of the hovered element (which could sit far from the cursor or run
+   off-screen near a window edge). */
+.cursor-tooltip {
+  position: fixed;
+  z-index: 3000;
+  top: 0;
+  left: 0;
+  max-width: min(280px, calc(100vw - 16px));
   border: 1px solid var(--color-border);
   border-radius: 5px;
   padding: 5px 8px;
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-popover);
   color: var(--color-text-body);
-  content: attr(data-tooltip);
   font-size: 11px;
   font-weight: 500;
   line-height: 16px;
-  opacity: 0;
   overflow-wrap: anywhere;
   pointer-events: none;
-  transform: translate(-50%, -3px);
-  transition: opacity var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard);
-  visibility: hidden;
   white-space: normal;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(2px);
+  transition: opacity var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard), visibility var(--duration-fast) var(--ease-standard);
 }
 
-[data-tooltip]:hover::after,
-[data-tooltip]:focus-visible::after {
+.cursor-tooltip.is-visible {
   opacity: 1;
-  transform: translate(-50%, 0);
   visibility: visible;
+  transform: translateY(0);
 }
 
 .custom-select.is-open {
@@ -2992,14 +2989,6 @@ input[aria-disabled="true"] {
   .toast-region {
     top: 70px;
     right: 12px;
-  }
-}
-
-@media (min-width: 900px) and (max-width: 1199px) {
-  .step[data-tooltip]::after {
-    top: 50%;
-    left: calc(100% + 8px);
-    transform: translate(0, -50%);
   }
 }
 
