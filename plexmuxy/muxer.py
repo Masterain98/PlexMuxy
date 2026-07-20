@@ -156,9 +156,8 @@ def _execute_runtime_plan(
         result.warnings.extend(preparation_warnings or [])
         return result
 
-    if runtime_plan.output_path.resolve() == runtime_plan.source_video.resolve():
-        return runtime_failure("OUTPUT_EQUALS_INPUT", "Output path is the same as the source video; refusing in-place mux.")
-    if runtime_plan.output_path.exists() and not config.task.overwrite:
+    in_place = runtime_plan.output_path.resolve() == runtime_plan.source_video.resolve()
+    if not in_place and runtime_plan.output_path.exists() and not config.task.overwrite:
         return runtime_failure("OUTPUT_EXISTS", f"Output file already exists: {runtime_plan.output_path}")
     mkvmerge_path = resolve_mkvmerge_path(config)
     if mkvmerge_path is None:

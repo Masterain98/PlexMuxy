@@ -45,6 +45,14 @@ async function chooseOutputDirectory() {
   } catch (error) { showError(error.message); }
 }
 
+async function chooseExtraDirectory() {
+  clearError();
+  try {
+    const result = await callApi("choose_directory");
+    if (!result.cancelled && result.path) { $("extra-dir").value = result.path; handleOverrideChange(); }
+  } catch (error) { showError(error.message); }
+}
+
 function resetExtraDirToRecommended() {
   $("extra-dir").value = "Extra";
   handleOverrideChange();
@@ -332,7 +340,7 @@ function applyConfigDefaults() {
   const autoMime = autoPickFontMimeMode(mkvmergeVersion);
   const configMime = state.config?.font?.mime_mode;
   setCustomSelectValue("font-mime-mode", configMime || autoMime);
-  setCustomSelectValue("font-embed-scheme", state.config?.font?.embed_scheme || "attachment");
+  setCustomSelectValue("font-embed-scheme", state.config?.font?.embed_scheme || "ass");
   updateFontMimeRecommendation(mkvmergeVersion);
   const tracks = state.config?.tracks || {};
   $("audio-filter-enabled").checked = Boolean(tracks.audio_filter_enabled);
@@ -408,6 +416,16 @@ function updateOptionAvailability() {
       showCollapsibleRow(templateRow);
     } else {
       hideCollapsibleRow(templateRow);
+    }
+  }
+
+  const cleanup = getCustomSelectValue("cleanup");
+  const extraDirRow = $("extra-dir-row");
+  if (extraDirRow) {
+    if (cleanup === "move") {
+      showCollapsibleRow(extraDirRow);
+    } else {
+      hideCollapsibleRow(extraDirRow);
     }
   }
 

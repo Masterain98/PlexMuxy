@@ -285,7 +285,7 @@ def parse_v2_config(data: dict[str, Any]) -> AppConfig:
         mode=choice(font_data.get("mode", "all"), {"all", "referenced", "subset"}, "font.mode"),
         mime_mode=choice(font_data.get("mime_mode", "legacy"), {"legacy", "modern"}, "font.mime_mode"),
         embed_scheme=choice(
-            font_data.get("embed_scheme", "attachment"),
+            font_data.get("embed_scheme", "ass"),
             {"attachment", "ass", "both"},
             "font.embed_scheme",
         ),

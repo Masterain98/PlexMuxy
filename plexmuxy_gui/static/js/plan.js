@@ -146,7 +146,7 @@ async function savePlanEdits() {
 
 function buildPayload() {
   return { input_dir: $("input-dir").value.trim(), yes: false, overrides: {
-    cleanup: getCustomSelectValue("cleanup"), extra_dir: $("extra-dir").value.trim(),
+    cleanup: getCustomSelectValue("cleanup"), extra_dir: getCustomSelectValue("cleanup") === "move" ? $("extra-dir").value.trim() : "",
     output_suffix: $("output-suffix").value, output_dir: $("output-dir").value.trim(),
     name_strategy: getCustomSelectValue("name-strategy"), name_template: $("name-template").value.trim(),
     overwrite: $("overwrite").checked,

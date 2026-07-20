@@ -92,10 +92,12 @@ def build_mux_plans(
             continue
 
         output_path = build_output_path(video, scan.input_dir, config)
-        if output_path.resolve() == video.resolve():
-            result.skipped_files.append(SkippedFile(video, "invalid_output_path_same_as_input", "planning"))
-            continue
-        if output_path.exists() and not config.task.overwrite:
+        # An output path that equals the source means an in-place mux (the
+        # "same-name" strategy with the default output location, or a template
+        # that resolves to the source name). The muxer writes to a temporary
+        # file and swaps it into place, so this is safe and is not a collision.
+        in_place = output_path.resolve() == video.resolve()
+        if not in_place and output_path.exists() and not config.task.overwrite:
             result.skipped_files.append(SkippedFile(video, "output_exists", "planning"))
             continue
 
@@ -119,6 +121,12 @@ def build_mux_plans(
         cleanup_candidates = unique_paths(
             [video, *subtitle_cleanup_candidates, *(track.path for track in audio_tracks)]
         )
+        if in_place:
+            # The muxed result replaces the source in place, so the source path
+            # now holds the output and must be excluded from cleanup: moving or
+            # deleting it would destroy the result.
+            resolved_output = output_path.resolve()
+            cleanup_candidates = [path for path in cleanup_candidates if path.resolve() != resolved_output]
         result.plans.append(MuxPlan(
             source_video=video,
             output_path=output_path,

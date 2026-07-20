@@ -80,7 +80,7 @@ def test_unrecognized_subtitle_language_is_reported_and_not_planned(tmp_path):
     assert any(skipped.reason == "no_mux_inputs" for skipped in plan_result.skipped_files)
 
 
-def test_same_name_mkv_without_output_dir_is_rejected(tmp_path):
+def test_same_name_mkv_without_output_dir_muxes_in_place(tmp_path):
     video = tmp_path / "Example.mkv"
     subtitle = tmp_path / "Example.chs.ass"
     video.write_text("", encoding="utf-8")
@@ -91,8 +91,13 @@ def test_same_name_mkv_without_output_dir_is_rejected(tmp_path):
     scan = scan_media_dir(tmp_path, config.media)
     plan_result = build_mux_plans(scan, config)
 
-    assert plan_result.plans == []
-    assert any(skipped.reason == "invalid_output_path_same_as_input" for skipped in plan_result.skipped_files)
+    assert len(plan_result.plans) == 1
+    plan = plan_result.plans[0]
+    assert plan.output_path == video
+    # The source is replaced in place, so it must not be a cleanup candidate;
+    # otherwise cleanup would move/delete the freshly muxed output.
+    assert not any(candidate.resolve() == video.resolve() for candidate in plan.cleanup_candidates)
+    assert not any(skipped.reason == "invalid_output_path_same_as_input" for skipped in plan_result.skipped_files)
 
 
 def test_same_name_strategy_uses_source_stem_in_output_dir(tmp_path):

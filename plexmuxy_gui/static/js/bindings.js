@@ -8,6 +8,7 @@ function bindEvents() {
     ["choose-dir-btn", "click", chooseDirectory], ["open-config-btn", "click", openConfigLocation],
     ["output-dir-choose-btn", "click", chooseOutputDirectory],
     ["output-dir-recommended-btn", "click", resetOutputDirToRecommended],
+    ["extra-dir-choose-btn", "click", chooseExtraDirectory],
     ["extra-dir-recommended-btn", "click", resetExtraDirToRecommended],
     ["diagnostics-btn", "click", exportDiagnostics], ["save-settings-btn", "click", saveSettings],
     ["save-environment-btn", "click", saveEnvironmentSettings], ["test-notification-btn", "click", testNotification],

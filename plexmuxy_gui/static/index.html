@@ -322,11 +322,14 @@
                     </div>
                   </div>
                 </div>
-                <div class="setting-row">
-                  <label class="setting-copy" for="extra-dir"><strong data-i18n="options.extraDir.label">Extra media directory</strong><span data-i18n="options.extraDir.help">Search a second folder for companion tracks and attachments.</span></label>
+                <div class="setting-row option-collapsible" id="extra-dir-row">
+                  <label class="setting-copy" for="extra-dir"><strong data-i18n="options.extraDir.label">Move target path</strong><span data-i18n="options.extraDir.help">Target move path when cleaning up task files.</span></label>
                   <div class="input-with-button">
                     <input id="extra-dir" type="text" placeholder="Optional absolute path" autocomplete="off" data-i18n-placeholder="options.extraDir.placeholder" />
-                    <button id="extra-dir-recommended-btn" class="secondary compact" type="button" data-i18n="options.recommended">Use recommended</button>
+                    <div class="button-row compact">
+                      <button id="extra-dir-choose-btn" class="secondary compact" type="button" data-i18n="options.outputDir.choose">Choose directory</button>
+                      <button id="extra-dir-recommended-btn" class="secondary compact" type="button" data-i18n="options.recommended">Use recommended</button>
+                    </div>
                   </div>
                 </div>
                 <div class="setting-row">
@@ -348,7 +351,7 @@
                     </button>
                     <div id="name-strategy-listbox" class="select-listbox" role="listbox" aria-labelledby="name-strategy" hidden>
                       <button type="button" role="option" aria-selected="true" tabindex="-1" data-value="suffix" data-i18n="options.nameStrategy.suffix">Append suffix</button>
-                      <button type="button" role="option" aria-selected="false" tabindex="-1" data-value="same-name" data-i18n="options.nameStrategy.same-name">Keep source name</button>
+                      <button type="button" role="option" aria-selected="false" tabindex="-1" data-value="same-name" data-i18n="options.nameStrategy.same-name">Override original video file</button>
                       <button type="button" role="option" aria-selected="false" tabindex="-1" data-value="template" data-i18n="options.nameStrategy.template">Use template</button>
                     </div>
                   </div>
@@ -385,13 +388,13 @@
                 <div class="setting-row">
                   <label class="setting-copy" for="font-embed-scheme"><strong data-i18n="options.fontEmbedScheme.label">Font delivery</strong><span data-i18n="options.fontEmbedScheme.help">How subsetted fonts reach the player. Attachment embeds them in the MKV. ASS instead writes a self-contained .ass with the fonts embedded. Both keeps the MKV attachment and also writes the self-contained .ass.</span></label>
                   <div class="control-wrap custom-select" data-custom-select>
-                    <button id="font-embed-scheme" class="select-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="font-embed-scheme-listbox" data-value="attachment">
+                    <button id="font-embed-scheme" class="select-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="font-embed-scheme-listbox" data-value="ass">
                       <span data-select-label data-i18n="options.fontEmbedScheme.attachment">MKV attachment</span>
                       <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"></use></svg>
                     </button>
                     <div id="font-embed-scheme-listbox" class="select-listbox" role="listbox" aria-labelledby="font-embed-scheme" hidden>
-                      <button type="button" role="option" aria-selected="true" tabindex="-1" data-value="attachment" data-i18n="options.fontEmbedScheme.attachment">MKV attachment</button>
-                      <button type="button" role="option" aria-selected="false" tabindex="-1" data-value="ass" data-i18n="options.fontEmbedScheme.ass">Self-contained .ass</button>
+                      <button type="button" role="option" aria-selected="false" tabindex="-1" data-value="attachment" data-i18n="options.fontEmbedScheme.attachment">MKV attachment</button>
+                      <button type="button" role="option" aria-selected="true" tabindex="-1" data-value="ass" data-i18n="options.fontEmbedScheme.ass">Self-contained .ass subtitle file with embedded fonts</button>
                       <button type="button" role="option" aria-selected="false" tabindex="-1" data-value="both" data-i18n="options.fontEmbedScheme.both">Both</button>
                     </div>
                   </div>
