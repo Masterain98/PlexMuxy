@@ -86,6 +86,12 @@ def _embed_ass_subtitles(
         if not track.path or not track.path.exists():
             produced.append(None)
             continue
+        if track.path.suffix.lower() not in _ASS_SUBTITLE_SUFFIXES:
+            # Only ASS/SSA formats support the embedded [Fonts] section; skip
+            # incompatible subtitle tracks (e.g. .srt, .sub, .smi) so they are
+            # left untouched for normal muxing.
+            produced.append(None)
+            continue
         suffix = f".embedded.{index}.ass" if multi else ".embedded.ass"
         out = parent / f"{stem}{suffix}"
         try:
@@ -146,6 +152,11 @@ def execute_prepared_mux_plan(
 _FONT_ATTACHMENT_SUFFIXES = frozenset({
     ".ttf", ".otf", ".ttc", ".otc", ".woff", ".woff2",
 })
+
+# Subtitle formats that share the ASS/SSA ``[Fonts]`` section syntax and can
+# receive embedded fonts. Other formats (e.g. .srt, .sub) are not compatible
+# with embed_fonts_into_ass and must be skipped during ASS embedding.
+_ASS_SUBTITLE_SUFFIXES = frozenset({".ass", ".ssa"})
 
 
 def _execute_runtime_plan(

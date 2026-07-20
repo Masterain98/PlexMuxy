@@ -190,6 +190,7 @@ class PlexMuxyApi:
         self._state_path = state_path
         self._job_store: JobStore | None = None
         self._job_queue: JobQueue | None = None
+        self._jobs_lock = threading.Lock()
         self._preview = AudioPreviewManager(preview_root)
         self._active_plan_ids: dict[Path, str] = {}
         self._last_diagnostics_path: Path | None = None
@@ -1107,11 +1108,15 @@ class PlexMuxyApi:
         return self.guarded(run)
 
     def _ensure_jobs(self) -> tuple[JobStore, JobQueue]:
-        if self._job_store is None:
-            self._job_store = JobStore(self._state_path or platform_state_path())
-        if self._job_queue is None:
-            self._job_queue = JobQueue(self._job_store, terminal_callback=self._notify_job_terminal)
-        return self._job_store, self._job_queue
+        # pywebview exposed methods run on separate threads, so the lazy
+        # first-access path must be guarded to avoid creating duplicate
+        # JobStore/JobQueue instances over the same state store.
+        with self._jobs_lock:
+            if self._job_store is None:
+                self._job_store = JobStore(self._state_path or platform_state_path())
+            if self._job_queue is None:
+                self._job_queue = JobQueue(self._job_store, terminal_callback=self._notify_job_terminal)
+            return self._job_store, self._job_queue
 
     def _request_context(self, payload: dict[str, Any]):
         if not isinstance(payload, dict):
@@ -1376,8 +1381,11 @@ def requires_delete_confirmation(config) -> bool:
 
 
 def open_path(path: Path) -> None:
-    if os.name == "nt":
-        os.startfile(path)
+    if sys.platform == "win32":
+        # os.startfile is a Windows-only API; the guard above ensures this
+        # branch only executes on Windows. The ignore is required because the
+        # Linux CI type stubs have no os.startfile attribute.
+        os.startfile(path)  # type: ignore[attr-defined]
         return
     if sys.platform == "darwin":
         subprocess.Popen(["open", str(path)])
