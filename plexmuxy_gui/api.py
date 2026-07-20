@@ -928,6 +928,12 @@ class PlexMuxyApi:
     def clear_jobs(self) -> dict[str, Any]:
         def run() -> dict[str, Any]:
             store, _queue = self._ensure_jobs()
+            active = [j for j in store.list_jobs() if j.state not in TERMINAL_STATES]
+            if active:
+                return self.fail(
+                    f"Cannot clear jobs while {len(active)} job(s) are in a non-terminal state; "
+                    f"cancel them first"
+                )
             removed = store.clear_jobs()
             return self.ok({"removed": removed})
         return self.guarded(run)

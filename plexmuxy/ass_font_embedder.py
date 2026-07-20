@@ -67,10 +67,12 @@ def _read_ass_text(path: Path) -> tuple[str, str, bytes]:
     are decoded and re-encoded correctly instead of falling back to lossy
     UTF-8 replacement.
     """
-    from .ass_analysis import _detect_encoding, _codec_for_encoding
+    from .ass_analysis import AssDecodeError, _codec_for_encoding, _detect_encoding
 
     raw = path.read_bytes()
-    encoding, bom, payload, _issue = _detect_encoding(raw)
+    encoding, bom, payload, issue = _detect_encoding(raw)
+    if issue is not None and issue.rewrite_unsafe:
+        raise AssDecodeError(issue.message)
     codec = _codec_for_encoding(encoding)
     text = payload.decode(codec, errors="strict")
     return text, codec, bom

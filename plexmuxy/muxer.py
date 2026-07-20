@@ -47,7 +47,7 @@ def execute_mux_plan(
         # that were actually embedded; leave others at their original path.
         subtitle_tracks = [
             replace(track, path=Path(emb)) if emb is not None else track
-            for track, emb in zip(plan.subtitle_tracks, embedded)
+            for track, emb in zip(plan.subtitle_tracks, embedded, strict=True)
         ]
         runtime = replace(plan, subtitle_tracks=subtitle_tracks, attachments=[])
     else:
@@ -116,7 +116,7 @@ def execute_prepared_mux_plan(
         # that were actually embedded; leave others at their original path.
         subtitle_tracks = [
             replace(track, path=Path(emb)) if emb is not None else track
-            for track, emb in zip(prepared.subtitle_tracks, embedded)
+            for track, emb in zip(prepared.subtitle_tracks, embedded, strict=True)
         ]
         runtime = replace(
             prepared.original_plan,
