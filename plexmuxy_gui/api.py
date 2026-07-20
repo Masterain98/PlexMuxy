@@ -58,6 +58,7 @@ from plexmuxy.tool_downloads import install_unrar_from_rarlab as acquire_unrar_f
 from plexmuxy.update_check import check_for_updates
 
 from .notifications import NativeNotifier
+from .preferences import load_preferences, save_preferences
 
 if sys.platform == "win32":
     # Native window handle helpers used to make the frameless (borderless)
@@ -142,7 +143,6 @@ def _find_plexmuxy_hwnd() -> int | None:
     except Exception:  # noqa: BLE001 - resolution failure is non-fatal; handles just stay inert.
         return None
     return found
-from .preferences import load_preferences, save_preferences
 
 DEPENDENCY_RESOLVERS: dict[str, Callable[[str], DependencyResolution]] = {
     "mkvmerge": resolve_mkvmerge,

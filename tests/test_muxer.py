@@ -6,17 +6,27 @@ from plexmuxy.muxer import execute_mux_plan, execute_prepared_mux_plan
 from tests.font_test_utils import build_test_ttf
 
 
-def test_execute_mux_plan_refuses_in_place_output_even_with_overwrite(tmp_path):
+def test_execute_mux_plan_allows_in_place_output(monkeypatch, tmp_path):
     video = tmp_path / "Example.mkv"
     video.write_text("source", encoding="utf-8")
     config = default_config()
     config.task.overwrite = True
     plan = MuxPlan(source_video=video, output_path=video)
 
+    captured = {}
+
+    def fake_runtime(original_plan, runtime_plan, cfg, cancellation_event, preparation_warnings=None, prepared=None):
+        # In-place muxing is supported: the muxer writes to a temp file and
+        # swaps it into place, so an output path equal to the source must not
+        # be refused (even with overwrite enabled).
+        captured["runtime_plan"] = runtime_plan
+        return MuxResult(plan=runtime_plan, success=True, output_path=runtime_plan.output_path)
+
+    monkeypatch.setattr("plexmuxy.muxer._execute_runtime_plan", fake_runtime)
     result = execute_mux_plan(plan, config)
 
-    assert result.success is False
-    assert "same as the source" in result.error
+    assert result.success is True
+    assert captured["runtime_plan"].output_path.resolve() == video.resolve()
 
 
 def test_embed_scheme_emits_self_contained_ass(monkeypatch, tmp_path):
