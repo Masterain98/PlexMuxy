@@ -109,7 +109,7 @@ Source-audio filtering, update checks, and Plex refreshes are disabled by defaul
 
 The desktop “Environment configuration” view is persistent and separate from job options. Each dependency shows its verified executable, discovery source, and version. “Auto-detect” performs a fresh probe and keeps the result as an unsaved draft; it never replaces an explicit saved path silently. Windows also discovers MKVToolNix through 32/64-bit HKLM/HKCU uninstall information. The UnRAR action downloads only RARLAB's signed x64 installer over allowlisted HTTPS, lets the official installer handle setup, and offers the detected executable for confirmation before saving. Windows builds opt into Per-Monitor V2 awareness before creating native windows so the WebView and file dialogs follow system scaling on high-DPI and mixed-monitor setups.
 
-Windows job notifications can be enabled on that page. The current native Windows Shell backend covers completed, failed, and cancelled jobs, and notification failures never change a mux result. Action buttons, application activation, and durable notification-center identity require a future installer/application-identity integration with the Windows App SDK.
+Windows job notifications can be enabled on that page. The native Windows Shell backend covers completed, failed, and cancelled jobs, and notification failures never change a mux result. When installed via the Inno Setup installer, notifications use Windows Toast with the fixed `com.plexmuxy.gui` AppUserModelID, providing action buttons (view/output), task activation, and durable notification-center identity. Portable builds fall back to the Shell notification area backend.
 
 ## Matching
 

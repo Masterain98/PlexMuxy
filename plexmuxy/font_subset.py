@@ -152,6 +152,8 @@ def subset_font_face(
         font.close()
 
     try:
+        if not face.family_names:
+            raise FontSubsetError("Font face has no family name records to validate the subset against")
         validate_subset_font(temporary, face, face.family_names[0], requested)
         os.replace(temporary, output)
     except Exception:

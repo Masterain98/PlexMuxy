@@ -60,18 +60,20 @@ def _uuencode(data: bytes) -> str:
 
 
 def _read_ass_text(path: Path) -> tuple[str, str, bytes]:
-    """Return (text, encoding_for_encode, bom_bytes)."""
+    """Return (text, encoding_for_encode, bom_bytes).
+
+    Reuses the canonical encoding detection from ``ass_analysis`` so that
+    GB18030, Shift-JIS, and BOM-less UTF-16 ASS files accepted by the planner
+    are decoded and re-encoded correctly instead of falling back to lossy
+    UTF-8 replacement.
+    """
+    from .ass_analysis import _detect_encoding, _codec_for_encoding
+
     raw = path.read_bytes()
-    if raw.startswith(b"\xff\xfe"):
-        return raw.decode("utf-16-le"), "utf-16-le", b"\xff\xfe"
-    if raw.startswith(b"\xfe\xff"):
-        return raw.decode("utf-16-be"), "utf-16-be", b"\xfe\xff"
-    if raw.startswith(b"\xef\xbb\xbf"):
-        return raw.decode("utf-8-sig"), "utf-8-sig", b"\xef\xbb\xbf"
-    try:
-        return raw.decode("utf-8"), "utf-8", b""
-    except UnicodeDecodeError:
-        return raw.decode("utf-8", errors="replace"), "utf-8", b""
+    encoding, bom, payload, _issue = _detect_encoding(raw)
+    codec = _codec_for_encoding(encoding)
+    text = payload.decode(codec, errors="strict")
+    return text, codec, bom
 
 
 def _encode_ass_text(text: str, encoding: str, bom: bytes) -> bytes:

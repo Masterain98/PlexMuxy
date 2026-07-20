@@ -145,7 +145,7 @@ def assign_candidates(
             result = match_candidate(video, candidate)
             if result is None:
                 continue
-            if result.reason.startswith("episode_identity") and not matching.allow_episode_only_match:
+            if result.reason.startswith(("episode_identity", "episode_token")) and not matching.allow_episode_only_match:
                 continue
             if result.confidence >= matching.minimum_confidence:
                 scored.append((video, result))

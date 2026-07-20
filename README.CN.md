@@ -57,7 +57,7 @@ plexmuxy mux D:\Media --cleanup none
 # 删除策略必须确认
 plexmuxy mux D:\Media --cleanup delete --yes
 
-# 导出不含媒体文件和完整用户路径的诊断包
+# 导出不含媒体文件、仅保留媒体根路径用于排障的诊断包
 plexmuxy diagnostics --output diagnostics.zip
 ```
 
@@ -73,7 +73,7 @@ plexmuxy diagnostics --output diagnostics.zip
 
 桌面端的“环境配置”是独立于任务工作流的持久化页面。每个依赖项都会显示已验证的可执行文件、发现来源和版本。“自动检测”会立即重新探测并将结果保留为未保存草稿，绝不会静默替换已保存的显式路径。Windows 还会扫描 HKLM/HKCU 的 32/64 位卸载信息来发现 MKVToolNix。UnRAR 操作只允许通过白名单 HTTPS 下载 RARLAB 的已签名 x64 安装包，由官方安装程序完成安装，并在用户确认保存前把检测结果作为候选项显示。Windows 构建在创建原生窗口前启用 Per-Monitor V2 DPI 感知，因此文件选择器和 WebView 在高分辨率、多显示器环境中使用系统缩放。
 
-Windows 可在该页面启用任务结束通知。当前实现使用 Windows Shell 的原生通知区域后端，覆盖任务完成、失败和取消；通知不可用不会影响封装结果。需要应用激活、操作按钮和通知中心身份的 Windows App SDK 通知属于后续安装器/应用身份工作。
+Windows 可在该页面启用任务结束通知。原生 Windows Shell 通知区域后端覆盖任务完成、失败和取消；通知不可用不会影响封装结果。通过 Inno Setup 安装器安装后，通知将使用 Windows Toast 和固定的 `com.plexmuxy.gui` AppUserModelID，提供操作按钮（查看/输出）、任务激活和通知中心持久身份。便携版回退到通知区域后端。
 
 ## 文件匹配
 

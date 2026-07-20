@@ -48,7 +48,7 @@ from plexmuxy.diagnostics import (
 )
 from plexmuxy.integrations.plex import refresh_paths
 from plexmuxy.job_store import JobStore, platform_state_path
-from plexmuxy.jobs import JobRecord
+from plexmuxy.jobs import TERMINAL_STATES, JobRecord
 from plexmuxy.overrides import apply_job_overrides, overrides_from_payload
 from plexmuxy.plan_edit import plan_edits_from_payload
 from plexmuxy.queue import JobQueue
@@ -655,6 +655,8 @@ class PlexMuxyApi:
                 data["font"]["mode"] = payload["font_mode"]
             if "mime_mode" in payload:
                 data["font"]["mime_mode"] = payload["mime_mode"]
+            if "embed_scheme" in payload:
+                data["font"]["embed_scheme"] = payload["embed_scheme"]
             tracks = data["tracks"]
             for key in (
                 "audio_filter_enabled",
@@ -680,8 +682,7 @@ class PlexMuxyApi:
             allowed = {
                 "mkvmerge_path", "ffmpeg_path", "unrar_path", "notifications_enabled",
                 "updates_enabled", "plex_enabled", "plex_server_url", "plex_section_id",
-                "plex_token_env", "plex_path_mappings", "font_cache_enabled",
-                "font_cache_max_size_mb", "font_cache_max_age_days",
+                "plex_token_env", "plex_path_mappings",
             }
             unknown = sorted(set(payload) - allowed)
             if unknown:
@@ -917,6 +918,9 @@ class PlexMuxyApi:
     def delete_job(self, job_id: str) -> dict[str, Any]:
         def run() -> dict[str, Any]:
             store, _queue = self._ensure_jobs()
+            job = store.get_job(str(job_id))
+            if job is not None and job.state not in TERMINAL_STATES:
+                return self.fail(f"Cannot delete a job in state '{job.state}'; cancel it first")
             store.delete_job(str(job_id))
             return self.ok({"job_id": str(job_id)})
         return self.guarded(run)
@@ -1258,6 +1262,7 @@ def config_summary(config, notifier: NativeNotifier | None = None) -> dict[str, 
             "unrar_path": config.font.unrar_path,
             "mode": config.font.mode,
             "mime_mode": config.font.mime_mode,
+            "embed_scheme": config.font.embed_scheme,
             "subset_failure_action": config.font.subset_failure_action,
         },
         "updates": {
@@ -1366,8 +1371,7 @@ def requires_delete_confirmation(config) -> bool:
 
 def open_path(path: Path) -> None:
     if os.name == "nt":
-        start_file = getattr(os, "start" + "file")
-        start_file(path)
+        os.startfile(path)
         return
     if sys.platform == "darwin":
         subprocess.Popen(["open", str(path)])

@@ -271,5 +271,5 @@ def validate_plan_snapshot(snapshot: MuxPlanSnapshot, config: AppConfig) -> None
                         raise StalePlanError(f"Direct font digest does not match the snapshot: {stable_source}")
         if output.exists() and output not in existed:
             raise StalePlanError(f"Output appeared after planning: {output}")
-        if output == plan.source_video.resolve():
+        if output == plan.source_video.resolve() and output not in existed:
             raise StalePlanError(f"Output path equals source path: {output}")

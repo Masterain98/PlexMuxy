@@ -80,7 +80,9 @@ def preview_font_archive(
     elif suffix == ".7z":
         names = preview_7z_names(archive, font_config.archive_limits)
     elif suffix == ".rar":
-        raise ValueError("RAR archive preview is not supported; run without dry-run to extract it")
+        if not font_config.archive_limits.allow_uninspected_archives:
+            raise ValueError("RAR archive preview is not supported; run without dry-run to extract it")
+        names = _preview_rar_names(archive, font_config)
     else:
         raise ValueError(f"Unsupported font archive extension: {archive.suffix}")
     paths = [safe_destination(destination, name) for name in names]
@@ -102,6 +104,41 @@ def preview_7z_names(archive: Path, limits: ArchiveLimits | None = None) -> list
         names = [name for name, _ in members]
         validate_members(members, limits or ArchiveLimits())
         return names
+
+
+def _preview_rar_names(archive: Path, font_config: FontConfig) -> list[str]:
+    """List font file names inside a RAR archive using the configured unrar.
+
+    RAR archives cannot be inspected by the pure-Python libraries used for
+    ZIP/7z, so when ``allow_uninspected_archives`` is enabled we fall back to
+    running ``unrar lt`` to discover the member names without extracting.
+    """
+    import subprocess
+
+    resolution = resolve_unrar(font_config.unrar_path)
+    if resolution.resolved_path is None:
+        raise ValueError("Unrar path is not configured; cannot preview RAR archive")
+    try:
+        completed = subprocess.run(
+            [resolution.resolved_path, "lt", str(archive)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=10.0, check=False,
+        )
+    except OSError as exc:
+        raise ValueError(f"Failed to list RAR archive {archive.name}: {exc}") from exc
+    if completed.returncode != 0:
+        raise ValueError(f"unrar failed to list {archive.name}: {completed.stderr.strip()}")
+    names: list[str] = []
+    for line in completed.stdout.splitlines():
+        stripped = line.strip()
+        # unrar "lt" output lists each file with "Name: <path>"
+        if stripped.lower().startswith("name:"):
+            name = stripped[5:].strip()
+            if name:
+                names.append(name)
+    if not names:
+        raise ValueError(f"RAR archive {archive.name} appears to contain no files")
+    return names
 
 
 def list_font_files(fonts_dir: Path, allowed_extensions: list[str]) -> list[Path]:

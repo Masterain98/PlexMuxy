@@ -159,11 +159,13 @@ def build_job_plan(
 
         def inspect(video: Path) -> list:
             key = Path(video).expanduser().resolve()
-            cached = inspections.get(key)
-            if cached is not None:
-                return cached
+            with _plan_cache_lock:
+                cached = inspections.get(key)
+                if cached is not None:
+                    return cached
             result = inspect_source_tracks(key, mkvmerge)
-            inspections[key] = result
+            with _plan_cache_lock:
+                inspections[key] = result
             return result
 
         normalized_overrides = {

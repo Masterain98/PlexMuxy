@@ -226,7 +226,7 @@ def run_job_command(args: argparse.Namespace) -> int:
         if args.output_format == "human":
             print(msg(args, "message.planSaved", path=target))
     emit_output(args, {"command": args.command, "status": "ok" if report.error is None else "error", "report": job_report_to_dict(report)}, format_job_report(report, dry_run=args.dry_run, translate=args._messages.get))
-    return 0 if args.dry_run or (report.failure_count == 0 and report.error is None) else 1
+    return 0 if (args.dry_run and report.error is None) or (report.failure_count == 0 and report.error is None) else 1
 
 
 def execute_plan_command(args: argparse.Namespace) -> int:

@@ -24,6 +24,8 @@ function countEditChanges(edit) {
   n += symmetricDiffCount(edit.included_external_audio, b.included_external_audio);
   n += overrideChanges(edit.source_track_overrides, b.source_track_overrides, "track_id");
   n += overrideChanges(edit.subtitle_metadata_overrides, b.subtitle_metadata_overrides, "path");
+  // Detect reorder-only changes: same set of tracks but a different order.
+  if (JSON.stringify(edit.external_track_order) !== JSON.stringify(b.external_track_order)) n += 1;
   return n;
 }
 
@@ -407,7 +409,7 @@ function touchEdit(edit, cardEl) { markPlanEdited(cardEl); updateSaveButton(); }
 
 function renderSubtitleSection(plan) {
   const edit = currentPlanEdit(plan);
-  const sourceSubs = (plan.source_tracks || []).filter((track) => track.type === "subtitle");
+  const sourceSubs = (plan.source_tracks || []).filter((track) => track.type === "subtitles");
   const externalSubs = plan.subtitle_tracks || [];
   const box = element("div", "track-box editable-track-box");
   box.append(boxHeader(t("plan.subtitles"), t("plan.trackCount", { count: sourceSubs.length + externalSubs.length })));

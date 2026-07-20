@@ -25,7 +25,7 @@ class FakeProcess:
     def poll(self):
         return self.returncode
 
-    def communicate(self):
+    def communicate(self, timeout=None):
         return self.stdout, self.stderr
 
 

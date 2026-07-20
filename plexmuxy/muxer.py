@@ -36,17 +36,18 @@ def execute_mux_plan(
     cancellation_event: threading.Event | None = None,
 ) -> MuxResult:
     scheme = config.font.embed_scheme
-    embedded: list[str] = []
+    embedded: list[str | None] = []
     if scheme in ("ass", "both"):
         embedded = _embed_ass_subtitles(
             plan.output_path, plan.subtitle_tracks, plan.attachments
         )
-    if scheme == "ass" and embedded:
+    if scheme == "ass" and any(embedded):
         # Fonts now live inside the subtitle file, so mux that self-contained
-        # track and drop the separate MKV font attachments.
+        # track and drop the separate MKV font attachments. Only replace tracks
+        # that were actually embedded; leave others at their original path.
         subtitle_tracks = [
-            replace(track, path=Path(embedded[i]))
-            for i, track in enumerate(plan.subtitle_tracks)
+            replace(track, path=Path(emb)) if emb is not None else track
+            for track, emb in zip(plan.subtitle_tracks, embedded)
         ]
         runtime = replace(plan, subtitle_tracks=subtitle_tracks, attachments=[])
     else:
@@ -54,8 +55,9 @@ def execute_mux_plan(
         # additionally writes the self-contained .ass next to the output.
         runtime = plan
     result = _execute_runtime_plan(plan, runtime, config, cancellation_event)
-    if embedded:
-        result = replace(result, embedded_subtitles=embedded)
+    produced = [p for p in embedded if p is not None]
+    if produced:
+        result = replace(result, embedded_subtitles=produced)
     return result
 
 
@@ -63,22 +65,26 @@ def _embed_ass_subtitles(
     output_path: Path,
     subtitle_tracks: list[SubtitleTrackPlan],
     attachments: list[AttachmentPlan],
-) -> list[str]:
+) -> list[str | None]:
     """EXPERIMENTAL: emit self-contained .ass files with their fonts embedded.
 
     Complements (or, in "ass" mode, replaces) MKV font attachments so the
     subtitle can be played standalone. Fonts are embedded in a ``[Fonts]``
     section using the Aegisub/libass uuencode scheme.
+
+    Returns a list parallel to *subtitle_tracks*: each entry is the embedded
+    output path, or ``None`` when the track was skipped or embedding failed.
     """
     font_paths = [a.path for a in attachments if a.path.suffix.lower() in _FONT_ATTACHMENT_SUFFIXES]
     if not font_paths or not subtitle_tracks:
-        return []
-    produced: list[str] = []
+        return [None] * len(subtitle_tracks)
     parent = output_path.parent
     stem = output_path.stem
     multi = len(subtitle_tracks) > 1
+    produced: list[str | None] = []
     for index, track in enumerate(subtitle_tracks):
         if not track.path or not track.path.exists():
+            produced.append(None)
             continue
         suffix = f".embedded.{index}.ass" if multi else ".embedded.ass"
         out = parent / f"{stem}{suffix}"
@@ -87,8 +93,9 @@ def _embed_ass_subtitles(
             produced.append(str(out))
         except Exception as exc:  # pragma: no cover - best effort
             logger.warning("Failed to emit embedded ASS %s: %s", out, exc)
-    if produced:
-        logger.info("Emitted %d self-contained subtitle file(s) with embedded fonts", len(produced))
+            produced.append(None)
+    if any(produced):
+        logger.info("Emitted %d self-contained subtitle file(s) with embedded fonts", sum(p is not None for p in produced))
     return produced
 
 
@@ -98,17 +105,18 @@ def execute_prepared_mux_plan(
     cancellation_event: threading.Event | None = None,
 ) -> MuxResult:
     scheme = config.font.embed_scheme
-    embedded: list[str] = []
+    embedded: list[str | None] = []
     if scheme in ("ass", "both"):
         embedded = _embed_ass_subtitles(
             prepared.original_plan.output_path, prepared.subtitle_tracks, prepared.attachments
         )
-    if scheme == "ass" and embedded:
+    if scheme == "ass" and any(embedded):
         # Fonts now live inside the subtitle file, so mux that self-contained
-        # track and drop the separate MKV font attachments.
+        # track and drop the separate MKV font attachments. Only replace tracks
+        # that were actually embedded; leave others at their original path.
         subtitle_tracks = [
-            replace(track, path=Path(embedded[i]))
-            for i, track in enumerate(prepared.subtitle_tracks)
+            replace(track, path=Path(emb)) if emb is not None else track
+            for track, emb in zip(prepared.subtitle_tracks, embedded)
         ]
         runtime = replace(
             prepared.original_plan,
@@ -129,8 +137,9 @@ def execute_prepared_mux_plan(
         prepared.subset_warnings,
         prepared,
     )
-    if embedded:
-        result = replace(result, embedded_subtitles=embedded)
+    produced = [p for p in embedded if p is not None]
+    if produced:
+        result = replace(result, embedded_subtitles=produced)
     return result
 
 
@@ -177,17 +186,23 @@ def _execute_runtime_plan(
             command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
             encoding="utf-8", errors="replace", creationflags=windows_no_window_flag(),
         )
-        while process.poll() is None:
-            if cancellation_event is not None and cancellation_event.wait(0.2):
-                terminate_process(process)
-                handle_failed_output(partial, runtime_plan.output_path, config.task.failed_output_action)
-                return runtime_failure("CANCELLED", "Mux was cancelled")
-            if cancellation_event is None:
-                try:
-                    process.wait(timeout=0.2)
-                except subprocess.TimeoutExpired:
-                    pass
-        stdout, stderr = process.communicate()
+        # Use communicate(timeout=...) instead of poll()+wait() so the PIPE
+        # buffers are drained while waiting. Without draining, a verbose
+        # mkvmerge can fill the OS pipe buffer and block forever.
+        stdout: str | None = None
+        stderr: str | None = None
+        while True:
+            try:
+                stdout, stderr = process.communicate(timeout=0.2)
+                break
+            except subprocess.TimeoutExpired:
+                if cancellation_event is not None and cancellation_event.is_set():
+                    terminate_process(process)
+                    stdout, stderr = process.communicate()
+                    handle_failed_output(partial, runtime_plan.output_path, config.task.failed_output_action)
+                    return runtime_failure("CANCELLED", "Mux was cancelled")
+        stdout = stdout or ""
+        stderr = stderr or ""
     except OSError as exc:
         handle_failed_output(partial, runtime_plan.output_path, config.task.failed_output_action)
         return runtime_failure("MUX_EXECUTION_FAILED", str(exc))
@@ -274,7 +289,7 @@ def build_mkvmerge_command(
     for attachment in plan.attachments:
         command.extend([
             "--attachment-name", attachment.name,
-            "--attachment-mime-type", attachment_mime_type(attachment),
+            "--attachment-mime-type", attachment_mime_type(attachment, mime_mode=mime_mode),
             "--attach-file", str(attachment.path),
         ])
     return command
@@ -388,7 +403,7 @@ def subtitle_matches(expected: Any, actual: dict[str, Any]) -> bool:
 def source_audio_fingerprint(track: SourceTrackInfo) -> tuple[Any, ...]:
     return (
         track.codec or "",
-        (track.language or "").casefold(),
+        _normalize_language(track.language),
         track.title or "",
         track.default_track,
         track.forced_track,
@@ -400,12 +415,42 @@ def output_audio_fingerprint(track: dict[str, Any]) -> tuple[Any, ...]:
     props = track.get("properties", {})
     return (
         str(track.get("codec") or ""),
-        str(props.get("language_ietf") or props.get("language") or "").casefold(),
+        _normalize_language(props.get("language_ietf") or props.get("language")),
         str(props.get("track_name") or ""),
         bool(props.get("default_track", False)),
         bool(props.get("forced_track", False)),
         props.get("audio_channels"),
     )
+
+
+# Common ISO 639-1/639-2 legacy → IETF BCP 47 canonical aliases that mkvmerge
+# may rewrite when it adds the LanguageIETF element during muxing.
+_LANGUAGE_ALIASES: dict[str, str] = {
+    "jpn": "ja",
+    "eng": "en",
+    "chi": "zh",
+    "fre": "fr",
+    "ger": "de",
+    "ita": "it",
+    "spa": "es",
+    "por": "pt",
+    "rus": "ru",
+    "kor": "ko",
+    "tha": "th",
+    "vie": "vi",
+    "ind": "id",
+    "zho": "zh",
+    "zul": "zu",
+}
+
+
+def _normalize_language(value: str | None) -> str:
+    """Normalize a language tag so legacy (ISO 639-2/B) and IETF (BCP 47)
+    values compare consistently during mux verification."""
+    if not value:
+        return ""
+    folded = str(value).casefold()
+    return _LANGUAGE_ALIASES.get(folded, folded)
 
 
 def inspect_source_tracks(source: Path, mkvmerge_path: str) -> list[SourceTrackInfo]:
@@ -436,6 +481,7 @@ def resolve_mkvmerge_path(config: AppConfig) -> str | None:
 
 
 _MKVMERGE_VERSION_CACHE: dict[str, tuple[int, ...] | None] = {}
+_MKVMERGE_VERSION_LOCK = threading.Lock()
 
 
 def _parse_mkvmerge_version(text: str) -> tuple[int, ...] | None:
@@ -458,22 +504,23 @@ def mkvmerge_supports_legacy_font_mime_types(mkvmerge_path: str) -> bool:
     the legacy font MIME types by default, so the flag is unnecessary (and would
     be rejected as unknown) for them.
     """
-    if mkvmerge_path in _MKVMERGE_VERSION_CACHE:
-        version = _MKVMERGE_VERSION_CACHE[mkvmerge_path]
-    else:
-        try:
-            completed = subprocess.run(
-                [mkvmerge_path, "--version"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=5.0, shell=False, creationflags=windows_no_window_flag(),
-            )
-            version = _parse_mkvmerge_version(completed.stdout + completed.stderr)
-        except (OSError, ValueError, subprocess.TimeoutExpired):
-            # Any failure to probe (missing tool, unexpected output, sandbox
-            # restrictions) means we cannot confirm support, so stay safe and
-            # omit the flag. Old mkvmerge already used legacy MIME types.
-            version = None
-        _MKVMERGE_VERSION_CACHE[mkvmerge_path] = version
+    with _MKVMERGE_VERSION_LOCK:
+        if mkvmerge_path in _MKVMERGE_VERSION_CACHE:
+            version = _MKVMERGE_VERSION_CACHE[mkvmerge_path]
+        else:
+            try:
+                completed = subprocess.run(
+                    [mkvmerge_path, "--version"],
+                    capture_output=True, text=True, encoding="utf-8", errors="replace",
+                    timeout=5.0, shell=False, creationflags=windows_no_window_flag(),
+                )
+                version = _parse_mkvmerge_version(completed.stdout + completed.stderr)
+            except (OSError, ValueError, subprocess.TimeoutExpired):
+                # Any failure to probe (missing tool, unexpected output, sandbox
+                # restrictions) means we cannot confirm support, so stay safe and
+                # omit the flag. Old mkvmerge already used legacy MIME types.
+                version = None
+            _MKVMERGE_VERSION_CACHE[mkvmerge_path] = version
     return version is not None and version >= (66,)
 
 

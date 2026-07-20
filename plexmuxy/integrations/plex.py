@@ -28,6 +28,10 @@ def validate_server_url(value: str) -> str:
     parsed = urllib.parse.urlsplit(raw)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise PlexIntegrationError("Plex server URL must be an absolute http or https URL")
+    if parsed.scheme == "http":
+        raise PlexIntegrationError(
+            "Plex server URL must use HTTPS to protect the auth token sent during library refresh"
+        )
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise PlexIntegrationError("Plex server URL cannot contain credentials, a query, or a fragment")
     return raw

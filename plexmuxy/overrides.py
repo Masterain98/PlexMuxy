@@ -21,6 +21,12 @@ class JobOverrides:
     mime_mode: FontMimeMode | None = None
     embed_scheme: str | None = None
     overwrite: bool = False
+    audio_filter_enabled: bool | None = None
+    exclude_audio_title_patterns: list[str] | None = None
+    keep_audio_languages: list[str] | None = None
+    keep_default_audio: bool | None = None
+    keep_all_when_unknown: bool | None = None
+    allow_no_audio: bool | None = None
 
 
 def apply_job_overrides(config: AppConfig, overrides: JobOverrides) -> AppConfig:
@@ -46,6 +52,18 @@ def apply_job_overrides(config: AppConfig, overrides: JobOverrides) -> AppConfig
         updated.font.embed_scheme = cast(EmbedScheme, overrides.embed_scheme)
     if overrides.overwrite:
         updated.task.overwrite = True
+    if overrides.audio_filter_enabled is not None:
+        updated.tracks.audio_filter_enabled = overrides.audio_filter_enabled
+    if overrides.exclude_audio_title_patterns is not None:
+        updated.tracks.exclude_audio_title_patterns = overrides.exclude_audio_title_patterns
+    if overrides.keep_audio_languages is not None:
+        updated.tracks.keep_audio_languages = overrides.keep_audio_languages
+    if overrides.keep_default_audio is not None:
+        updated.tracks.keep_default_audio = overrides.keep_default_audio
+    if overrides.keep_all_when_unknown is not None:
+        updated.tracks.keep_all_when_unknown = overrides.keep_all_when_unknown
+    if overrides.allow_no_audio is not None:
+        updated.tracks.allow_no_audio = overrides.allow_no_audio
     # Reuse the same validation path as persisted configuration so malformed
     # CLI/GUI overrides never reach the planner.
     from .config import config_to_dict, parse_config
@@ -82,6 +100,12 @@ def overrides_from_payload(payload: dict[str, Any]) -> JobOverrides:
         mime_mode=cast(FontMimeMode | None, optional_str(payload.get("mime_mode"))),
         embed_scheme=optional_str(payload.get("embed_scheme")),
         overwrite=bool(payload.get("overwrite", False)),
+        audio_filter_enabled=payload.get("audio_filter_enabled") if "audio_filter_enabled" in payload else None,
+        exclude_audio_title_patterns=payload.get("exclude_audio_title_patterns") if "exclude_audio_title_patterns" in payload else None,
+        keep_audio_languages=payload.get("keep_audio_languages") if "keep_audio_languages" in payload else None,
+        keep_default_audio=payload.get("keep_default_audio") if "keep_default_audio" in payload else None,
+        keep_all_when_unknown=payload.get("keep_all_when_unknown") if "keep_all_when_unknown" in payload else None,
+        allow_no_audio=payload.get("allow_no_audio") if "allow_no_audio" in payload else None,
     )
 
 

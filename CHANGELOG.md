@@ -15,7 +15,7 @@ All notable changes follow Keep a Changelog categories.
 - Conservative source-audio filtering with manual track overrides and exact output verification.
 - Safe plan editing, external track reassignment/order, subtitle metadata editing, and ffmpeg audio previews.
 - Persistent SQLite task queue/history, crash interruption state, retries, replanning, and per-task diagnostics.
-- Task diagnostics now expose the unredacted media/project root path so troubleshooting agents can locate the original media resources.
+- Task diagnostics now expose the unredacted media/project root path (limited to internal task diagnostics only) so troubleshooting agents can locate the original media resources.
 - Validated persistent font-subset cache and ffmpeg/libass render integration tests.
 - Opt-in update checks and post-verification Plex library refresh with environment-only token handling.
 - English/Simplified Chinese CLI messages with stable JSON output and error contracts.
