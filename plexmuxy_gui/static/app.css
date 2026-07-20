@@ -263,6 +263,7 @@ p {
 }
 
 .window-frame {
+  position: relative;
   display: grid;
   grid-template-rows: 36px minmax(0, 1fr);
   width: 100%;
@@ -273,6 +274,42 @@ p {
   border: 1px solid var(--color-border);
   background: var(--color-canvas);
 }
+
+/* Edge/corner resize handles for the frameless window. The container ignores
+   pointer events so only the thin strips capture them; they are revealed only
+   when the backend reports a resizable frame (Windows). */
+.resize-handles {
+  position: absolute;
+  inset: 0;
+  z-index: 55;
+  display: none;
+  pointer-events: none;
+}
+
+body.frame-resizable .resize-handles {
+  display: block;
+}
+
+.resize-handle {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.resize-handle:hover {
+  background: color-mix(in srgb, var(--color-brand) 32%, transparent);
+}
+
+.resize-nw { top: 0; left: 0; width: 8px; height: 8px; cursor: nwse-resize; }
+.resize-n  { top: 0; left: 8px; right: 8px; height: 4px; cursor: ns-resize; }
+.resize-ne { top: 0; right: 0; width: 8px; height: 8px; cursor: nesw-resize; }
+.resize-w  { top: 8px; bottom: 8px; left: 0; width: 4px; cursor: ew-resize; }
+.resize-e  { top: 8px; bottom: 8px; right: 0; width: 4px; cursor: ew-resize; }
+.resize-sw { bottom: 0; left: 0; width: 8px; height: 8px; cursor: nesw-resize; }
+.resize-s  { bottom: 0; left: 8px; right: 8px; height: 4px; cursor: ns-resize; }
+.resize-se { bottom: 0; right: 0; width: 8px; height: 8px; cursor: nwse-resize; }
 
 .window-titlebar {
   display: grid;
@@ -1539,6 +1576,53 @@ button.plan-save-fab:hover:not(:disabled) { background: var(--color-brand); filt
 .plan-card .track-box.attachments-box .item-list > li:first-child { border-top: 1px solid var(--color-divider); padding-top: 10px; }
 .compact-settings { margin-bottom: 18px; }
 .setting-row textarea { width: min(520px, 100%); resize: vertical; }
+
+/* Collapsible setting rows with animated show/hide */
+.option-collapsible {
+  overflow: hidden;
+  max-height: 200px;
+  opacity: 1;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-top: 13px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--color-divider);
+  min-height: 74px;
+  transition: max-height var(--duration-slow) var(--ease-emphasized),
+              opacity var(--duration-normal) var(--ease-emphasized),
+              padding-top var(--duration-normal) var(--ease-emphasized),
+              padding-bottom var(--duration-normal) var(--ease-emphasized),
+              border-width var(--duration-normal) var(--ease-emphasized),
+              min-height var(--duration-normal) var(--ease-emphasized);
+}
+
+.option-collapsible.is-hidden {
+  max-height: 0;
+  opacity: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom-width: 0;
+  min-height: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Input with inline button(s) */
+.input-with-button {
+  display: grid;
+  gap: 8px;
+}
+
+.input-with-button input {
+  width: 100%;
+}
+
+.input-with-button .button-row {
+  display: flex;
+  gap: 8px;
+}
 .audio-preview { grid-column: 1 / -1; width: 100%; height: 34px; }
 .compact { min-height: 30px; padding: 5px 9px; font-size: 12px; }
 .job-history-card { display: grid; gap: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 16px; background: var(--color-canvas-soft); }

@@ -58,6 +58,90 @@ from plexmuxy.tool_downloads import install_unrar_from_rarlab as acquire_unrar_f
 from plexmuxy.update_check import check_for_updates
 
 from .notifications import NativeNotifier
+
+if sys.platform == "win32":
+    # Native window handle helpers used to make the frameless (borderless)
+    # window resizable from the custom edge handles in the UI.
+    import ctypes.wintypes  # noqa: F401
+
+    _windll = ctypes.windll
+    _wintypes = ctypes.wintypes
+    _WINFUNCTYPE = ctypes.WINFUNCTYPE
+    _HWND_CACHE: int | None = None
+else:  # pragma: no cover - non-Windows paths keep the helpers as safe no-ops.
+    _windll = None
+    _wintypes = None
+    _WINFUNCTYPE = None
+    _HWND_CACHE = None
+
+_WINDOW_TITLE_HINT = "PlexMuxy"
+
+# pywebview's frameless window has no public handle accessor, so the UI drives
+# resizing through a CSS direction that maps to a Win32 non-client hit-test zone.
+_HT_CODES = {
+    "nw": 13, "n": 12, "ne": 14,
+    "w": 10, "e": 11,
+    "sw": 16, "s": 15, "se": 17,
+}
+
+
+def _get_cached_hwnd() -> int | None:
+    """Return the native HWND for the PlexMuxy top-level window (cached)."""
+    global _HWND_CACHE
+    if sys.platform != "win32" or _windll is None:
+        return None
+    user32 = _windll.user32
+    if _HWND_CACHE and user32.IsWindow(_HWND_CACHE):
+        return _HWND_CACHE
+    _HWND_CACHE = _find_plexmuxy_hwnd()
+    return _HWND_CACHE
+
+
+def _find_plexmuxy_hwnd() -> int | None:
+    """Locate the top-level window by matching the process id and title."""
+    if sys.platform != "win32" or _windll is None:
+        return None
+    user32 = _windll.user32
+    get_window_thread_process_id = user32.GetWindowThreadProcessId
+    get_window_thread_process_id.argtypes = [_wintypes.HWND, ctypes.POINTER(_wintypes.DWORD)]
+    get_window_thread_process_id.restype = _wintypes.DWORD
+    get_window_text_length = user32.GetWindowTextLengthW
+    get_window_text_length.argtypes = [_wintypes.HWND]
+    get_window_text_length.restype = ctypes.c_int
+    get_window_text = user32.GetWindowTextW
+    get_window_text.argtypes = [_wintypes.HWND, _wintypes.LPWSTR, ctypes.c_int]
+    get_window_text.restype = ctypes.c_int
+    is_window = user32.IsWindow
+    is_window.argtypes = [_wintypes.HWND]
+    is_window.restype = ctypes.c_int
+
+    pid = os.getpid()
+    found: int | None = None
+
+    @_WINFUNCTYPE(ctypes.c_bool, _wintypes.HWND, _wintypes.LPARAM)
+    def _match(hwnd, _lparam):
+        nonlocal found
+        if found is not None:
+            return True
+        owner = _wintypes.DWORD()
+        get_window_thread_process_id(hwnd, ctypes.byref(owner))
+        if owner.value != pid or not is_window(hwnd):
+            return True
+        length = get_window_text_length(hwnd)
+        if length <= 0:
+            return True
+        buffer = ctypes.create_unicode_buffer(length + 1)
+        get_window_text(hwnd, buffer, length + 1)
+        if buffer.value != _WINDOW_TITLE_HINT:
+            return True
+        found = hwnd
+        return False
+
+    try:
+        user32.EnumWindows(_WINFUNCTYPE(ctypes.c_bool, _wintypes.HWND, _wintypes.LPARAM)(_match), 0)
+    except Exception:  # noqa: BLE001 - resolution failure is non-fatal; handles just stay inert.
+        return None
+    return found
 from .preferences import load_preferences, save_preferences
 
 DEPENDENCY_RESOLVERS: dict[str, Callable[[str], DependencyResolution]] = {
@@ -169,6 +253,7 @@ class PlexMuxyApi:
                     "config_exists": config_path.exists(),
                     "activation_job_id": self._activation_job_id,
                     "activation_action": self._activation_action,
+                    "resizable_frame": sys.platform == "win32",
                 }
             )
 
@@ -356,6 +441,43 @@ class PlexMuxyApi:
             else:
                 self._window.maximize()
                 self._window_maximized = True
+            return self.ok({"maximized": self._window_maximized})
+
+        return self.guarded(run)
+
+    def resize_window(self, direction: str) -> dict[str, Any]:
+        """Begin a native edge resize from one of the custom UI handles.
+
+        pywebview's frameless window has no resize borders, so the edge handles in
+        the UI call this with a direction string. On Windows we hand the resize to
+        the OS via ``WM_NCLBUTTONDOWN`` so the user gets native cursors, snapping,
+        and a real drag loop. Returns the resulting maximized state so the frontend
+        can keep its maximize button in sync.
+        """
+
+        def run() -> dict[str, Any]:
+            if self._window is None:
+                return self.fail("Window is not ready")
+            ht = _HT_CODES.get(direction)
+            if ht is None or sys.platform != "win32" or _windll is None:
+                return self.ok({"maximized": self._window_maximized})
+            hwnd = _get_cached_hwnd()
+            if not hwnd:
+                return self.ok({"maximized": self._window_maximized})
+            # A maximized window cannot be edge-resized; restore first so the drag
+            # is meaningful and our tracked state stays accurate.
+            if self._window_maximized:
+                self._window.restore()
+                self._window_maximized = False
+            user32 = _windll.user32
+            send_message = user32.SendMessageW
+            send_message.argtypes = [_wintypes.HWND, _wintypes.UINT, _wintypes.WPARAM, _wintypes.LPARAM]
+            send_message.restype = _wintypes.LPARAM
+            # ReleaseCapture + WM_NCLBUTTONDOWN starts the OS resize loop on the
+            # window's own message queue. It blocks until the mouse is released,
+            # which is the expected, self-contained resize interaction.
+            user32.ReleaseCapture()
+            send_message(hwnd, 0x00A1, ht, 0)
             return self.ok({"maximized": self._window_maximized})
 
         return self.guarded(run)

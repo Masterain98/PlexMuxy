@@ -37,6 +37,24 @@ async function chooseDirectory() {
   } catch (error) { showError(error.message); }
 }
 
+async function chooseOutputDirectory() {
+  clearError();
+  try {
+    const result = await callApi("choose_directory");
+    if (!result.cancelled && result.path) { $("output-dir").value = result.path; handleOverrideChange(); }
+  } catch (error) { showError(error.message); }
+}
+
+function resetExtraDirToRecommended() {
+  $("extra-dir").value = "Extra";
+  handleOverrideChange();
+}
+
+function resetOutputDirToRecommended() {
+  $("output-dir").value = "";
+  handleOverrideChange();
+}
+
 
 
 async function openConfigLocation() {
@@ -165,6 +183,10 @@ function renderAppInfo() {
   setText("app-version", t("version", { version: state.appInfo.version }));
   setText("about-version", t("version", { version: state.appInfo.version }));
   setText("sidebar-config-path", state.appInfo.config_path || "");
+  // Reveal the edge resize handles only where the frameless window can resize.
+  if (document.body) {
+    document.body.classList.toggle("frame-resizable", Boolean(state.appInfo.resizable_frame));
+  }
 }
 
 
@@ -306,8 +328,12 @@ function applyConfigDefaults() {
   const fontMode = state.config?.font?.mode || "all";
   if (fontMode !== "subset") state.lastNonSubsetFontMode = fontMode;
   $("font-subset").checked = fontMode === "subset";
-  setCustomSelectValue("font-mime-mode", state.config?.font?.mime_mode || "legacy");
+  const mkvmergeVersion = state.config?.mkvmerge?.version;
+  const autoMime = autoPickFontMimeMode(mkvmergeVersion);
+  const configMime = state.config?.font?.mime_mode;
+  setCustomSelectValue("font-mime-mode", configMime || autoMime);
   setCustomSelectValue("font-embed-scheme", state.config?.font?.embed_scheme || "attachment");
+  updateFontMimeRecommendation(mkvmergeVersion);
   const tracks = state.config?.tracks || {};
   $("audio-filter-enabled").checked = Boolean(tracks.audio_filter_enabled);
   $("audio-exclude-patterns").value = (tracks.exclude_audio_title_patterns || []).join(", ");
@@ -318,20 +344,120 @@ function applyConfigDefaults() {
   state.settingsDirty = false; updateOptionAvailability(); updateRunButton();
 }
 
+function autoPickFontMimeMode(versionString) {
+  if (!versionString) return "legacy";
+  const match = String(versionString).match(/v?(\d+)/);
+  if (!match) return "legacy";
+  const major = parseInt(match[1], 10);
+  return major >= 66 ? "modern" : "legacy";
+}
+
+function updateFontMimeRecommendation(versionString) {
+  const recommended = autoPickFontMimeMode(versionString);
+  const listbox = $("font-mime-mode-listbox");
+  if (!listbox) return;
+  const options = listbox.querySelectorAll('[role="option"]');
+  options.forEach((option) => {
+    // Remove existing recommendation badge text
+    const baseText = (option.dataset.i18nOriginalText || option.textContent).replace(/\s*（推荐）$/, "").replace(/\s*\(Recommended\)$/, "");
+    option.dataset.i18nOriginalText = baseText;
+    if (option.dataset.value === recommended) {
+      option.textContent = baseText + " " + t("options.fontMimeMode.recommended");
+    } else {
+      option.textContent = baseText;
+    }
+  });
+  // Also update the trigger label to include the badge for the currently selected option
+  syncCustomSelectLabels();
+  // Apply the recommendation to the trigger label after sync
+  const trigger = $("font-mime-mode");
+  if (!trigger) return;
+  const selectedValue = trigger.dataset.value;
+  if (selectedValue === recommended) {
+    const label = trigger.querySelector("[data-select-label]");
+    if (label) {
+      const base = label.textContent.replace(/\s*（推荐）$/, "").replace(/\s*\(Recommended\)$/, "");
+      label.textContent = base + " " + t("options.fontMimeMode.recommended");
+    }
+  }
+}
+
+// Hook into custom select changes for font-mime-mode to update recommendation badge on trigger
+function handleFontMimeModeChange() {
+  handleOverrideChange();
+  const mkvmergeVersion = state.config?.mkvmerge?.version;
+  updateFontMimeRecommendation(mkvmergeVersion);
+}
+
 
 
 function updateOptionAvailability() {
-  const templateEnabled = getCustomSelectValue("name-strategy") === "template";
-  if ($("name-template")) {
-    $("name-template").disabled = !templateEnabled;
-    $("name-template").setAttribute("aria-disabled", String(!templateEnabled));
+  const strategy = getCustomSelectValue("name-strategy");
+  const suffixRow = $("output-suffix-row");
+  const templateRow = $("name-template-row");
+
+  if (suffixRow) {
+    if (strategy === "suffix") {
+      showCollapsibleRow(suffixRow);
+    } else {
+      hideCollapsibleRow(suffixRow);
+    }
   }
+  if (templateRow) {
+    if (strategy === "template") {
+      showCollapsibleRow(templateRow);
+    } else {
+      hideCollapsibleRow(templateRow);
+    }
+  }
+
   const filterEnabled = Boolean($("audio-filter-enabled")?.checked);
-  document.querySelectorAll(".audio-filter-option input").forEach((control) => {
-    control.disabled = !filterEnabled;
-    control.setAttribute("aria-disabled", String(!filterEnabled));
+  document.querySelectorAll(".audio-filter-option.option-collapsible").forEach((row) => {
+    if (filterEnabled) {
+      showCollapsibleRow(row);
+    } else {
+      hideCollapsibleRow(row);
+    }
   });
+
   applyCompatibility();
+}
+
+function showCollapsibleRow(row) {
+  if (!row) return;
+  // Invalidate any pending hide transitions
+  row._hideGen = (row._hideGen || 0) + 1;
+  // Remove inline display:none so CSS grid takes over for the transition
+  row.style.display = "";
+  // Force reflow before removing is-hidden so transition fires
+  void row.offsetHeight;
+  row.classList.remove("is-hidden");
+  // Re-enable all inputs inside
+  row.querySelectorAll("input, button, select, textarea").forEach((el) => {
+    el.disabled = false;
+    el.setAttribute("aria-disabled", "false");
+  });
+}
+
+function hideCollapsibleRow(row) {
+  if (!row) return;
+  row.classList.add("is-hidden");
+  // Track generation to discard stale transitionend events
+  const gen = (row._hideGen || 0) + 1;
+  row._hideGen = gen;
+  const onTransitionEnd = () => {
+    if (row._hideGen !== gen) return;
+    if (row.classList.contains("is-hidden")) {
+      row.style.display = "none";
+    }
+    row.removeEventListener("transitionend", onTransitionEnd);
+  };
+  row.addEventListener("transitionend", onTransitionEnd);
+  // Disable all inputs inside
+  row.querySelectorAll("input, button, select, textarea").forEach((el) => {
+    el.disabled = true;
+    el.setAttribute("aria-disabled", "true");
+  });
 }
 
 // Enable/disable settings based on the environment compatibility report

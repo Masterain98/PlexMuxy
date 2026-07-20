@@ -75,6 +75,9 @@ function handleLocaleChange() {
   if (state.loading) setText("loading-text", t(state.loadingMessageKey));
   if (state.activeJobId) setRuntimeStatus(t("status.jobRunning"));
   updateRouteLabels();
+  if (state.config?.mkvmerge?.version && typeof updateFontMimeRecommendation === "function") {
+    updateFontMimeRecommendation(state.config.mkvmerge.version);
+  }
 }
 
 

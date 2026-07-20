@@ -6,6 +6,9 @@ function bindEvents() {
     ["skip-link", "click", skipToMainContent],
     ["alert-close-btn", "click", clearError],
     ["choose-dir-btn", "click", chooseDirectory], ["open-config-btn", "click", openConfigLocation],
+    ["output-dir-choose-btn", "click", chooseOutputDirectory],
+    ["output-dir-recommended-btn", "click", resetOutputDirToRecommended],
+    ["extra-dir-recommended-btn", "click", resetExtraDirToRecommended],
     ["diagnostics-btn", "click", exportDiagnostics], ["save-settings-btn", "click", saveSettings],
     ["save-environment-btn", "click", saveEnvironmentSettings], ["test-notification-btn", "click", testNotification],
     ["plan-btn", "click", generatePlan], ["run-btn", "click", runMux], ["cancel-btn", "click", cancelJob],
@@ -21,6 +24,7 @@ function bindEvents() {
     ["output-suffix", "input", handleOverrideChange], ["output-dir", "input", handleOverrideChange],
     ["name-strategy", "change", handleOverrideChange], ["name-template", "input", handleOverrideChange],
     ["overwrite", "change", handleOverrideChange], ["font-subset", "change", handleFontSubsetChange],
+    ["font-mime-mode", "change", handleFontMimeModeChange],
     ["audio-filter-enabled", "change", handleOverrideChange],
     ["audio-exclude-patterns", "input", handleOverrideChange], ["audio-keep-languages", "input", handleOverrideChange],
     ["keep-default-audio", "change", handleOverrideChange], ["keep-unknown-audio", "change", handleOverrideChange],
@@ -38,6 +42,12 @@ function bindEvents() {
   document.querySelectorAll(".theme-option").forEach((button) => {
     if (button.classList.contains("language-option")) return;
     if (!button.dataset.boundClick) { button.addEventListener("click", chooseTheme); button.dataset.boundClick = "true"; }
+  });
+  document.querySelectorAll(".resize-handle").forEach((handle) => {
+    if (!handle.dataset.boundPointer) {
+      handle.addEventListener("pointerdown", startWindowResize);
+      handle.dataset.boundPointer = "true";
+    }
   });
   document.querySelectorAll(".language-option").forEach((button) => {
     if (!button.dataset.boundClick) { button.addEventListener("click", chooseLocale); button.dataset.boundClick = "true"; }

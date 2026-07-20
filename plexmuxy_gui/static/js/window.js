@@ -34,3 +34,33 @@ async function closeWindow() {
 }
 
 
+
+function startWindowResize(event) {
+  const handle = event.currentTarget;
+  const direction = handle.dataset.resize;
+  if (!direction) return;
+  event.preventDefault();
+  event.stopPropagation();
+  try {
+    callApi("resize_window", direction)
+      .then((result) => {
+        // If the resize began from a maximized window, the backend restores it
+        // first; mirror that on the maximize button so its state stays correct.
+        if (result && typeof result.maximized === "boolean" && !result.maximized) {
+          const button = $("window-maximize-btn");
+          if (button) {
+            button.classList.remove("is-maximized");
+            button.setAttribute("aria-pressed", "false");
+            button.setAttribute("aria-label", t("window.maximize"));
+            button.dataset.tooltip = t("window.maximizeShort");
+            button.removeAttribute("title");
+          }
+        }
+      })
+      .catch((error) => showError(error.message));
+  } catch (error) {
+    showError(error.message);
+  }
+}
+
+

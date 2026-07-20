@@ -87,6 +87,17 @@
       </div>
     </header>
 
+    <div class="resize-handles" aria-hidden="true">
+      <div class="resize-handle resize-nw" data-resize="nw"></div>
+      <div class="resize-handle resize-n" data-resize="n"></div>
+      <div class="resize-handle resize-ne" data-resize="ne"></div>
+      <div class="resize-handle resize-w" data-resize="w"></div>
+      <div class="resize-handle resize-e" data-resize="e"></div>
+      <div class="resize-handle resize-sw" data-resize="sw"></div>
+      <div class="resize-handle resize-s" data-resize="s"></div>
+      <div class="resize-handle resize-se" data-resize="se"></div>
+    </div>
+
     <div id="app-shell" class="app-shell">
       <button id="sidebar-scrim" class="sidebar-scrim" type="button" tabindex="-1" aria-label="Close navigation" data-i18n-aria-label="sidebar.close"></button>
 
@@ -300,28 +311,33 @@
                 <div class="setting-row">
                   <label class="setting-copy" for="cleanup"><strong data-i18n="options.cleanup.label">Cleanup policy</strong><span data-i18n="options.cleanup.help">Keep sources, move them after success, or delete confirmed inputs.</span></label>
                   <div class="control-wrap custom-select" data-custom-select>
-                    <button id="cleanup" class="select-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="cleanup-listbox" data-value="none">
-                      <span data-select-label data-i18n="options.cleanup.none">Keep source files</span>
+                    <button id="cleanup" class="select-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="cleanup-listbox" data-value="move">
+                      <span data-select-label data-i18n="options.cleanup.move">Move after mux</span>
                       <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"></use></svg>
                     </button>
                     <div id="cleanup-listbox" class="select-listbox" role="listbox" aria-labelledby="cleanup" hidden>
-                      <button type="button" role="option" aria-selected="true" tabindex="-1" data-value="none" data-i18n="options.cleanup.none">Keep source files</button>
-                      <button type="button" role="option" aria-selected="false" tabindex="-1" data-value="move" data-i18n="options.cleanup.move">Move after mux</button>
+                      <button type="button" role="option" aria-selected="false" tabindex="-1" data-value="none" data-i18n="options.cleanup.none">Keep source files</button>
+                      <button type="button" role="option" aria-selected="true" tabindex="-1" data-value="move" data-i18n="options.cleanup.move">Move after mux</button>
                       <button type="button" role="option" aria-selected="false" tabindex="-1" data-value="delete" data-i18n="options.cleanup.delete">Delete after mux</button>
                     </div>
                   </div>
                 </div>
                 <div class="setting-row">
                   <label class="setting-copy" for="extra-dir"><strong data-i18n="options.extraDir.label">Extra media directory</strong><span data-i18n="options.extraDir.help">Search a second folder for companion tracks and attachments.</span></label>
-                  <input id="extra-dir" type="text" placeholder="Optional absolute path" autocomplete="off" data-i18n-placeholder="options.extraDir.placeholder" />
+                  <div class="input-with-button">
+                    <input id="extra-dir" type="text" placeholder="Optional absolute path" autocomplete="off" data-i18n-placeholder="options.extraDir.placeholder" />
+                    <button id="extra-dir-recommended-btn" class="secondary compact" type="button" data-i18n="options.recommended">Use recommended</button>
+                  </div>
                 </div>
                 <div class="setting-row">
                   <label class="setting-copy" for="output-dir"><strong data-i18n="options.outputDir.label">Output directory</strong><span data-i18n="options.outputDir.help">Leave empty to write the muxed file beside its source video.</span></label>
-                  <input id="output-dir" type="text" placeholder="Use the source folder" autocomplete="off" data-i18n-placeholder="options.outputDir.placeholder" />
-                </div>
-                <div class="setting-row">
-                  <label class="setting-copy" for="output-suffix"><strong data-i18n="options.outputSuffix.label">Output suffix</strong><span data-i18n="options.outputSuffix.help">Added before the file extension when the suffix strategy is active.</span></label>
-                  <input id="output-suffix" type="text" placeholder=".plex" autocomplete="off" />
+                  <div class="input-with-button">
+                    <input id="output-dir" type="text" placeholder="Use the source folder" autocomplete="off" data-i18n-placeholder="options.outputDir.placeholder" />
+                    <div class="button-row compact">
+                      <button id="output-dir-choose-btn" class="secondary compact" type="button" data-i18n="options.outputDir.choose">Choose directory</button>
+                      <button id="output-dir-recommended-btn" class="secondary compact" type="button" data-i18n="options.recommended">Use recommended</button>
+                    </div>
+                  </div>
                 </div>
                 <div class="setting-row">
                   <label class="setting-copy" for="name-strategy"><strong data-i18n="options.nameStrategy.label">Naming strategy</strong><span data-i18n="options.nameStrategy.help">Choose how PlexMuxy derives the final file name.</span></label>
@@ -337,16 +353,20 @@
                     </div>
                   </div>
                 </div>
-                <div class="setting-row">
+                <div class="setting-row option-collapsible" id="output-suffix-row">
+                  <label class="setting-copy" for="output-suffix"><strong data-i18n="options.outputSuffix.label">Output suffix</strong><span data-i18n="options.outputSuffix.help">Added before the file extension when the suffix strategy is active.</span></label>
+                  <input id="output-suffix" type="text" placeholder=".plex" autocomplete="off" />
+                </div>
+                <div class="setting-row option-collapsible" id="name-template-row" style="display:none">
                   <label class="setting-copy" for="name-template"><strong data-i18n="options.nameTemplate.label">Name template</strong><span data-i18n="options.nameTemplate.help">Available when the template strategy is selected.</span></label>
                   <input id="name-template" type="text" placeholder="{stem}.plex.mkv" autocomplete="off" />
                 </div>
                 <label class="setting-row setting-row-toggle" for="font-subset">
-                  <span class="setting-copy"><strong data-i18n="options.fontSubset.label">Subset fonts for this workflow</strong><span data-i18n="options.fontSubset.help">Attach only glyphs referenced by matched ASS/SSA subtitles. Turning this off restores your previous font mode.</span></span>
+                  <span class="setting-copy"><strong data-i18n="options.fontSubset.label">Font subsetting</strong><span data-i18n="options.fontSubset.help">Attach only glyphs referenced by matched ASS/SSA subtitles. Turning this off restores your previous font mode.</span></span>
                   <span class="toggle-row">
                     <input id="font-subset" class="visually-hidden" type="checkbox" />
                     <span class="toggle-control" aria-hidden="true"></span>
-                    <span class="toggle-label" data-i18n="options.fontSubset.enable">Enable font subsetting</span>
+                    <span class="toggle-label" data-i18n="options.fontSubset.enable">Enable font subsetting to reduce file size</span>
                   </span>
                 </label>
                 <div class="setting-row">
@@ -384,23 +404,23 @@
                     <span class="toggle-label" data-i18n="options.audioFilter.enable">Enable audio filtering</span>
                   </span>
                 </label>
-                <div class="setting-row audio-filter-option">
+                <div class="setting-row audio-filter-option option-collapsible">
                   <label class="setting-copy" for="audio-exclude-patterns"><strong data-i18n="options.audioPatterns.label">Excluded title patterns</strong><span data-i18n="options.audioPatterns.help">Comma-separated case-insensitive text or glob patterns, such as commentary or *descriptive*.</span></label>
                   <input id="audio-exclude-patterns" type="text" placeholder="commentary, *descriptive*" autocomplete="off" />
                 </div>
-                <div class="setting-row audio-filter-option">
+                <div class="setting-row audio-filter-option option-collapsible">
                   <label class="setting-copy" for="audio-keep-languages"><strong data-i18n="options.audioLanguages.label">Kept languages</strong><span data-i18n="options.audioLanguages.help">Comma-separated MKV or IETF language codes. Leave empty to avoid language filtering.</span></label>
                   <input id="audio-keep-languages" type="text" placeholder="jpn, eng" autocomplete="off" />
                 </div>
-                <label class="setting-row setting-row-toggle audio-filter-option" for="keep-default-audio">
+                <label class="setting-row setting-row-toggle audio-filter-option option-collapsible" for="keep-default-audio">
                   <span class="setting-copy"><strong data-i18n="options.keepDefaultAudio.label">Always keep default audio</strong><span data-i18n="options.keepDefaultAudio.help">Default source tracks take precedence over exclusion rules.</span></span>
                   <span class="toggle-row"><input id="keep-default-audio" class="visually-hidden" type="checkbox" /><span class="toggle-control" aria-hidden="true"></span><span class="toggle-label" data-i18n="options.keepDefaultAudio.enable">Keep defaults</span></span>
                 </label>
-                <label class="setting-row setting-row-toggle audio-filter-option" for="keep-unknown-audio">
+                <label class="setting-row setting-row-toggle audio-filter-option option-collapsible" for="keep-unknown-audio">
                   <span class="setting-copy"><strong data-i18n="options.keepUnknownAudio.label">Keep unknown language</strong><span data-i18n="options.keepUnknownAudio.help">Prevents missing or unknown language metadata from causing deletion.</span></span>
                   <span class="toggle-row"><input id="keep-unknown-audio" class="visually-hidden" type="checkbox" /><span class="toggle-control" aria-hidden="true"></span><span class="toggle-label" data-i18n="options.keepUnknownAudio.enable">Keep unknown</span></span>
                 </label>
-                <label class="setting-row setting-row-toggle audio-filter-option" for="allow-no-audio">
+                <label class="setting-row setting-row-toggle audio-filter-option option-collapsible" for="allow-no-audio">
                   <span class="setting-copy"><strong data-i18n="options.allowNoAudio.label">Allow output with no audio</strong><span data-i18n="options.allowNoAudio.help">Dangerous: permits manual rules to remove every source audio track.</span></span>
                   <span class="toggle-row"><input id="allow-no-audio" class="visually-hidden" type="checkbox" /><span class="toggle-control" aria-hidden="true"></span><span class="toggle-label" data-i18n="options.allowNoAudio.enable">Allow silent output</span></span>
                 </label>

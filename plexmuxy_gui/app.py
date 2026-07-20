@@ -73,6 +73,7 @@ EXPOSED_API_METHODS = (
     "pause_queue",
     "plan_job",
     "reset_dependency_path",
+    "resize_window",
     "reorder_job",
     "replan_job",
     "resume_queue",
