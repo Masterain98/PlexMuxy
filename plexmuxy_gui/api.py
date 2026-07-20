@@ -185,6 +185,7 @@ class PlexMuxyApi:
         self._window: Any = None
         self._window_maximized = False
         self._allow_window_close = False
+        self._resize: dict[str, Any] | None = None
         self._state_path = state_path
         self._job_store: JobStore | None = None
         self._job_queue: JobQueue | None = None
@@ -446,39 +447,103 @@ class PlexMuxyApi:
         return self.guarded(run)
 
     def resize_window(self, direction: str) -> dict[str, Any]:
-        """Begin a native edge resize from one of the custom UI handles.
+        """Begin a native edge resize driven by one of the custom UI handles.
 
-        pywebview's frameless window has no resize borders, so the edge handles in
-        the UI call this with a direction string. On Windows we hand the resize to
-        the OS via ``WM_NCLBUTTONDOWN`` so the user gets native cursors, snapping,
-        and a real drag loop. Returns the resulting maximized state so the frontend
-        can keep its maximize button in sync.
+        pywebview's frameless window has no resize borders, and sending
+        ``WM_NCLBUTTONDOWN`` to it does not engage the OS resize loop on every
+        backend. Instead the UI handle starts a drag here: we snapshot the window
+        rectangle and the cursor position, then ``resize_window_drag`` moves the
+        real window via ``SetWindowPos`` using the live cursor position. All math
+        stays in physical screen pixels (``GetWindowRect`` / ``GetCursorPos``), so
+        it is correct under DPI scaling. Returns the resulting maximized state so
+        the frontend can keep its maximize button in sync.
         """
 
         def run() -> dict[str, Any]:
             if self._window is None:
                 return self.fail("Window is not ready")
-            ht = _HT_CODES.get(direction)
-            if ht is None or sys.platform != "win32" or _windll is None:
+            if direction not in _HT_CODES or sys.platform != "win32" or _windll is None:
                 return self.ok({"maximized": self._window_maximized})
             hwnd = _get_cached_hwnd()
             if not hwnd:
-                return self.ok({"maximized": self._window_maximized})
+                return self.fail("Window handle not found")
             # A maximized window cannot be edge-resized; restore first so the drag
             # is meaningful and our tracked state stays accurate.
             if self._window_maximized:
                 self._window.restore()
                 self._window_maximized = False
             user32 = _windll.user32
-            send_message = user32.SendMessageW
-            send_message.argtypes = [_wintypes.HWND, _wintypes.UINT, _wintypes.WPARAM, _wintypes.LPARAM]
-            send_message.restype = _wintypes.LPARAM
-            # ReleaseCapture + WM_NCLBUTTONDOWN starts the OS resize loop on the
-            # window's own message queue. It blocks until the mouse is released,
-            # which is the expected, self-contained resize interaction.
-            user32.ReleaseCapture()
-            send_message(hwnd, 0x00A1, ht, 0)
+            rect = _wintypes.RECT()
+            user32.GetWindowRect.argtypes = [_wintypes.HWND, ctypes.POINTER(_wintypes.RECT)]
+            user32.GetWindowRect.restype = ctypes.c_int
+            if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                return self.fail("Could not read window rectangle")
+            cursor = _wintypes.POINT()
+            user32.GetCursorPos.argtypes = [ctypes.POINTER(_wintypes.POINT)]
+            user32.GetCursorPos.restype = ctypes.c_int
+            user32.GetCursorPos(ctypes.byref(cursor))
+            self._resize = {
+                "hwnd": hwnd,
+                "direction": direction,
+                "left": rect.left, "top": rect.top,
+                "width": rect.right - rect.left, "height": rect.bottom - rect.top,
+                "start_x": cursor.x, "start_y": cursor.y,
+            }
             return self.ok({"maximized": self._window_maximized})
+
+        return self.guarded(run)
+
+    def resize_window_drag(self) -> dict[str, Any]:
+        """Apply one step of an in-progress edge resize using the live cursor."""
+
+        def run() -> dict[str, Any]:
+            if not self._resize or sys.platform != "win32" or _windll is None:
+                return self.ok({})
+            r = self._resize
+            user32 = _windll.user32
+            cursor = _wintypes.POINT()
+            user32.GetCursorPos.argtypes = [ctypes.POINTER(_wintypes.POINT)]
+            user32.GetCursorPos.restype = ctypes.c_int
+            user32.GetCursorPos(ctypes.byref(cursor))
+            dx = cursor.x - r["start_x"]
+            dy = cursor.y - r["start_y"]
+            direction = r["direction"]
+            min_w, min_h = 960, 640
+            left = r["left"]
+            top = r["top"]
+            width = r["width"]
+            height = r["height"]
+            right = left + width
+            bottom = top + height
+            if "e" in direction:
+                width = max(min_w, r["width"] + dx)
+            if "w" in direction:
+                width = max(min_w, r["width"] - dx)
+                left = right - width
+            if "s" in direction:
+                height = max(min_h, r["height"] + dy)
+            if "n" in direction:
+                height = max(min_h, r["height"] - dy)
+                top = bottom - height
+            user32.SetWindowPos.argtypes = [
+                _wintypes.HWND, _wintypes.HWND, ctypes.c_int, ctypes.c_int,
+                ctypes.c_int, ctypes.c_int, ctypes.c_uint,
+            ]
+            user32.SetWindowPos.restype = ctypes.c_int
+            user32.SetWindowPos(
+                r["hwnd"], 0, left, top, width, height,
+                0x0004 | 0x0010,  # SWP_NOZORDER | SWP_NOACTIVATE
+            )
+            return self.ok({})
+
+        return self.guarded(run)
+
+    def resize_window_end(self) -> dict[str, Any]:
+        """End an in-progress edge resize and discard the snapshot."""
+
+        def run() -> dict[str, Any]:
+            self._resize = None
+            return self.ok({})
 
         return self.guarded(run)
 

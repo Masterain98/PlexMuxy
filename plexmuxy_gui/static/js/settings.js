@@ -83,21 +83,35 @@ async function saveSettings() {
 
 
 
+async function persistNotificationSetting() {
+  try {
+    state.config = await callApi("save_environment_settings", buildEnvironmentPayload());
+    renderEnvironmentSettings(false);
+    renderRuntimeStatus();
+  } catch (error) { showError(error.message); }
+}
+
+
+function buildEnvironmentPayload() {
+  return {
+    mkvmerge_path: dependencyPathForSave("mkvmerge"),
+    ffmpeg_path: dependencyPathForSave("ffmpeg"),
+    unrar_path: dependencyPathForSave("unrar"),
+    notifications_enabled: $("notifications-enabled").checked,
+    updates_enabled: $("updates-enabled").checked,
+    plex_enabled: $("plex-enabled").checked,
+    plex_server_url: $("plex-server-url").value.trim(),
+    plex_section_id: $("plex-section-id").value.trim(),
+    plex_token_env: $("plex-token-env").value.trim(),
+    plex_path_mappings: parsePathMappings($("plex-path-mappings").value),
+  };
+}
+
+
 async function saveEnvironmentSettings() {
   clearError();
   try {
-    state.config = await callApi("save_environment_settings", {
-      mkvmerge_path: dependencyPathForSave("mkvmerge"),
-      ffmpeg_path: dependencyPathForSave("ffmpeg"),
-      unrar_path: dependencyPathForSave("unrar"),
-      notifications_enabled: $("notifications-enabled").checked,
-      updates_enabled: $("updates-enabled").checked,
-      plex_enabled: $("plex-enabled").checked,
-      plex_server_url: $("plex-server-url").value.trim(),
-      plex_section_id: $("plex-section-id").value.trim(),
-      plex_token_env: $("plex-token-env").value.trim(),
-      plex_path_mappings: parsePathMappings($("plex-path-mappings").value),
-    });
+    state.config = await callApi("save_environment_settings", buildEnvironmentPayload());
     state.dependencyDrafts = { mkvmerge: null, ffmpeg: null, unrar: null };
     state.environmentDirty = false;
     renderConfigSummary(); renderEnvironmentSettings(); renderRuntimeStatus(); updateRunButton();

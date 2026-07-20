@@ -35,12 +35,16 @@ async function closeWindow() {
 
 
 
+let resizeDragState = null;
+
 function startWindowResize(event) {
   const handle = event.currentTarget;
   const direction = handle.dataset.resize;
   if (!direction) return;
   event.preventDefault();
   event.stopPropagation();
+  try { handle.setPointerCapture(event.pointerId); } catch (_) { /* best effort */ }
+  resizeDragState = { handle, direction };
   try {
     callApi("resize_window", direction)
       .then((result) => {
@@ -61,6 +65,28 @@ function startWindowResize(event) {
   } catch (error) {
     showError(error.message);
   }
+}
+
+function moveWindowResize(event) {
+  if (!resizeDragState) return;
+  event.preventDefault();
+  try {
+    callApi("resize_window_drag");
+  } catch (error) {
+    showError(error.message);
+  }
+}
+
+function endWindowResize(event) {
+  if (!resizeDragState) return;
+  const handle = resizeDragState.handle;
+  resizeDragState = null;
+  try {
+    callApi("resize_window_end");
+  } catch (error) {
+    showError(error.message);
+  }
+  try { handle.releasePointerCapture(event.pointerId); } catch (_) { /* best effort */ }
 }
 
 

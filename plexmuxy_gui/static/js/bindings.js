@@ -30,7 +30,7 @@ function bindEvents() {
     ["audio-exclude-patterns", "input", handleOverrideChange], ["audio-keep-languages", "input", handleOverrideChange],
     ["keep-default-audio", "change", handleOverrideChange], ["keep-unknown-audio", "change", handleOverrideChange],
     ["allow-no-audio", "change", handleOverrideChange],
-    ["notifications-enabled", "change", handleEnvironmentChange],
+    ["notifications-enabled", "change", persistNotificationSetting],
     ["updates-enabled", "change", handleEnvironmentChange],
     ["plex-enabled", "change", handleEnvironmentChange], ["plex-server-url", "input", handleEnvironmentChange],
     ["plex-section-id", "input", handleEnvironmentChange], ["plex-token-env", "input", handleEnvironmentChange],
@@ -47,6 +47,9 @@ function bindEvents() {
   document.querySelectorAll(".resize-handle").forEach((handle) => {
     if (!handle.dataset.boundPointer) {
       handle.addEventListener("pointerdown", startWindowResize);
+      handle.addEventListener("pointermove", moveWindowResize);
+      handle.addEventListener("pointerup", endWindowResize);
+      handle.addEventListener("pointercancel", endWindowResize);
       handle.dataset.boundPointer = "true";
     }
   });
