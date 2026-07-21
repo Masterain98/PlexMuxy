@@ -1,8 +1,11 @@
 name: release
 
+# Trigger a release whenever the version file is edited on the main branch.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths:
+      - "plexmuxy/VERSION"
 
 permissions:
   contents: write
@@ -20,11 +23,12 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - name: Verify tag matches package version
+      - name: Read version from VERSION file
+        id: version
         shell: pwsh
         run: |
-          $expected = "v$(python -c 'import plexmuxy; print(plexmuxy.__version__)')"
-          if ($env:GITHUB_REF_NAME -ne $expected) { throw "Tag $env:GITHUB_REF_NAME does not match $expected" }
+          $version = (Get-Content plexmuxy/VERSION).Trim()
+          echo "version=$version" >> $env:GITHUB_OUTPUT
       - run: python -m pip install -e ".[dev,build,gui]" cyclonedx-bom
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
@@ -86,11 +90,9 @@ jobs:
           } finally {
             Remove-Item -Force -ErrorAction SilentlyContinue $certificate
           }
-      - name: Build Windows installer with fixed application identity
+      - name: Build Windows installer
         shell: pwsh
-        run: |
-          $version = python -c "import plexmuxy; print(plexmuxy.__version__)"
-          iscc "/DMyAppVersion=$version" packaging/plexmuxy.iss
+        run: iscc "/DMyAppVersion=${{ steps.version.outputs.version }}" packaging/plexmuxy.iss
       - name: Sign installer when a certificate is configured
         if: env.WINDOWS_CERTIFICATE_BASE64 != ''
         shell: pwsh
@@ -104,16 +106,20 @@ jobs:
           } finally {
             Remove-Item -Force -ErrorAction SilentlyContinue $certificate
           }
-      - name: Generate release SBOM
-        run: python -m cyclonedx_py environment --output-format JSON --output-file dist/plexmuxy-sbom.cdx.json
-      - name: Package executables and checksums
+      - name: Rename release artifacts
         shell: pwsh
         run: |
-          Compress-Archive -Path dist/plexmuxy/* -DestinationPath dist/plexmuxy-windows-x64.zip
-          Compress-Archive -Path dist/plexmuxy-gui/* -DestinationPath dist/plexmuxy-gui-windows-x64.zip
+          $version = "${{ steps.version.outputs.version }}"
+          Move-Item -Force "dist/plexmuxy-gui/plexmuxy-gui.exe" "dist/PlexMuxy-windows-amd64-$version.exe"
+          Move-Item -Force "dist/plexmuxy-$version-windows-x64-setup.exe" "dist/PlexMuxy-windows-amd64-$version-setup.exe"
+      - name: Generate release SBOM
+        run: python -m cyclonedx_py environment --output-format JSON --output-file dist/plexmuxy-sbom.cdx.json
+      - name: Generate checksums and manifest
+        shell: pwsh
+        run: |
           $artifacts = Get-ChildItem dist -File
           $manifest = [ordered]@{
-            version = (python -c "import plexmuxy; print(plexmuxy.__version__)")
+            version = "${{ steps.version.outputs.version }}"
             commit = $env:GITHUB_SHA
             python = (python --version)
             artifacts = @($artifacts | ForEach-Object { [ordered]@{ name = $_.Name; size = $_.Length; sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLower() } })
@@ -127,7 +133,10 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create $env:GITHUB_REF_NAME (Get-ChildItem dist -File | ForEach-Object FullName) --verify-tag --generate-notes --title "PlexMuxy $env:GITHUB_REF_NAME"
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $tag = "v$version"
+          gh release create $tag (Get-ChildItem dist -File | ForEach-Object FullName) --generate-notes --title "PlexMuxy $tag"
 
   publish-pypi:
     name: Publish source and wheel with PyPI Trusted Publishing
@@ -148,4 +157,3 @@ jobs:
       - run: python -m pip install build
       - run: python -m build
       - uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247
-
