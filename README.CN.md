@@ -35,7 +35,7 @@ plexmuxy gui
 # 或 plexmuxy-gui
 ```
 
-Windows GUI 采用 Microsoft Edge WebView2 Evergreen Runtime。Windows 11 通常已自带；Windows 10 可能需要安装 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。正式发布的 Windows CLI/GUI 压缩包不依赖本机 Python，请使用 `SHA256SUMS.txt` 校验下载文件。
+Windows GUI 采用 Microsoft Edge WebView2 Evergreen Runtime。Windows 11 通常已自带；Windows 10 可能需要安装 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。GitHub Release 会直接发布 `dist` 中带版本号的 Windows GUI 二进制文件和单用户安装包，两者都不依赖本机 Python；请使用 `SHA256SUMS.txt` 校验下载文件。
 
 ## 命令示例
 

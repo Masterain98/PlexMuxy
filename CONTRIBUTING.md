@@ -68,7 +68,7 @@ pwsh scripts/build_installer.ps1
 ```
 
 The installer version is forwarded from `plexmuxy/VERSION` to the Inno Setup script, so the
-portable build, the installer, the wheel, and the CLI/GUI all share one version number.
+binary build, the installer, the wheel, and the CLI/GUI all share one version number.
 
 ## Commands
 
@@ -185,16 +185,17 @@ PlexMuxy handles user media, so a few invariants are non-negotiable:
 - The **single version source** is the plain-text file `plexmuxy/VERSION`. To cut a release,
   bump that file; `plexmuxy.__version__`, setuptools, the CLI, diagnostics, and the GUI all
   read it.
-- Release tags are `v<version>` (e.g. `v0.2.0`). The release workflow reads `plexmuxy/VERSION`
-  and is triggered when that file changes on `main`.
+- Release tags are `v<version>` (e.g. `v0.2.1`). The release workflow reads `plexmuxy/VERSION`
+  and is triggered when that file changes on `main`. Maintainers can also dispatch the workflow
+  manually from `main` to retry a failed run for the same commit and version.
 - **Branch strategy:**
   - `main` is the protected, releasable branch.
   - `develop` is the integration branch for the next minor release.
   - Feature branches start from `develop`, stay short-lived, and merge through reviewed PRs.
   - Release candidates branch from `develop`, pass the full matrix and manual Windows
     acceptance, then merge to `main` and back to `develop`.
-- PyPI publication uses Trusted Publishing and is a deliberate maintainer step after artifact
-  and hash comparison.
+- After the GitHub Release job succeeds, PyPI publication runs automatically through Trusted
+  Publishing. Existing files are skipped so a manual retry can complete safely.
 
 ## Pull Request Process
 

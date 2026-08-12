@@ -4,6 +4,8 @@ All notable changes follow Keep a Changelog categories.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-12
+
 ### Added
 
 - Immutable, serializable plan snapshots and `execute-plan`.
@@ -25,6 +27,8 @@ All notable changes follow Keep a Changelog categories.
 
 ### Changed
 
+- Release automation can now be dispatched manually from `main` and safely retried for the same commit and version.
+- Release documentation now reflects the Windows binaries published directly from `dist` instead of ZIP archives.
 - Replaced the unmaintained `pymkv` distribution with `pymkv2` while preserving the `pymkv` runtime import API.
 - Redesigned the desktop GUI around the five-stage workflow, persistent themes, responsive navigation, and clearer task states.
 - Matching now performs global confidence assignment and skips ambiguity by default.
@@ -33,6 +37,7 @@ All notable changes follow Keep a Changelog categories.
 
 ### Fixed
 
+- Made brand-asset verification insensitive to checkout line endings and kept Windows path opening portable across platform-specific type stubs.
 - Prevented pywebview from recursively inspecting the native GUI window by exposing only the intended bridge methods.
 - Made sidebar selection transitions target the clicked stage directly instead of cycling through every item.
 - Prevented movie fallback across multi-video directories.

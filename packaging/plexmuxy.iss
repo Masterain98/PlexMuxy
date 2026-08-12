@@ -11,7 +11,7 @@
 AppId={{9D751EA1-421A-47C8-A329-5B6AE179DC9D}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-; Display as "PlexMuxy 0.2.0" instead of the default "PlexMuxy version 0.2.0".
+; Display as "PlexMuxy <version>" instead of the default "PlexMuxy version <version>".
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher=PlexMuxy contributors
 AppPublisherURL=https://github.com/Masterain98/PlexMuxy

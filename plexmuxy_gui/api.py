@@ -1382,10 +1382,8 @@ def requires_delete_confirmation(config) -> bool:
 
 def open_path(path: Path) -> None:
     if sys.platform == "win32":
-        # os.startfile is a Windows-only API; the guard above ensures this
-        # branch only executes on Windows. The ignore is required because the
-        # Linux CI type stubs have no os.startfile attribute.
-        os.startfile(path)  # type: ignore[attr-defined]
+        # The platform guard lets type checkers resolve this Windows-only API.
+        os.startfile(path)
         return
     if sys.platform == "darwin":
         subprocess.Popen(["open", str(path)])

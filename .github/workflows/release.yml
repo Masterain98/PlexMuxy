@@ -1,7 +1,9 @@
 name: release
 
-# Trigger a release whenever the version file is edited on the main branch.
+# Trigger a release whenever the version file is edited on the main branch, or
+# manually rerun the current main release after fixing a workflow failure.
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -12,6 +14,7 @@ permissions:
 
 jobs:
   release:
+    if: github.ref == 'refs/heads/main'
     runs-on: windows-latest
     env:
       WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
@@ -129,14 +132,31 @@ jobs:
             $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLower()
             "$hash  $($_.Name)" | Add-Content -Encoding ascii dist/SHA256SUMS.txt
           }
-      - name: Create GitHub release
+      - name: Create or refresh GitHub release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $version = "${{ steps.version.outputs.version }}"
           $tag = "v$version"
-          gh release create $tag (Get-ChildItem dist -File | ForEach-Object FullName) --generate-notes --title "PlexMuxy $tag"
+          $assets = @(Get-ChildItem dist -File | ForEach-Object FullName)
+
+          $tagCommit = gh api "repos/$env:GITHUB_REPOSITORY/commits/$tag" --jq .sha 2>$null
+          $tagExists = $LASTEXITCODE -eq 0
+          if ($tagExists -and $tagCommit.Trim() -ne $env:GITHUB_SHA) {
+            throw "Tag $tag already points to $($tagCommit.Trim()), not $env:GITHUB_SHA. Bump plexmuxy/VERSION instead of moving a published tag."
+          }
+
+          gh release view $tag *> $null
+          $releaseExists = $LASTEXITCODE -eq 0
+          if ($releaseExists) {
+            gh release upload $tag $assets --clobber
+            gh release edit $tag --title "PlexMuxy $tag"
+          } elseif ($tagExists) {
+            gh release create $tag $assets --verify-tag --generate-notes --title "PlexMuxy $tag"
+          } else {
+            gh release create $tag $assets --target $env:GITHUB_SHA --generate-notes --title "PlexMuxy $tag"
+          }
 
   publish-pypi:
     name: Publish source and wheel with PyPI Trusted Publishing
@@ -157,3 +177,5 @@ jobs:
       - run: python -m pip install build
       - run: python -m build
       - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
+        with:
+          skip-existing: true

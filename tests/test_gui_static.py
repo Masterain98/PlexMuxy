@@ -56,7 +56,10 @@ def test_gui_ships_and_references_approved_brand_assets():
     }
     for name, source in source_assets.items():
         packaged = asset_dir / name
-        assert packaged.read_bytes() == source.read_bytes()
+        if source.suffix == ".svg":
+            assert packaged.read_text(encoding="utf-8") == source.read_text(encoding="utf-8")
+        else:
+            assert packaged.read_bytes() == source.read_bytes()
 
     assert 'href="./assets/plexmuxy-app-icon.svg"' in html
     assert 'href="./assets/plexmuxy-app-icon-32.png"' in html

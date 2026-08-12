@@ -35,10 +35,9 @@ plexmuxy gui
 # or: plexmuxy-gui
 ```
 
-The Windows GUI uses the Microsoft Edge WebView2 Evergreen Runtime. Windows 11 normally includes it; Windows 10 may require the [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). The standalone releases use the same Evergreen dependency to keep downloads small.
+The Windows GUI uses the Microsoft Edge WebView2 Evergreen Runtime. Windows 11 normally includes it; Windows 10 may require the [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). The release binary uses the same Evergreen dependency to keep downloads small.
 
-Windows release archives contain independent CLI and GUI builds and do not require a local Python installation. Verify downloads against `SHA256SUMS.txt`.
-Releases also include a per-user Windows installer with a stable application identity, Start-menu entry, uninstaller, and notification activation. The portable ZIP remains supported.
+GitHub Releases publish the versioned Windows GUI binary directly from `dist`, together with a per-user installer. Neither requires a local Python installation. The installer provides a stable application identity, Start-menu entry, uninstaller, and notification activation. Verify downloads against `SHA256SUMS.txt`.
 
 ## Commands
 
